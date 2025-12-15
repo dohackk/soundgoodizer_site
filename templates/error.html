@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Ошибка - SoundGoodizer{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+    <i class="bi bi-exclamation-triangle display-1 text-danger mb-3"></i>
+    <h1 class="display-5 mb-3">Произошла ошибка</h1>
+    <p class="lead mb-4">{{ error or 'Неизвестная ошибка' }}</p>
+    
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="mb-3">Что можно сделать:</h5>
+                    <ul class="list-unstyled text-start">
+                        <li class="mb-2">
+                            <i class="bi bi-arrow-return-left text-primary me-2"></i>
+                            <a href="javascript:history.back()" class="text-decoration-none">Вернуться назад</a>
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-house text-primary me-2"></i>
+                            <a href="{{ url_for('index') }}" class="text-decoration-none">Перейти на главную</a>
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-grid text-primary me-2"></i>
+                            <a href="{{ url_for('catalog') }}" class="text-decoration-none">Перейти в каталог</a>
+                        </li>
+                        <li>
+                            <i class="bi bi-envelope text-primary me-2"></i>
+                            <a href="mailto:support@soundgoodizer.ru" class="text-decoration-none">Написать в поддержку</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-4">
+        <button class="btn btn-primary me-2" onclick="history.back()">
+            <i class="bi bi-arrow-left me-1"></i>Назад
+        </button>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+            <i class="bi bi-house me-1"></i>На главную
+        </a>
+    </div>
+</div>
+
+{% if session.get('user_role') == 'admin' %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-bug me-2"></i>Техническая информация</h5>
+            </div>
+            <div class="card-body">
+                <pre class="mb-0"><code>{{ error_details or 'Нет дополнительной информации' }}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

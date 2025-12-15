@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Админ панель - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.3s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.8;
+    }
+    
+    .recent-item {
+        border-left: 3px solid transparent;
+        transition: all 0.2s;
+    }
+    
+    .recent-item:hover {
+        border-left-color: var(--secondary-color);
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="bi bi-speedometer2 text-primary me-2"></i>Административная панель
+        </h1>
+        <p class="text-muted mb-0">Управление магазином SoundGoodizer</p>
+    </div>
+    <div class="btn-group">
+        <button class="btn btn-outline-primary">
+            <i class="bi bi-download me-1"></i>Экспорт
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card stat-card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Пользователи</h6>
+                        <h2 class="mb-0">{{ stats.users }}</h2>
+                        <small class="text-success">
+                            <i class="bi bi-arrow-up me-1"></i>+12 за месяц
+                        </small>
+                    </div>
+                    <div class="stat-icon text-primary">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-top-0 py-2">
+                <a href="#" class="text-primary small">Просмотреть всех <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card stat-card border-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Заказы</h6>
+                        <h2 class="mb-0">{{ stats.orders }}</h2>
+                        <small class="text-success">
+                            <i class="bi bi-arrow-up me-1"></i>+8 за день
+                        </small>
+                    </div>
+                    <div class="stat-icon text-warning">
+                        <i class="bi bi-cart"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-top-0 py-2">
+                <a href="#" class="text-warning small">Просмотреть заказы <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card stat-card border-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Аренды</h6>
+                        <h2 class="mb-0">{{ stats.rentals }}</h2>
+                        <small class="text-danger">
+                            <i class="bi bi-arrow-down me-1"></i>-2 за неделю
+                        </small>
+                    </div>
+                    <div class="stat-icon text-info">
+                        <i class="bi bi-calendar"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-top-0 py-2">
+                <a href="#" class="text-info small">Просмотреть аренды <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card stat-card border-secondary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Ремонты</h6>
+                        <h2 class="mb-0">{{ stats.repairs }}</h2>
+                        <small class="text-success">
+                            <i class="bi bi-arrow-up me-1"></i>+1 за неделю
+                        </small>
+                    </div>
+                    <div class="stat-icon text-secondary">
+                        <i class="bi bi-wrench"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-top-0 py-2">
+                <a href="#" class="text-secondary small">Просмотреть ремонты <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Быстрые действия</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-xl-2 col-md-4 col-6 mb-3">
+                        <a href="#" class="btn btn-outline-success w-100">
+                            <i class="bi bi-people d-block fs-3 mb-2"></i>
+                            Пользователи
+                        </a>
+                    </div>
+                    <div class="col-xl-2 col-md-4 col-6 mb-3">
+                        <a href="#" class="btn btn-outline-warning w-100">
+                            <i class="bi bi-cart d-block fs-3 mb-2"></i>
+                            Заказы
+                        </a>
+                    </div>
+                    <div class="col-xl-2 col-md-4 col-6 mb-3">
+                        <a href="#" class="btn btn-outline-info w-100">
+                            <i class="bi bi-calendar d-block fs-3 mb-2"></i>
+                            Аренды
+                        </a>
+                    </div>
+                    <div class="col-xl-2 col-md-4 col-6 mb-3">
+                        <a href="#" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-wrench d-block fs-3 mb-2"></i>
+                            Ремонты
+                        </a>
+                    </div>
+                    <div class="col-xl-2 col-md-4 col-6 mb-3">
+                        <a href="#" class="btn btn-outline-dark w-100">
+                            <i class="bi bi-graph-up d-block fs-3 mb-2"></i>
+                            Отчеты
+                        </a>
+                    </div>
+                    <div class="col-xl-2 col-md-4 col-6 mb-3">
+                        <a href="{{ url_for('admin_instruments') }}" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-music-note-beamed d-block fs-3 mb-2"></i>
+                            Инструменты
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-cart me-2"></i>Последние заказы</h5>
+                <a href="#" class="btn btn-sm btn-outline-primary">Все заказы</a>
+            </div>
+            <div class="card-body">
+                {% if recent_orders and recent_orders|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Дата</th>
+                                <th>Пользователь</th>
+                                <th>Сумма</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in recent_orders %}
+                            <tr class="recent-item">
+                                <td><strong>#{{ order[0] }}</strong></td>
+                                <td>{{ order[21] if order[21] else order[20] }}</td>
+                                <td>{{ order[24] }}</td>
+                                <td>{{ "{:,.0f}".format(order[6]) if order[6] else 0 }} ₽</td>
+                                <td>
+                                    {% if order[26] == 'pending' %}
+                                    <span class="badge bg-warning">Ожидает</span>
+                                    {% elif order[26] == 'confirmed' %}
+                                    <span class="badge bg-info">Подтвержден</span>
+                                    {% elif order[26] == 'processing' %}
+                                    <span class="badge bg-primary">В обработке</span>
+                                    {% elif order[26] == 'shipped' %}
+                                    <span class="badge bg-success">Отправлен</span>
+                                    {% elif order[26] == 'delivered' %}
+                                    <span class="badge bg-success">Доставлен</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">{{ order[26] }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary">Просмотр</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-cart display-4 text-muted mb-3"></i>
+                    <p class="text-muted">Заказов пока нет</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-people me-2"></i>Последние пользователи</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_users %}
+                    {% for user in recent_users %}
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="flex-shrink-0">
+                            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" 
+                                 style="width: 40px; height: 40px;">
+                                <i class="bi bi-person text-white"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="mb-0">{{ user[4] }} {{ user[5] }}</h6>
+                            <small class="text-muted">@{{ user[1] }}</small>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted">{{ user[20].strftime('%d.%m.%Y') if user[20] else '' }}</small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-people display-4 text-muted mb-3"></i>
+                    <p class="text-muted">Пользователей пока нет</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-body">
+                <h6 class="mb-3"><i class="bi bi-graph-up me-2"></i>Сегодня</h6>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="h4 mb-0">{{ stats.orders_today or 0 }}</div>
+                        <small class="text-muted">Новых заказов</small>
+                    </div>
+                    <div class="col-6">
+                        <div class="h4 mb-0">{{ stats.users_today or 0 }}</div>
+                        <small class="text-muted">Новых пользователей</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const counters = document.querySelectorAll('.stat-card h2');
+        counters.forEach(counter => {
+            const target = parseInt(counter.textContent);
+            if (target > 0) {
+                let current = 0;
+                const increment = target / 50;
+                
+                const updateCounter = () => {
+                    if (current < target) {
+                        current += increment;
+                        counter.textContent = Math.round(current);
+                        setTimeout(updateCounter, 20);
+                    } else {
+                        counter.textContent = target;
+                    }
+                };
+                
+                updateCounter();
+            }
+        });
+    });
+</script>
+{% endblock %}

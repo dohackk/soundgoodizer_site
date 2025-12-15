@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Регистрация - SoundGoodizer{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white text-center">
+                <h4 class="mb-0"><i class="bi bi-person-plus me-2"></i>Регистрация</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="{{ url_for('register') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Логин *</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control" name="login" 
+                                   placeholder="Придумайте логин" required minlength="3">
+                        </div>
+                        <div class="form-text">Минимум 3 символа</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Email *</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                            <input type="email" class="form-control" name="email" 
+                                   placeholder="example@mail.com" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Имя *</label>
+                            <input type="text" class="form-control" name="first_name" 
+                                   placeholder="Иван" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Фамилия *</label>
+                            <input type="text" class="form-control" name="last_name" 
+                                   placeholder="Иванов" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Телефон</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                            <input type="tel" class="form-control" name="phone" 
+                                   placeholder="+7 (999) 123-45-67">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Пароль *</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control" name="password" 
+                                       placeholder="Пароль" required minlength="6">
+                            </div>
+                            <div class="form-text">Минимум 6 символов</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Подтверждение пароля *</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control" name="confirm_password" 
+                                       placeholder="Повторите пароль" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="terms" required>
+                        <label class="form-check-label" for="terms">
+                            Я согласен с <a href="#">правилами сайта</a> и 
+                            <a href="#">политикой конфиденциальности</a>
+                        </label>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-person-plus me-2"></i>Зарегистрироваться
+                        </button>
+                    </div>
+                </form>
+                
+                <hr class="my-4">
+                
+                <div class="text-center">
+                    <p class="mb-2">Уже есть аккаунт?</p>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Войти
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

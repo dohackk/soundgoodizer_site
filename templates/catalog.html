@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Каталог инструментов - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-sidebar {
+        position: sticky;
+        top: 90px;
+    }
+    
+    .instrument-card {
+        transition: all 0.3s ease;
+    }
+    
+    .instrument-card:hover {
+        transform: translateY(-5px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Главная</a></li>
+        <li class="breadcrumb-item active">Каталог</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <div class="col-lg-3 col-md-4 mb-4">
+        <div class="card filter-sidebar">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Фильтры</h5>
+            </div>
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('catalog') }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Поиск</label>
+                        <input type="text" class="form-control" name="search" 
+                               placeholder="Название, модель..." 
+                               value="{{ search_term or '' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Категория</label>
+                        <select class="form-select" name="category_id">
+                            <option value="">Все категории</option>
+                            {% for category in categories %}
+                            <option value="{{ category[0] }}" 
+                                    {% if selected_category == category[0]|string %}selected{% endif %}>
+                                {{ category[1] }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Бренд</label>
+                        <select class="form-select" name="brand_id">
+                            <option value="">Все бренды</option>
+                            {% for brand in brands %}
+                            <option value="{{ brand[0] }}" 
+                                    {% if selected_brand == brand[0]|string %}selected{% endif %}>
+                                {{ brand[1] }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search me-2"></i>Применить фильтры
+                        </button>
+                        <a href="{{ url_for('catalog') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle me-2"></i>Сбросить
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-9 col-md-8">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
+            <div>
+                <h1 class="h2 mb-2">Каталог инструментов</h1>
+                {% if search_term %}
+                <p class="text-muted mb-0">Результаты поиска по запросу: "{{ search_term }}"</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if instruments %}
+        <div class="alert alert-info d-flex align-items-center mb-4">
+            <i class="bi bi-info-circle me-2"></i>
+            Найдено инструментов: <strong class="ms-1">{{ instruments|length }}</strong>
+        </div>
+        
+        <div class="row g-4">
+            {% for instrument in instruments %}
+            <div class="col-xl-4 col-lg-6 col-md-6">
+                <div class="card instrument-card h-100">
+                    <div class="position-relative">
+                        {% if instrument.main_image_url %}
+                        <img src="{{ url_for('static', filename=instrument.main_image_url) }}" 
+                             class="card-img-top" alt="{{ instrument.name }}" 
+                             style="height: 200px; object-fit: cover;">
+                        {% else %}
+                        <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
+                             style="height: 200px;">
+                            <i class="bi bi-music-note-beamed display-4 text-secondary"></i>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="position-absolute top-0 end-0 m-2">
+                            {% if instrument.quantity_in_stock > 0 %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle me-1"></i>В наличии
+                            </span>
+                            {% else %}
+                            <span class="badge bg-danger">
+                                <i class="bi bi-x-circle me-1"></i>Нет в наличии
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        {% if instrument.condition_name and instrument.condition_name != 'new' %}
+                        <div class="position-absolute top-0 start-0 m-2">
+                            <span class="badge bg-warning text-dark">{{ instrument.condition_name }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">{{ instrument.name }}</h5>
+                        <p class="card-text text-muted small mb-2">
+                            <i class="bi bi-tag me-1"></i>{{ instrument.brand_name or 'Без бренда' }}
+                            {% if instrument.category_name %}
+                            <span class="ms-2">
+                                <i class="bi bi-folder me-1"></i>{{ instrument.category_name }}
+                            </span>
+                            {% endif %}
+                        </p>
+                        
+                        <p class="card-text mb-3">
+                            {{ instrument.description[:80] if instrument.description else 'Описание отсутствует' }}
+                            {% if instrument.description and instrument.description|length > 80 %}...{% endif %}
+                        </p>
+                        
+                        <div class="d-flex justify-content-between align-items-center mt-auto">
+                            <div>
+                                <span class="price h5 mb-0">{{ "{:,.0f}".format(instrument.purchase_price) }} ₽</span>
+                                {% if instrument.rental_price_per_day %}
+                                <div class="text-muted small">
+                                    <i class="bi bi-calendar me-1"></i>{{ "{:,.0f}".format(instrument.rental_price_per_day) }} ₽/день
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="btn-group">
+                                <a href="{{ url_for('instrument_detail', instrument_id=instrument.instrument_id) }}" 
+                                   class="btn btn-sm btn-outline-primary" title="Подробнее">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if instrument.quantity_in_stock > 0 %}
+                                <a href="{{ url_for('add_to_cart', instrument_id=instrument.instrument_id) }}" 
+                                   class="btn btn-sm btn-primary" title="В корзину">
+                                    <i class="bi bi-cart-plus"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-footer bg-white border-top-0 pt-0">
+                        <div class="d-flex justify-content-between align-items-center small">
+                            <div>
+                                {% if instrument.quantity_in_stock > 0 %}
+                                <span class="text-success">
+                                    <i class="bi bi-box-seam me-1"></i>{{ instrument.quantity_in_stock }} шт.
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="text-muted">
+                                <i class="bi bi-eye me-1"></i>{{ instrument.views_count or 0 }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-search display-1 text-muted mb-3"></i>
+            <h3 class="mb-3">Инструменты не найдены</h3>
+            <p class="text-muted mb-4">Попробуйте изменить параметры поиска или выберите другую категорию</p>
+            <div class="d-flex flex-wrap justify-content-center gap-2">
+                <a href="{{ url_for('catalog') }}" class="btn btn-primary">
+                    <i class="bi bi-grid me-2"></i>Весь каталог
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

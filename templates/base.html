@@ -209,13 +209,13 @@
                             <li><a class="dropdown-item" href="#"><i class="bi bi-wrench me-2"></i>Ремонт</a></li>
                         </ul>
                     </li>
-                    <!-- {% if session.get('user_role') == 'admin' %}
+                    {# {% if session.get('user_role') == 'admin' %}
                     <li class="nav-item">
                         <a class="nav-link text-danger" href="{{ url_for('admin_dashboard') }}">
                             <i class="bi bi-speedometer2 me-1"></i>Админ-панель
                         </a>
-                    </li> -->
-                    {% endif %}
+                    </li>
+                    {% endif % } #}
                 </ul>
                 
                 <div class="d-flex align-items-center">
@@ -249,11 +249,11 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Профиль</a></li>
                             <li><a class="dropdown-item" href="#"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
-                            {% if session.user_role == 'admin' %}
-                            <!-- <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
+                            {# {% if session.user_role == 'admin' %}
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
                                 <i class="bi bi-speedometer2 me-2"></i>Админ-панель
                             </a></li>
-                            {% endif %} -->
+                            {% endif % }#}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('logout') }}">
                                 <i class="bi bi-box-arrow-right me-2"></i>Выйти

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Подтверждение Email - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .verification-box {
+        max-width: 500px;
+        margin: 0 auto;
+    }
+    
+    .email-display {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-left: 4px solid #667eea;
+    }
+    
+    .code-input {
+        font-size: 1.5rem;
+        letter-spacing: 10px;
+        text-align: center;
+        height: 60px;
+    }
+    
+    #countdown {
+        font-weight: bold;
+        color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card verification-box">
+            <div class="card-header bg-primary text-white text-center">
+                <h4 class="mb-0"><i class="bi bi-envelope-check me-2"></i>Подтверждение Email</h4>
+            </div>
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-envelope-check display-1 text-primary mb-3"></i>
+                    <h3>Проверьте вашу почту</h3>
+                    <p class="text-muted">Мы отправили 6-значный код подтверждения на ваш email</p>
+                </div>
+                
+                <div class="email-display text-center">
+                    <i class="bi bi-envelope me-2"></i>
+                    <strong>{{ email }}</strong>
+                </div>
+                
+                <form method="POST" action="{{ url_for('verify_email') }}" id="verificationForm">
+                    <div class="mb-3">
+                        <label class="form-label">Введите 6-значный код:</label>
+                        <input type="text" 
+                               class="form-control code-input" 
+                               name="code" 
+                               placeholder="123456" 
+                               maxlength="6" 
+                               pattern="[0-9]{6}"
+                               required
+                               autofocus>
+                        <div class="form-text text-center">Код состоит из 6 цифр</div>
+                    </div>
+                    
+                    <div class="mb-3 text-center">
+                        <p class="mb-2">Не получили код?</p>
+                        <button type="button" id="resendBtn" class="btn btn-outline-secondary" disabled>
+                            <i class="bi bi-clock me-1"></i>Отправить повторно (<span id="countdown">60</span>)
+                        </button>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-check-circle me-2"></i>Подтвердить
+                        </button>
+                        <a href="{{ url_for('register') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Назад к регистрации
+                        </a>
+                    </div>
+                </form>
+                
+                <hr class="my-4">
+                
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle me-2"></i>Что делать, если не пришел код?</h6>
+                    <ul class="mb-0">
+                        <li>Проверьте папку "Спам" или "Рассылки"</li>
+                        <li>Убедитесь, что ввели правильный email</li>
+                        <li>Подождите 1-2 минуты, письма иногда приходят с задержкой</li>
+                        <li>Нажмите "Отправить повторно" после окончания таймера</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const resendBtn = document.getElementById('resendBtn');
+    const countdownElement = document.getElementById('countdown');
+    let countdown = 60;
+    
+    // Таймер для повторной отправки
+    const timer = setInterval(function() {
+        countdown--;
+        countdownElement.textContent = countdown;
+        
+        if (countdown <= 0) {
+            clearInterval(timer);
+            resendBtn.disabled = false;
+            resendBtn.innerHTML = '<i class="bi bi-envelope-arrow-up me-1"></i>Отправить повторно';
+            countdownElement.style.display = 'none';
+        }
+    }, 1000);
+    
+    // Обработка повторной отправки
+    resendBtn.addEventListener('click', function() {
+        if (this.disabled) return;
+        
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Отправка...';
+        
+        fetch('{{ url_for("resend_verification") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Новый код отправлен на вашу почту');
+                
+                // Сброс таймера
+                countdown = 60;
+                countdownElement.textContent = countdown;
+                countdownElement.style.display = 'inline';
+                
+                const newTimer = setInterval(function() {
+                    countdown--;
+                    countdownElement.textContent = countdown;
+                    
+                    if (countdown <= 0) {
+                        clearInterval(newTimer);
+                        resendBtn.disabled = false;
+                        resendBtn.innerHTML = '<i class="bi bi-envelope-arrow-up me-1"></i>Отправить повторно';
+                        countdownElement.style.display = 'none';
+                    }
+                }, 1000);
+            } else {
+                alert('Ошибка: ' + data.message);
+                resendBtn.disabled = false;
+                resendBtn.innerHTML = '<i class="bi bi-envelope-arrow-up me-1"></i>Отправить повторно';
+            }
+        })
+        .catch(error => {
+            alert('Ошибка сети');
+            resendBtn.disabled = false;
+            resendBtn.innerHTML = '<i class="bi bi-envelope-arrow-up me-1"></i>Отправить повторно';
+        });
+    });
+});
+</script>
+{% endblock %}

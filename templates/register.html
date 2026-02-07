@@ -10,7 +10,7 @@
                 <h4 class="mb-0"><i class="bi bi-person-plus me-2"></i>Регистрация</h4>
             </div>
             <div class="card-body p-4">
-                <form method="POST" action="{{ url_for('register') }}">
+                <form method="POST" action="{{ url_for('register') }}" id="register-form">
                     <div class="mb-3">
                         <label class="form-label">Логин *</label>
                         <div class="input-group">
@@ -47,9 +47,11 @@
                         <label class="form-label">Телефон</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-telephone"></i></span>
-                            <input type="tel" class="form-control" name="phone" 
-                                   placeholder="+7 (999) 123-45-67">
+                            <input type="tel" class="form-control phone-input" name="phone" 
+                                   placeholder="+7 (999) 123-45-67" id="phone-input"
+                                   pattern="\+7\s\(\d{3}\)\s\d{3}-\d{2}-\d{2}">
                         </div>
+                        <div class="form-text">Номер отформатируется автоматически</div>
                     </div>
                     
                     <div class="row">
@@ -99,4 +101,98 @@
         </div>
     </div>
 </div>
+
+<script>
+function formatPhoneNumber(phone) {
+    let digits = phone.replace(/\D/g, '');
+
+    if (digits.length > 0 && (digits[0] === '7' || digits[0] === '8')) {
+        digits = digits.substring(1);
+    }
+    
+    if (digits.length === 0) {
+        return '';
+    } else if (digits.length <= 3) {
+        return '+7 (' + digits;
+    } else if (digits.length <= 6) {
+        return '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3);
+    } else if (digits.length <= 8) {
+        return '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3, 6) + '-' + digits.substring(6);
+    } else {
+        return '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3, 6) + '-' + digits.substring(6, 8) + '-' + digits.substring(8, 10);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const phoneInput = document.getElementById('phone-input');
+    
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function(e) {
+            const cursorPosition = e.target.selectionStart;
+            const oldValue = e.target.value;
+            
+            let digits = e.target.value.replace(/\D/g, '');
+            
+            if (digits.length > 0 && (digits[0] === '7' || digits[0] === '8')) {
+                digits = digits.substring(1);
+            }
+            
+            let formatted = '';
+            if (digits.length === 0) {
+                formatted = '';
+            } else if (digits.length <= 3) {
+                formatted = '+7 (' + digits;
+            } else if (digits.length <= 6) {
+                formatted = '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3);
+            } else if (digits.length <= 8) {
+                formatted = '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3, 6) + '-' + digits.substring(6);
+            } else {
+                formatted = '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3, 6) + '-' + digits.substring(6, 8) + '-' + digits.substring(8, 10);
+            }
+            
+            e.target.value = formatted;
+            
+            setTimeout(() => {
+                let newCursorPosition = cursorPosition;
+                
+                if (formatted.length > oldValue.length) {
+                    newCursorPosition += (formatted.length - oldValue.length);
+                } else if (formatted.length < oldValue.length) {
+                    newCursorPosition -= (oldValue.length - formatted.length);
+                }
+                
+                newCursorPosition = Math.max(0, Math.min(newCursorPosition, formatted.length));
+                e.target.setSelectionRange(newCursorPosition, newCursorPosition);
+            }, 0);
+        });
+        
+        phoneInput.addEventListener('focus', function() {
+            if (!this.value) {
+                this.value = '+7 (';
+            }
+        });
+        
+        phoneInput.addEventListener('keydown', function(e) {
+            const cursorPosition = this.selectionStart;
+            
+            if (e.key === 'Backspace' && cursorPosition === 5) {
+                e.preventDefault();
+                this.value = '+7 ';
+                this.setSelectionRange(3, 3);
+            }
+            
+            if (e.key === 'Delete' && cursorPosition === 4) {
+                e.preventDefault();
+                const digits = this.value.replace(/\D/g, '').substring(1);
+                if (digits.length >= 3) {
+                    this.value = '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3);
+                } else {
+                    this.value = '+7 (' + digits;
+                }
+                this.setSelectionRange(5, 5);
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

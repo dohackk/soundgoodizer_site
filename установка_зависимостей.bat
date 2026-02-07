@@ -28,6 +28,9 @@ pip install pyodbc
 echo Устанавливаем Werkzeug...
 pip install werkzeug
 
+echo Устанавливаем flask-mail...
+pip install flask-mail
+
 echo.
 echo Все зависимости успешно установлены!
 echo.

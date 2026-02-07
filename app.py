@@ -3,9 +3,22 @@ import pyodbc
 import hashlib
 from functools import wraps
 from collections import namedtuple
+from flask_mail import Mail, Message
+import secrets
+from datetime import datetime, timedelta
+import os
 
 app = Flask(__name__)
 app.secret_key = 'soundgoodizer-secret-key-2025-super-secure'
+
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'e.saltymakov06@gmail.com'
+app.config['MAIL_PASSWORD'] = 'vbfm gowd elnj nxjg'
+app.config['MAIL_DEFAULT_SENDER'] = 'e.saltymakov06@gmail.com'
+
+mail = Mail(app)
 
 def get_db_connection():
     try:
@@ -43,10 +56,6 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def get_instruments(where_clause="", params=()):
-    """
-    Получает инструменты с правильными полями
-    Возвращает список именованных кортежей
-    """
     conn = get_db_connection()
     if not conn:
         return []
@@ -100,6 +109,79 @@ def get_instruments(where_clause="", params=()):
         print(f"Ошибка при получении инструментов: {e}")
         conn.close()
         return []
+
+def send_verification_email(email, verification_code):
+    """Отправка email с кодом подтверждения"""
+    try:
+        msg = Message(
+            subject='Подтверждение email - SoundGoodizer',
+            recipients=[email]
+        )
+        
+        msg.html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #667eea; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .code {{ font-size: 32px; font-weight: bold; color: #667eea; text-align: center; padding: 20px; background: #f8f9fa; border-radius: 5px; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>SoundGoodizer</h1>
+                    <p>Подтверждение email адреса</p>
+                </div>
+                
+                <p>Здравствуйте!</p>
+                <p>Благодарим вас за регистрацию в SoundGoodizer. Для завершения регистрации необходимо подтвердить ваш email адрес.</p>
+                
+                <p>Ваш код подтверждения:</p>
+                <div class="code">{verification_code}</div>
+                
+                <p>Введите этот 6-значный код на странице подтверждения на сайте SoundGoodizer.</p>
+                
+                <p><strong>Код действителен 24 часа.</strong></p>
+                
+                <p>Если вы не регистрировались на SoundGoodizer, просто проигнорируйте это письмо.</p>
+                
+                <hr>
+                
+                <p style="color: #666; font-size: 12px;">
+                    © SoundGoodizer. Все права защищены.<br>
+                    Это письмо отправлено автоматически, пожалуйста, не отвечайте на него.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.body = f"""
+        Здравствуйте!
+        
+        Благодарим вас за регистрацию в SoundGoodizer.
+        
+        Ваш код подтверждения: {verification_code}
+        
+        Введите этот 6-значный код на странице подтверждения на сайте SoundGoodizer.
+        
+        Код действителен 24 часа.
+        
+        Если вы не регистрировались на SoundGoodizer, просто проигнорируйте это письмо.
+        
+        © SoundGoodizer
+        """
+        
+        mail.send(msg)
+        print(f"✓ Email с кодом подтверждения отправлен на {email}")
+        return True
+    except Exception as e:
+        print(f"✗ Ошибка отправки email: {e}")
+        return False
 
 @app.route('/')
 def index():
@@ -161,8 +243,8 @@ def catalog():
     category_id = request.args.get('category_id')
     search = request.args.get('search', '')
     brand_id = request.args.get('brand_id')
-    page = request.args.get('page', 1, type=int)  
-    per_page = 12 
+    page = request.args.get('page', 1, type=int)
+    per_page = 12
     
     where_conditions = ["i.is_available_for_sale = 1"]
     params = []
@@ -384,23 +466,41 @@ def login():
             user = cursor.fetchone()
             
             if user:
-                stored_password_hash = user[3] 
+                stored_password_hash = user[3]
                 input_password_hash = hash_password(password)
                 
                 if stored_password_hash == input_password_hash:
+                    is_email_verified = user[12]
+                    
+                    if not is_email_verified:
+                        session['pending_verification_email'] = user[2]
+                        session['pending_user_id'] = user[0]
+                        
+                        verification_code = secrets.randbelow(900000) + 100000
+                        code_str = str(verification_code)
+                        expires_at = datetime.now() + timedelta(hours=24)
+                        
+                        cursor.execute("""
+                        UPDATE users 
+                        SET email_verification_code = ?, email_verification_expires = ?
+                        WHERE user_id = ?
+                        """, (code_str, expires_at, user[0]))
+                        conn.commit()
+                        
+                        send_verification_email(user[2], code_str)
+                        
+                        flash('Сначала подтвердите ваш email. Код отправлен на вашу почту.', 'warning')
+                        conn.close()
+                        return redirect(url_for('verify_email'))
+                    
                     session['user_id'] = user[0]
                     session['username'] = user[1]
                     session['user_name'] = f"{user[4]} {user[5]}"
                     session['user_role'] = user[18]
                     session['user_email'] = user[2]
                     session['user_avatar'] = user[11]
+                    session['is_email_verified'] = True
 
-                    print("=" * 50)
-                    print(f"Пользователь найден: {user[1]}")
-                    print(f"Позиция role_name: {user[18]}")
-                    print(f"Роль в сессии: {session.get('user_role')}")
-                    print("=" * 50)
-                    
                     flash(f'Добро пожаловать, {session["user_name"]}!', 'success')
                     conn.close()
                     return redirect(url_for('index'))
@@ -428,6 +528,15 @@ def register():
         last_name = request.form.get('last_name', '').strip()
         phone = request.form.get('phone', '').strip()
         
+        if phone:
+            digits = ''.join(filter(str.isdigit, phone))
+            
+            if digits.startswith('7') or digits.startswith('8'):
+                digits = digits[1:]
+            
+            if len(digits) == 10:
+                phone = f"+7 ({digits[:3]}) {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
+        
         errors = []
         if not login or len(login) < 3:
             errors.append('Логин должен содержать минимум 3 символа')
@@ -441,6 +550,10 @@ def register():
             errors.append('Введите имя')
         if not last_name:
             errors.append('Введите фамилию')
+        if phone:
+            digits = ''.join(filter(str.isdigit, phone))
+            if len(digits) < 10:
+                errors.append('Номер телефона должен содержать 10 цифр')
         
         if errors:
             for error in errors:
@@ -467,14 +580,20 @@ def register():
                 conn.close()
                 return render_template('register.html')
             
+            verification_code = secrets.randbelow(900000) + 100000
+            verification_code_str = str(verification_code)
+            expires_at = datetime.now() + timedelta(hours=24)
+            
             password_hash = hash_password(password)
             
             sql = """
             INSERT INTO users (login, email, password_hash, first_name, last_name, 
-                             phone, role_id, is_active, is_email_verified)
-            VALUES (?, ?, ?, ?, ?, ?, 4, 1, 0)
+                             phone, role_id, is_active, is_email_verified,
+                             email_verification_code, email_verification_expires)
+            VALUES (?, ?, ?, ?, ?, ?, 4, 1, 0, ?, ?)
             """
-            cursor.execute(sql, (login, email, password_hash, first_name, last_name, phone))
+            cursor.execute(sql, (login, email, password_hash, first_name, last_name, phone,
+                               verification_code_str, expires_at))
             conn.commit()
             
             cursor.execute("SELECT @@IDENTITY")
@@ -482,14 +601,152 @@ def register():
             
             conn.close()
             
-            flash('Регистрация успешна! Теперь войдите в систему', 'success')
-            return redirect(url_for('login'))
+            email_sent = send_verification_email(email, verification_code_str)
+            
+            if email_sent:
+                flash(f'Регистрация успешна! Код подтверждения отправлен на {email}', 'success')
+                session['pending_verification_email'] = email
+                session['pending_user_id'] = user_id
+                return redirect(url_for('verify_email'))
+            else:
+                flash('Регистрация успешна, но не удалось отправить email. Обратитесь к администратору.', 'warning')
+                return redirect(url_for('verify_email'))
             
         except Exception as e:
             conn.close()
             flash(f'Ошибка при регистрации: {str(e)}', 'danger')
     
     return render_template('register.html')
+
+@app.route('/verify-email', methods=['GET', 'POST'])
+def verify_email():
+    """Страница подтверждения email"""
+    email = session.get('pending_verification_email')
+    user_id = session.get('pending_user_id')
+    
+    if not email or not user_id:
+        flash('Сначала зарегистрируйтесь', 'warning')
+        return redirect(url_for('register'))
+    
+    if request.method == 'POST':
+        code = request.form.get('code', '').strip()
+        
+        if not code or len(code) != 6:
+            flash('Введите 6-значный код подтверждения', 'danger')
+            return render_template('verify_email.html', email=email)
+        
+        conn = get_db_connection()
+        if not conn:
+            flash('Ошибка подключения к базе данных', 'danger')
+            return render_template('verify_email.html', email=email)
+        
+        try:
+            cursor = conn.cursor()
+            
+            sql = """
+            SELECT email_verification_code, email_verification_expires 
+            FROM users 
+            WHERE user_id = ? AND email = ? AND is_email_verified = 0
+            """
+            cursor.execute(sql, (user_id, email))
+            result = cursor.fetchone()
+            
+            if result:
+                stored_code, expires_at = result
+                
+                if not stored_code:
+                    flash('Код подтверждения не найден', 'danger')
+                elif expires_at and expires_at < datetime.now():
+                    flash('Срок действия кода истек. Запросите новый код.', 'danger')
+                elif stored_code == code:
+                    cursor.execute("""
+                    UPDATE users 
+                    SET is_email_verified = 1, 
+                        email_verification_code = NULL,
+                        email_verification_expires = NULL
+                    WHERE user_id = ?
+                    """, (user_id,))
+                    conn.commit()
+                    
+                    cursor.execute("""
+                    SELECT u.*, r.role_name, u.avatar_url
+                    FROM users u
+                    JOIN roles r ON u.role_id = r.role_id
+                    WHERE u.user_id = ?
+                    """, (user_id,))
+                    user = cursor.fetchone()
+                    
+                    session.pop('pending_verification_email', None)
+                    session.pop('pending_user_id', None)
+                    
+                    session['user_id'] = user[0]
+                    session['username'] = user[1]
+                    session['user_name'] = f"{user[4]} {user[5]}"
+                    session['user_role'] = user[18]
+                    session['user_email'] = user[2]
+                    session['user_avatar'] = user[11]
+                    session['is_email_verified'] = True
+                    
+                    conn.close()
+                    
+                    flash('Email успешно подтвержден! Добро пожаловать в SoundGoodizer!', 'success')
+                    return redirect(url_for('index'))
+                else:
+                    flash('Неверный код подтверждения', 'danger')
+            else:
+                flash('Пользователь не найден или email уже подтвержден', 'danger')
+            
+            conn.close()
+        except Exception as e:
+            conn.close()
+            flash(f'Ошибка при подтверждении email: {str(e)}', 'danger')
+    
+    return render_template('verify_email.html', email=email)
+
+@app.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    """Повторная отправка кода подтверждения"""
+    email = session.get('pending_verification_email')
+    user_id = session.get('pending_user_id')
+    
+    if not email or not user_id:
+        return jsonify({'success': False, 'message': 'Сессия истекла. Зарегистрируйтесь заново.'})
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'success': False, 'message': 'Ошибка подключения к БД'})
+    
+    try:
+        cursor = conn.cursor()
+        
+        new_code = secrets.randbelow(900000) + 100000
+        new_code_str = str(new_code)
+        new_expires = datetime.now() + timedelta(hours=24)
+        
+        cursor.execute("""
+        UPDATE users 
+        SET email_verification_code = ?, email_verification_expires = ?
+        WHERE user_id = ? AND email = ? AND is_email_verified = 0
+        """, (new_code_str, new_expires, user_id, email))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Пользователь не найден или email уже подтвержден'})
+        
+        conn.commit()
+        
+        email_sent = send_verification_email(email, new_code_str)
+        
+        conn.close()
+        
+        if email_sent:
+            return jsonify({'success': True, 'message': 'Новый код отправлен на email'})
+        else:
+            return jsonify({'success': False, 'message': 'Ошибка отправки email'})
+            
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/logout')
 def logout():
@@ -498,51 +755,6 @@ def logout():
     flash('Вы вышли из системы', 'info')
     return redirect(url_for('index'))
 
-@app.route('/cart')
-@login_required
-def cart():
-    """Корзина пользователя"""
-    conn = get_db_connection()
-    if not conn:
-        flash('Ошибка подключения к базе данных', 'danger')
-        return redirect(url_for('index'))
-    
-    try:
-        cursor = conn.cursor()
-        
-        sql = """
-        SELECT ci.*, i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
-        FROM cart_items ci
-        JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ?
-        """
-        cursor.execute(sql, (session['user_id'],))
-        cart_items = cursor.fetchall()
-        
-        total = 0
-        items_list = []
-        for item in cart_items:
-            item_total = item[2] * item[3]
-            total += item_total
-            items_list.append({
-                'id': item[0],
-                'instrument_id': item[2],
-                'name': item[7],
-                'price': item[8],
-                'quantity': item[3],
-                'image': item[9],
-                'stock': item[10],
-                'total': item_total
-            })
-        
-        conn.close()
-        
-        return render_template('cart.html', cart_items=items_list, total=total)
-    except Exception as e:
-        conn.close()
-        flash(f'Ошибка при загрузке корзины: {str(e)}', 'danger')
-        return redirect(url_for('index'))
-    
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
@@ -694,6 +906,51 @@ def profile():
         flash(f'Ошибка при загрузке профиля: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
+@app.route('/cart')
+@login_required
+def cart():
+    """Корзина пользователя"""
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        sql = """
+        SELECT ci.*, i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
+        FROM cart_items ci
+        JOIN instruments i ON ci.instrument_id = i.instrument_id
+        WHERE ci.user_id = ?
+        """
+        cursor.execute(sql, (session['user_id'],))
+        cart_items = cursor.fetchall()
+        
+        total = 0
+        items_list = []
+        for item in cart_items:
+            item_total = item[2] * item[3]
+            total += item_total
+            items_list.append({
+                'id': item[0],
+                'instrument_id': item[2],
+                'name': item[7],
+                'price': item[8],
+                'quantity': item[3],
+                'image': item[9],
+                'stock': item[10],
+                'total': item_total
+            })
+        
+        conn.close()
+        
+        return render_template('cart.html', cart_items=items_list, total=total)
+    except Exception as e:
+        conn.close()
+        flash(f'Ошибка при загрузке корзины: {str(e)}', 'danger')
+        return redirect(url_for('index'))
+    
 @app.route('/add_to_cart/<int:instrument_id>')
 @login_required
 def add_to_cart(instrument_id):

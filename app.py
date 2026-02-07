@@ -139,7 +139,7 @@ def index():
         LEFT JOIN brands b ON i.brand_id = b.brand_id
         LEFT JOIN categories c ON i.category_id = c.category_id
         WHERE i.is_available_for_sale = 1
-        ORDER BY i.instrument_id DESC
+        ORDER BY i.views_count DESC, i.instrument_id DESC
         """
         cursor.execute(sql)
         instruments = cursor.fetchall()

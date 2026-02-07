@@ -375,7 +375,7 @@ def login():
             cursor = conn.cursor()
             
             sql = """
-            SELECT u.*, r.role_name 
+            SELECT u.*, r.role_name, u.avatar_url
             FROM users u
             JOIN roles r ON u.role_id = r.role_id
             WHERE u.login = ? AND u.is_active = 1
@@ -393,6 +393,7 @@ def login():
                     session['user_name'] = f"{user[4]} {user[5]}"
                     session['user_role'] = user[18]
                     session['user_email'] = user[2]
+                    session['user_avatar'] = user[11]
 
                     print("=" * 50)
                     print(f"Пользователь найден: {user[1]}")
@@ -542,6 +543,156 @@ def cart():
         flash(f'Ошибка при загрузке корзины: {str(e)}', 'danger')
         return redirect(url_for('index'))
     
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT avatar_url, password_hash FROM users WHERE user_id = ?", (session['user_id'],))
+        current_data = cursor.fetchone()
+        current_avatar_path = current_data[0] if current_data and current_data[0] else None
+        current_password_hash = current_data[1] if current_data else None
+        
+        if request.method == 'POST':
+            import os
+            import uuid
+            
+            if request.form.get('delete_avatar'):
+                if current_avatar_path:
+                    file_path = os.path.join('static', current_avatar_path)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                
+                cursor.execute(
+                    "UPDATE users SET avatar_url = NULL WHERE user_id = ?",
+                    (session['user_id'],)
+                )
+                conn.commit()
+                session['user_avatar'] = None
+                
+                flash('Фото профиля удалено', 'info')
+                return redirect(url_for('profile'))
+            
+            if 'avatar' in request.files:
+                file = request.files['avatar']
+                
+                if file.filename != '':
+                    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+                    file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+                    
+                    if file_ext not in allowed_extensions:
+                        flash('Разрешены только файлы: PNG, JPG, JPEG, GIF, WEBP', 'danger')
+                    else:
+                        if current_avatar_path:
+                            old_file_path = os.path.join('static', current_avatar_path)
+                            if os.path.exists(old_file_path):
+                                os.remove(old_file_path)
+                        
+                        username = session['username']
+                        safe_username = "".join(c for c in username if c.isalnum() or c in ('-', '_')).lower()
+                        
+                        filename = f"{safe_username}_{uuid.uuid4().hex[:8]}.{file_ext}"
+                        upload_folder = 'static/uploads/avatars'
+                        
+                        os.makedirs(upload_folder, exist_ok=True)
+                        
+                        file_path = os.path.join(upload_folder, filename)
+                        file.save(file_path)
+                        
+                        avatar_url = f'uploads/avatars/{filename}'
+                        
+                        cursor.execute(
+                            "UPDATE users SET avatar_url = ? WHERE user_id = ?",
+                            (avatar_url, session['user_id'])
+                        )
+                        conn.commit()
+                        
+                        session['user_avatar'] = avatar_url
+                        
+                        flash('Фото профиля успешно обновлено!', 'success')
+                        return redirect(url_for('profile'))
+                else:
+                    flash('Файл не выбран', 'warning')
+            
+            if request.form.get('change_password'):
+                current_password = request.form.get('current_password', '').strip()
+                new_password = request.form.get('new_password', '').strip()
+                confirm_password = request.form.get('confirm_password', '').strip()
+                
+                if not current_password or not new_password or not confirm_password:
+                    flash('Заполните все поля', 'danger')
+                elif new_password != confirm_password:
+                    flash('Новые пароли не совпадают', 'danger')
+                elif len(new_password) < 6:
+                    flash('Новый пароль должен содержать минимум 6 символов', 'danger')
+                else:
+                    current_password_hash_input = hashlib.sha256(current_password.encode()).hexdigest()
+                    
+                    if current_password_hash_input != current_password_hash:
+                        flash('Текущий пароль неверен', 'danger')
+                    else:
+                        new_password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+                        
+                        cursor.execute(
+                            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+                            (new_password_hash, session['user_id'])
+                        )
+                        conn.commit()
+                        
+                        flash('Пароль успешно изменен!', 'success')
+                        return redirect(url_for('profile'))
+        
+        cursor.execute("""
+            SELECT u.*, r.role_name 
+            FROM users u
+            JOIN roles r ON u.role_id = r.role_id
+            WHERE u.user_id = ?
+        """, (session['user_id'],))
+        user = cursor.fetchone()
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM cart_items WHERE user_id = ?
+        """, (session['user_id'],))
+        cart_items = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM purchase_orders WHERE user_id = ?
+        """, (session['user_id'],))
+        orders_count = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM rental_orders WHERE user_id = ?
+        """, (session['user_id'],))
+        rentals_count = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT TOP 5 po.*, os.status_name 
+            FROM purchase_orders po
+            JOIN order_statuses os ON po.status_id = os.status_id
+            WHERE po.user_id = ?
+            ORDER BY po.order_date DESC
+        """, (session['user_id'],))
+        recent_orders = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('profile.html',
+                             user=user,
+                             cart_items=cart_items,
+                             orders_count=orders_count,
+                             rentals_count=rentals_count,
+                             recent_orders=recent_orders)
+        
+    except Exception as e:
+        conn.close()
+        flash(f'Ошибка при загрузке профиля: {str(e)}', 'danger')
+        return redirect(url_for('index'))
 
 @app.route('/add_to_cart/<int:instrument_id>')
 @login_required

@@ -237,35 +237,61 @@
                     </a>
                     
                     {% if session.username %}
-                    <div class="dropdown">
-                        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle me-1"></i>{{ session.username }}
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><span class="dropdown-item-text">
-                                <small>Вошли как</small><br>
-                                <strong>{{ session.user_name }}</strong>
-                            </span></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Профиль</a></li>
-                            <li><a class="dropdown-item" href="#"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
-                            {% if session.user_role == 'admin' %}
-                            <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
-                                <i class="bi bi-speedometer2 me-2"></i>Админ-панель
-                            </a></li>
-                            {% endif %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                                <i class="bi bi-box-arrow-right me-2"></i>Выйти
-                            </a></li>
-                        </ul>
-                    </div>
-                    {% else %}
-                    <div class="btn-group">
-                        <a href="{{ url_for('login') }}" class="btn btn-outline-primary">Войти</a>
-                        <a href="{{ url_for('register') }}" class="btn btn-primary">Регистрация</a>
-                    </div>
-                    {% endif %}
+<div class="dropdown">
+    <button class="btn btn-outline-primary dropdown-toggle d-flex align-items-center" type="button" data-bs-toggle="dropdown">
+        {% if session.user_avatar %}
+        <img src="{{ url_for('static', filename=session.user_avatar) }}" 
+             class="rounded-circle me-2" 
+             style="width: 32px; height: 32px; object-fit: cover;"
+             alt="Аватар">
+        {% else %}
+        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-2" 
+             style="width: 32px; height: 32px;">
+            <i class="bi bi-person text-secondary"></i>
+        </div>
+        {% endif %}
+        {{ session.username }}
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+        <li>
+            <span class="dropdown-item-text d-flex align-items-center">
+                {% if session.user_avatar %}
+                <img src="{{ url_for('static', filename=session.user_avatar) }}" 
+                     class="rounded-circle me-2" 
+                     style="width: 48px; height: 48px; object-fit: cover;"
+                     alt="Аватар">
+                {% else %}
+                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-2" 
+                     style="width: 48px; height: 48px;">
+                    <i class="bi bi-person fs-4 text-secondary"></i>
+                </div>
+                {% endif %}
+                <div>
+                    <small>Вошли как</small><br>
+                    <strong>{{ session.user_name }}</strong>
+                </div>
+            </span>
+        </li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bi bi-person me-2"></i>Профиль</a></li>
+        <li><a class="dropdown-item" href="#"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
+        {% if session.user_role == 'admin' %}
+        <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
+            <i class="bi bi-speedometer2 me-2"></i>Админ-панель
+        </a></li>
+        {% endif %}
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+            <i class="bi bi-box-arrow-right me-2"></i>Выйти
+        </a></li>
+    </ul>
+</div>
+{% else %}
+<div class="btn-group">
+    <a href="{{ url_for('login') }}" class="btn btn-outline-primary">Войти</a>
+    <a href="{{ url_for('register') }}" class="btn btn-primary">Регистрация</a>
+</div>
+{% endif %}
                 </div>
             </div>
         </div>

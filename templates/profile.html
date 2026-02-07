@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block title %}Профиль - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-header {
+        background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+        border-radius: 15px;
+        padding: 2rem;
+        color: white;
+        margin-bottom: 2rem;
+    }
+    
+    .profile-avatar {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        border: 5px solid white;
+        object-fit: cover;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    .profile-stats {
+        display: flex;
+        justify-content: space-around;
+        text-align: center;
+        margin-top: 2rem;
+    }
+    
+    .stat-item {
+        padding: 1rem;
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+        font-weight: bold;
+        display: block;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .profile-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .upload-btn {
+        position: relative;
+        overflow: hidden;
+        display: inline-block;
+    }
+    
+    .upload-btn input[type=file] {
+        position: absolute;
+        left: 0;
+        top: 0;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+    }
+    
+    .user-info-card {
+        border-left: 4px solid var(--secondary-color);
+    }
+    
+    .info-row {
+        display: flex;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: var(--primary-color);
+        min-width: 150px;
+    }
+    
+    .info-value {
+        color: #666;
+    }
+    
+    .activity-timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    
+    .activity-timeline::before {
+        content: '';
+        position: absolute;
+        left: 15px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background-color: var(--secondary-color);
+    }
+    
+    .activity-item {
+        position: relative;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .activity-item::before {
+        content: '';
+        position: absolute;
+        left: -23px;
+        top: 5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: var(--secondary-color);
+        border: 3px solid white;
+    }
+    
+    .activity-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: var(--light-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+    }
+    
+    .no-avatar {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        border: 5px solid white;
+        background-color: var(--light-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4rem;
+        color: var(--secondary-color);
+    }
+    
+    .password-strength {
+        height: 5px;
+        margin-top: 5px;
+        border-radius: 3px;
+        transition: all 0.3s;
+    }
+    
+    .strength-weak {
+        background-color: #dc3545;
+        width: 33%;
+    }
+    
+    .strength-medium {
+        background-color: #ffc107;
+        width: 66%;
+    }
+    
+    .strength-strong {
+        background-color: #28a745;
+        width: 100%;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="profile-header">
+        <div class="row align-items-center">
+            <div class="col-md-3 text-center">
+                {% if user.avatar_url %}
+                <img src="{{ url_for('static', filename=user.avatar_url) }}" 
+                     class="profile-avatar" 
+                     alt="Аватар {{ user.first_name }}">
+                {% else %}
+                <div class="no-avatar">
+                    <i class="bi bi-person-circle"></i>
+                </div>
+                {% endif %}
+                
+                <div class="mt-3">
+                    <div class="profile-actions">
+                        <form method="POST" enctype="multipart/form-data" style="display: inline;">
+                            <label class="btn btn-light upload-btn">
+                                <i class="bi bi-camera me-1"></i>Сменить фото
+                                <input type="file" name="avatar" accept="image/*" onchange="this.form.submit()">
+                            </label>
+                        </form>
+                        
+                        {% if user.avatar_url %}
+                        <button type="button" class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#avatarModal">
+                            <i class="bi bi-trash me-1"></i>Удалить
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-9">
+                <h1 class="display-5">{{ user.first_name }} {{ user.last_name }}</h1>
+                <p class="lead mb-0">{{ user.role_name }}</p>
+                <p class="mb-0"><i class="bi bi-envelope me-2"></i>{{ user.email }}</p>
+                {% if user.phone %}
+                <p class="mb-0"><i class="bi bi-telephone me-2"></i>{{ user.phone }}</p>
+                {% endif %}
+                <p class="mb-0"><i class="bi bi-calendar me-2"></i>Зарегистрирован: {{ user.created_at.strftime('%d.%m.%Y') if user.created_at else 'Нет данных' }}</p>
+            </div>
+        </div>
+        
+        <div class="profile-stats">
+            <div class="stat-item">
+                <span class="stat-number">{{ cart_items }}</span>
+                <span class="stat-label">В корзине</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">{{ orders_count }}</span>
+                <span class="stat-label">Покупок</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">{{ rentals_count }}</span>
+                <span class="stat-label">Аренд</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">{{ user.views_count or 0 }}</span>
+                <span class="stat-label">Просмотров</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card h-70">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Личная информация</h5>
+                </div>
+                <div class="card-body user-info-card">
+                    <div class="info-row">
+                        <div class="info-label">Логин:</div>
+                        <div class="info-value">{{ user.login }}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Имя:</div>
+                        <div class="info-value">{{ user.first_name }}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Фамилия:</div>
+                        <div class="info-value">{{ user.last_name }}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Email:</div>
+                        <div class="info-value">{{ user.email }}</div>
+                    </div>
+                    {% if user.phone %}
+                    <div class="info-row">
+                        <div class="info-label">Телефон:</div>
+                        <div class="info-value">{{ user.phone }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Последние действия</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_orders %}
+                    <div class="activity-timeline">
+                        {% for order in recent_orders %}
+                        <div class="activity-item">
+                            <div class="d-flex">
+                                <div class="activity-icon">
+                                    <i class="bi bi-cart-check text-primary"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-1">Заказ #{{ order[0] }}</h6>
+                                    <p class="mb-1 text-muted small">
+                                        {{ order[4].strftime('%d.%m.%Y %H:%M') if order[4] else 'Дата не указана' }}
+                                    </p>
+                                    <span class="badge bg-{{ 'success' if order[7] == 'completed' else 'warning' if order[7] == 'processing' else 'secondary' }}">
+                                        {{ order[12] }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-cart-x display-4 text-muted mb-3"></i>
+                        <p class="text-muted">У вас еще нет заказов</p>
+                        <a href="{{ url_for('catalog') }}" class="btn btn-primary">
+                            <i class="bi bi-cart me-2"></i>Сделать первый заказ
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Безопасность</h5>
+    </div>
+    <div class="card-body">
+        <h6 class="mb-3">Смена пароля</h6>
+        <form method="POST" class="needs-validation" novalidate>
+            <input type="hidden" name="change_password" value="1">
+            
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label small fw-bold">Текущий пароль</label>
+                    <input type="password" class="form-control form-control-sm" 
+                           name="current_password" required>
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label small fw-bold">Новый пароль</label>
+                    <input type="password" class="form-control form-control-sm" 
+                           name="new_password" id="newPassword" 
+                           required minlength="6">
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label small fw-bold">Подтверждение</label>
+                    <input type="password" class="form-control form-control-sm" 
+                           name="confirm_password" id="confirmPassword" required>
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-key me-1"></i>Сменить пароль
+                    </button>
+                </div>
+            </div>
+            
+            <div class="row mt-2">
+                <div class="col-md-6">
+                    <div class="password-strength" id="passwordStrength"></div>
+                    <small class="text-muted">Минимум 6 символов</small>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-danger small" id="passwordMatch"></div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="avatarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Удаление фото профиля</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить фото профиля?</p>
+                <p class="text-muted small">После удаления будет установлено стандартное изображение.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form method="POST" action="{{ url_for('profile') }}" style="display: inline;">
+                    <input type="hidden" name="delete_avatar" value="1">
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const newPassword = document.getElementById('newPassword');
+    const confirmPassword = document.getElementById('confirmPassword');
+    const passwordStrength = document.getElementById('passwordStrength');
+    const passwordMatch = document.getElementById('passwordMatch');
+    
+    function checkPasswordStrength(password) {
+        let strength = 0;
+        
+        if (password.length >= 6) strength++;
+        if (password.length >= 8) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[0-9]/.test(password)) strength++;
+        if (/[^A-Za-z0-9]/.test(password)) strength++;
+        
+        passwordStrength.className = 'password-strength';
+        
+        if (password.length === 0) {
+            passwordStrength.style.width = '0';
+        } else if (strength <= 2) {
+            passwordStrength.classList.add('strength-weak');
+        } else if (strength <= 4) {
+            passwordStrength.classList.add('strength-medium');
+        } else {
+            passwordStrength.classList.add('strength-strong');
+        }
+    }
+    
+    function checkPasswordMatch() {
+        if (newPassword.value && confirmPassword.value) {
+            if (newPassword.value === confirmPassword.value) {
+                passwordMatch.textContent = 'Пароли совпадают';
+                passwordMatch.className = 'text-success small mt-1';
+            } else {
+                passwordMatch.textContent = 'Пароли не совпадают';
+                passwordMatch.className = 'text-danger small mt-1';
+            }
+        } else {
+            passwordMatch.textContent = '';
+        }
+    }
+    
+    newPassword.addEventListener('input', function() {
+        checkPasswordStrength(this.value);
+        checkPasswordMatch();
+    });
+    
+    confirmPassword.addEventListener('input', checkPasswordMatch);
+});
+</script>
+{% endblock %}

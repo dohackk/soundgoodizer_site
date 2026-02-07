@@ -35,6 +35,8 @@
             </div>
             <div class="card-body">
                 <form method="GET" action="{{ url_for('catalog') }}">
+                    <input type="hidden" name="page" value="1">
+                    
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Поиск</label>
                         <input type="text" class="form-control" name="search" 
@@ -89,12 +91,22 @@
                 <p class="text-muted mb-0">Результаты поиска по запросу: "{{ search_term }}"</p>
                 {% endif %}
             </div>
+            <div class="mt-2 mt-md-0">
+                <div class="text-muted small">
+                    Всего инструментов: <strong>{{ pagination.total if pagination else instruments|length }}</strong>
+                </div>
+            </div>
         </div>
         
         {% if instruments %}
         <div class="alert alert-info d-flex align-items-center mb-4">
             <i class="bi bi-info-circle me-2"></i>
-            Найдено инструментов: <strong class="ms-1">{{ instruments|length }}</strong>
+            <div>
+                Показано инструментов: <strong>{{ instruments|length }}</strong>
+                {% if pagination %}
+                <span class="ms-2">(страница {{ pagination.page }} из {{ pagination.pages }})</span>
+                {% endif %}
+            </div>
         </div>
         
         <div class="row g-4">
@@ -191,6 +203,83 @@
             </div>
             {% endfor %}
         </div>
+
+    {% if pagination and pagination.pages > 1 %}
+    
+<nav aria-label="Навигация по страницам" class="mt-5">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+            <a class="page-link" 
+               href="{{ url_for('catalog', page=1, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
+               aria-label="Первая">
+                <i class="bi bi-chevron-double-left"></i>
+            </a>
+        </li>
+        
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+            <a class="page-link" 
+               href="{{ url_for('catalog', page=pagination.prev_num, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
+               aria-label="Предыдущая">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        
+
+        {% if pagination.page > 3 %}
+            <li class="page-item">
+                <a class="page-link" 
+                   href="{{ url_for('catalog', page=1, search=search_term, category_id=selected_category, brand_id=selected_brand) }}">
+                    1
+                </a>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">...</span>
+            </li>
+        {% endif %}
+        
+        {% for page_num in range([1, pagination.page - 2]|max, [pagination.page + 3, pagination.pages + 1]|min) %}
+            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                <a class="page-link" 
+                   href="{{ url_for('catalog', page=page_num, search=search_term, category_id=selected_category, brand_id=selected_brand) }}">
+                    {{ page_num }}
+                </a>
+            </li>
+        {% endfor %}
+        
+        {% if pagination.page < pagination.pages - 2 %}
+            <li class="page-item disabled">
+                <span class="page-link">...</span>
+            </li>
+            <li class="page-item">
+                <a class="page-link" 
+                   href="{{ url_for('catalog', page=pagination.pages, search=search_term, category_id=selected_category, brand_id=selected_brand) }}">
+                    {{ pagination.pages }}
+                </a>
+            </li>
+        {% endif %}
+        
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            <a class="page-link" 
+               href="{{ url_for('catalog', page=pagination.next_num, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
+               aria-label="Следующая">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+        
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            <a class="page-link" 
+               href="{{ url_for('catalog', page=pagination.pages, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
+               aria-label="Последняя">
+                <i class="bi bi-chevron-double-right"></i>
+            </a>
+        </li>
+    </ul>
+    
+    <div class="text-center mt-2 text-muted small">
+        Страница <span class="fw-bold text-primary">{{ pagination.page }}</span> из {{ pagination.pages }}
+    </div>
+</nav>
+{% endif %}
         
         {% else %}
         <div class="text-center py-5">

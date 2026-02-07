@@ -161,6 +161,8 @@ def catalog():
     category_id = request.args.get('category_id')
     search = request.args.get('search', '')
     brand_id = request.args.get('brand_id')
+    page = request.args.get('page', 1, type=int)  
+    per_page = 12 
     
     where_conditions = ["i.is_available_for_sale = 1"]
     params = []
@@ -180,13 +182,59 @@ def catalog():
     
     where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
     
-    instruments = get_instruments(where_clause, params)
-    
     conn = get_db_connection()
     if not conn:
         return render_template('error.html', error="Ошибка подключения к базе данных")
     
     cursor = conn.cursor()
+    
+    count_sql = f"SELECT COUNT(*) FROM instruments i {where_clause}"
+    cursor.execute(count_sql, params)
+    total_count = cursor.fetchone()[0]
+    
+    offset = (page - 1) * per_page
+    
+    sql = f"""
+    SELECT 
+        i.instrument_id,
+        i.name,
+        i.model,
+        i.year_of_manufacture,
+        i.purchase_price,
+        i.rental_price_per_day,
+        i.rental_price_per_week,
+        i.rental_price_per_month,
+        i.description,
+        i.characteristics,
+        i.condition_id,
+        i.quantity_in_stock,
+        i.is_available_for_sale,
+        i.is_available_for_rent,
+        i.main_image_url,
+        i.created_by,
+        i.created_at,
+        i.views_count,
+        b.brand_name,
+        c.category_name,
+        ic.condition_name,
+        i.brand_id,
+        i.category_id
+    FROM instruments i
+    LEFT JOIN brands b ON i.brand_id = b.brand_id
+    LEFT JOIN categories c ON i.category_id = c.category_id
+    LEFT JOIN instrument_conditions ic ON i.condition_id = ic.condition_id
+    {where_clause}
+    ORDER BY i.name
+    OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+    """
+    
+    pagination_params = params + [offset, per_page]
+    cursor.execute(sql, pagination_params)
+    
+    columns = [column[0] for column in cursor.description]
+    Instrument = namedtuple('Instrument', columns)
+    instruments = [Instrument(*row) for row in cursor.fetchall()]
+    
     cursor.execute("SELECT * FROM categories ORDER BY category_name")
     categories = cursor.fetchall()
     
@@ -195,13 +243,28 @@ def catalog():
     
     conn.close()
     
-    return render_template('catalog.html', 
-                         instruments=instruments, 
+    total_pages = (total_count + per_page - 1) // per_page
+    
+    pagination = {
+        'page': page,
+        'per_page': per_page,
+        'total': total_count,
+        'pages': total_pages,
+        'has_prev': page > 1,
+        'has_next': page < total_pages,
+        'prev_num': page - 1 if page > 1 else None,
+        'next_num': page + 1 if page < total_pages else None,
+        'iter_pages': range(max(1, page - 2), min(total_pages, page + 2) + 1)
+    }
+    
+    return render_template('catalog.html',
+                         instruments=instruments,
                          categories=categories,
                          brands=brands,
                          search_term=search,
                          selected_category=category_id,
-                         selected_brand=brand_id)
+                         selected_brand=brand_id,
+                         pagination=pagination)
 
 @app.route('/instrument/<int:instrument_id>')
 def instrument_detail(instrument_id):

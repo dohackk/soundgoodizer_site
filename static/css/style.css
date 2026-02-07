@@ -344,3 +344,43 @@ footer a:hover {
     padding: 2px 4px;
     border-radius: 3px;
 }
+
+/*дополнительные стили для пагинации*/
+.pagination-container {
+    margin-top: 3rem;
+    margin-bottom: 2rem;
+}
+
+.page-link {
+    min-width: 40px;
+    text-align: center;
+}
+
+.page-item.active .page-link {
+    background-color: var(--secondary-color);
+    border-color: var(--secondary-color);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.page-link:hover {
+    background-color: var(--light-color);
+    border-color: var(--secondary-color);
+    color: var(--secondary-color);
+}
+
+.page-item.disabled .page-link {
+    color: #adb5bd;
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+}
+/* Делаем цифру на активной странице видимой */
+.page-item.active .page-link {
+    color: white !important;
+    font-weight: bold;
+}
+
+/* Увеличиваем размер цифры на активной странице */
+.page-item.active .page-link {
+    font-size: 1.1em;
+}
+

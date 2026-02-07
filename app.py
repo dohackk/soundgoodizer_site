@@ -541,6 +541,7 @@ def cart():
         conn.close()
         flash(f'Ошибка при загрузке корзины: {str(e)}', 'danger')
         return redirect(url_for('index'))
+    
 
 @app.route('/add_to_cart/<int:instrument_id>')
 @login_required

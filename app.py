@@ -7,6 +7,7 @@ from flask_mail import Mail, Message
 import secrets
 from datetime import datetime, timedelta
 import os
+import dns.resolver
 
 app = Flask(__name__)
 app.secret_key = 'soundgoodizer-secret-key-2025-super-secure'
@@ -516,6 +517,101 @@ def login():
     
     return render_template('login.html')
 
+@app.route('/api/check-unique', methods=['POST'])
+def api_check_unique():
+    """API: проверка уникальности поля"""
+    data = request.get_json()
+    field = data.get('field')
+    value = data.get('value', '').strip()
+    
+    if not field or not value:
+        return jsonify({'exists': False})
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'exists': False})
+    
+    try:
+        cursor = conn.cursor()
+        
+        if field == 'phone':
+            digits = ''.join(filter(str.isdigit, value))
+            if digits.startswith('7') or digits.startswith('8'):
+                digits = digits[1:]
+            
+            cursor.execute("""
+                SELECT phone FROM users 
+                WHERE phone IS NOT NULL AND phone != ''
+            """)
+            all_phones = cursor.fetchall()
+            
+            exists = False
+            for phone_record in all_phones:
+                if phone_record[0]:
+                    phone_digits = ''.join(filter(str.isdigit, phone_record[0]))
+                    if phone_digits.startswith('7') or phone_digits.startswith('8'):
+                        phone_digits = phone_digits[1:]
+                    
+                    if phone_digits == digits:
+                        exists = True
+                        break
+            
+            conn.close()
+            return jsonify({'exists': exists})
+        
+        else:
+            if field == 'login':
+                cursor.execute("SELECT login FROM users WHERE login = ?", (value,))
+            elif field == 'email':
+                cursor.execute("SELECT email FROM users WHERE email = ?", (value,))
+            else:
+                conn.close()
+                return jsonify({'exists': False})
+            
+            result = cursor.fetchone()
+            conn.close()
+            return jsonify({'exists': result is not None})
+            
+    except Exception as e:
+        conn.close()
+        print(f"Ошибка при проверке уникальности: {e}")
+        return jsonify({'exists': False})
+
+@app.route('/api/check-email-dns', methods=['POST'])
+def api_check_email_dns():
+    """API: проверка email через DNS"""
+    data = request.get_json()
+    email = data.get('email', '').strip()
+    
+    if not email or '@' not in email:
+        return jsonify({'valid': False, 'message': 'Некорректный формат email'})
+    
+    try:
+        domain = email.split('@')[1]
+        
+        try:
+            mx_records = dns.resolver.resolve(domain, 'MX')
+            if len(mx_records) == 0:
+                return jsonify({'valid': False, 'message': 'Доменное имя почты не настроено для приема почты'})
+        except dns.resolver.NoAnswer:
+            return jsonify({'valid': False, 'message': 'Доменное имя почты не настроено для приема почты'})
+        except dns.resolver.NXDOMAIN:
+            return jsonify({'valid': False, 'message': 'Доменное имя почты не существует'})
+        except dns.resolver.NoNameservers:
+            try:
+                dns.resolver.resolve(domain, 'A')
+            except:
+                return jsonify({'valid': False, 'message': 'Не удалось проверить существование домена почты'})
+        except Exception as e:
+            print(f"DNS проверка пропущена: {e}")
+            return jsonify({'valid': True, 'message': ''})
+        
+        return jsonify({'valid': True, 'message': ''})
+        
+    except Exception as e:
+        print(f"Ошибка при проверке email DNS: {e}")
+        return jsonify({'valid': True, 'message': ''})
+    
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     """Регистрация нового пользователя"""
@@ -528,14 +624,13 @@ def register():
         last_name = request.form.get('last_name', '').strip()
         phone = request.form.get('phone', '').strip()
         
-        if phone:
-            digits = ''.join(filter(str.isdigit, phone))
-            
-            if digits.startswith('7') or digits.startswith('8'):
-                digits = digits[1:]
-            
-            if len(digits) == 10:
-                phone = f"+7 ({digits[:3]}) {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
+        form_data = {
+            'login': login,
+            'email': email,
+            'first_name': first_name,
+            'last_name': last_name,
+            'phone': phone
+        }
         
         errors = []
         if not login or len(login) < 3:
@@ -550,35 +645,71 @@ def register():
             errors.append('Введите имя')
         if not last_name:
             errors.append('Введите фамилию')
-        if phone:
+
+        if not phone:
+            errors.append('Введите номер телефона')
+        else:
             digits = ''.join(filter(str.isdigit, phone))
-            if len(digits) < 10:
+            
+            if digits.startswith('7') or digits.startswith('8'):
+                digits = digits[1:]
+            
+            if len(digits) != 10:
                 errors.append('Номер телефона должен содержать 10 цифр')
+            else:
+                phone = f"+7 ({digits[:3]}) {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
+                form_data['phone'] = phone
         
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('register.html')
+            return render_template('register.html', **form_data)
         
         conn = get_db_connection()
         if not conn:
             flash('Ошибка подключения к базе данных', 'danger')
-            return render_template('register.html')
+            return render_template('register.html', **form_data)
         
         try:
             cursor = conn.cursor()
             
-            cursor.execute("SELECT login, email FROM users WHERE login = ? OR email = ?", 
-                          (login, email))
-            existing = cursor.fetchone()
+            cursor.execute("""
+                SELECT login, email, phone 
+                FROM users 
+                WHERE login = ? OR email = ?
+            """, (login, email))
             
-            if existing:
-                if existing[0] == login:
-                    flash('Такой логин уже существует', 'danger')
-                else:
-                    flash('Такой email уже зарегистрирован', 'danger')
+            existing_users = cursor.fetchall()
+            
+            duplicate_errors = []
+            for user in existing_users:
+                if user[0] == login:
+                    duplicate_errors.append('Такой логин уже существует')
+                if user[1] == email:
+                    duplicate_errors.append('Такой email уже зарегистрирован')
+            
+            phone_digits = ''.join(filter(str.isdigit, phone))
+            if phone_digits.startswith('7') or phone_digits.startswith('8'):
+                phone_digits = phone_digits[1:]
+            
+            cursor.execute("SELECT phone FROM users WHERE phone IS NOT NULL AND phone != ''")
+            all_phones = cursor.fetchall()
+            
+            for phone_record in all_phones:
+                if phone_record[0]:
+                    user_phone_digits = ''.join(filter(str.isdigit, phone_record[0]))
+                    if user_phone_digits.startswith('7') or user_phone_digits.startswith('8'):
+                        user_phone_digits = user_phone_digits[1:]
+                    
+                    if user_phone_digits == phone_digits:
+                        duplicate_errors.append('Такой номер телефона уже зарегистрирован')
+                        break
+            
+            if duplicate_errors:
+                for error in duplicate_errors:
+                    flash(error, 'danger')
                 conn.close()
-                return render_template('register.html')
+                return render_template('register.html', **form_data)
             
             verification_code = secrets.randbelow(900000) + 100000
             verification_code_str = str(verification_code)
@@ -615,6 +746,7 @@ def register():
         except Exception as e:
             conn.close()
             flash(f'Ошибка при регистрации: {str(e)}', 'danger')
+            return render_template('register.html', **form_data)
     
     return render_template('register.html')
 

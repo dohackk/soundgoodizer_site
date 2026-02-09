@@ -15,43 +15,54 @@
                         <label class="form-label">Логин *</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-person"></i></span>
-                            <input type="text" class="form-control" name="login" 
-                                   placeholder="Придумайте логин" required minlength="3">
+                            <input type="text" class="form-control" name="login" id="login-input"
+                                   placeholder="Придумайте логин" required minlength="3" 
+                                   value="{{ request.form.login if request.form }}">
                         </div>
                         <div class="form-text">Минимум 3 символа</div>
+                        <div id="login-error" class="invalid-feedback" style="display: none;"></div>
+                        <div id="login-success" class="valid-feedback" style="display: none;">✓ Логин доступен</div>
                     </div>
                     
                     <div class="mb-3">
                         <label class="form-label">Email *</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-envelope"></i></span>
-                            <input type="email" class="form-control" name="email" 
-                                   placeholder="example@mail.com" required>
+                            <input type="email" class="form-control" name="email" id="email-input"
+                                   placeholder="example@mail.com" required 
+                                   value="{{ request.form.email if request.form }}">
                         </div>
+                        <div id="email-error" class="invalid-feedback" style="display: none;"></div>
+                        <div id="email-success" class="valid-feedback" style="display: none;">✓ Email доступен</div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Имя *</label>
-                            <input type="text" class="form-control" name="first_name" 
-                                   placeholder="Иван" required>
+                            <input type="text" class="form-control" name="first_name" id="first-name-input"
+                                   placeholder="Иван" required 
+                                   value="{{ request.form.first_name if request.form }}">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Фамилия *</label>
-                            <input type="text" class="form-control" name="last_name" 
-                                   placeholder="Иванов" required>
+                            <input type="text" class="form-control" name="last_name" id="last-name-input"
+                                   placeholder="Иванов" required 
+                                   value="{{ request.form.last_name if request.form }}">
                         </div>
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Телефон</label>
+                        <label class="form-label">Телефон *</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-telephone"></i></span>
                             <input type="tel" class="form-control phone-input" name="phone" 
                                    placeholder="+7 (999) 123-45-67" id="phone-input"
-                                   pattern="\+7\s\(\d{3}\)\s\d{3}-\d{2}-\d{2}">
+                                   required 
+                                   value="{{ request.form.phone if request.form }}">
                         </div>
                         <div class="form-text">Номер отформатируется автоматически</div>
+                        <div id="phone-error" class="invalid-feedback" style="display: none;"></div>
+                        <div id="phone-success" class="valid-feedback" style="display: none;">✓ Номер доступен</div>
                     </div>
                     
                     <div class="row">
@@ -59,7 +70,7 @@
                             <label class="form-label">Пароль *</label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
-                                <input type="password" class="form-control" name="password" 
+                                <input type="password" class="form-control" name="password" id="password-input"
                                        placeholder="Пароль" required minlength="6">
                             </div>
                             <div class="form-text">Минимум 6 символов</div>
@@ -68,9 +79,11 @@
                             <label class="form-label">Подтверждение пароля *</label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
-                                <input type="password" class="form-control" name="confirm_password" 
+                                <input type="password" class="form-control" name="confirm_password" id="confirm-password-input"
                                        placeholder="Повторите пароль" required>
                             </div>
+                            <div id="password-error" class="invalid-feedback" style="display: none;"></div>
+                            <div id="password-success" class="valid-feedback" style="display: none;">✓ Пароли совпадают</div>
                         </div>
                     </div>
                     
@@ -83,7 +96,7 @@
                     </div>
                     
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary btn-lg">
+                        <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
                             <i class="bi bi-person-plus me-2"></i>Зарегистрироваться
                         </button>
                     </div>
@@ -123,8 +136,154 @@ function formatPhoneNumber(phone) {
     }
 }
 
+function showError(fieldId, message) {
+    const errorElement = document.getElementById(fieldId + '-error');
+    const successElement = document.getElementById(fieldId + '-success');
+    const inputElement = document.getElementById(fieldId + '-input') || document.getElementById(fieldId);
+    
+    if (errorElement) {
+        errorElement.textContent = message;
+        errorElement.style.display = 'block';
+    }
+    if (successElement) {
+        successElement.style.display = 'none';
+    }
+    if (inputElement) {
+        inputElement.classList.remove('is-valid');
+        inputElement.classList.add('is-invalid');
+    }
+}
+
+function showSuccess(fieldId) {
+    const errorElement = document.getElementById(fieldId + '-error');
+    const successElement = document.getElementById(fieldId + '-success');
+    const inputElement = document.getElementById(fieldId + '-input') || document.getElementById(fieldId);
+    
+    if (errorElement) {
+        errorElement.style.display = 'none';
+    }
+    if (successElement) {
+        successElement.style.display = 'block';
+    }
+    if (inputElement) {
+        inputElement.classList.remove('is-invalid');
+        inputElement.classList.add('is-valid');
+    }
+}
+
+function resetField(fieldId) {
+    const errorElement = document.getElementById(fieldId + '-error');
+    const successElement = document.getElementById(fieldId + '-success');
+    const inputElement = document.getElementById(fieldId + '-input') || document.getElementById(fieldId);
+    
+    if (errorElement) {
+        errorElement.style.display = 'none';
+    }
+    if (successElement) {
+        successElement.style.display = 'none';
+    }
+    if (inputElement) {
+        inputElement.classList.remove('is-invalid', 'is-valid');
+    }
+}
+
+function validateEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+function checkUniqueness(field, value) {
+    if (!value) {
+        resetField(field);
+        return;
+    }
+    
+    if (field === 'phone') {
+        const digits = value.replace(/\D/g, '');
+        const cleanDigits = digits.startsWith('7') || digits.startsWith('8') ? digits.substring(1) : digits;
+        if (cleanDigits.length !== 10) {
+            showError('phone', 'Номер телефона должен содержать 10 цифр');
+            return;
+        }
+    }
+    
+    if (field === 'login' && value.length < 3) {
+        showError('login', 'Логин должен содержать минимум 3 символа');
+        return;
+    }
+    
+    if (field === 'email' && !validateEmail(value)) {
+        showError('email', 'Введите корректный email');
+        return;
+    }
+    
+    fetch('/api/check-unique', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            field: field,
+            value: value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.exists) {
+            let message = '';
+            switch(field) {
+                case 'login':
+                    message = 'Этот логин уже занят';
+                    break;
+                case 'email':
+                    message = 'Этот email уже зарегистрирован';
+                    break;
+                case 'phone':
+                    message = 'Этот номер телефона уже зарегистрирован';
+                    break;
+            }
+            showError(field, message);
+        } else {
+            if (field === 'login' && value.length >= 3) {
+                showSuccess('login');
+            } else if (field === 'email' && validateEmail(value)) {
+                showSuccess('email');
+            } else if (field === 'phone') {
+                showSuccess('phone');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка при проверке уникальности:', error);
+    });
+}
+
+function validatePasswords() {
+    const password = document.getElementById('password-input').value;
+    const confirmPassword = document.getElementById('confirm-password-input').value;
+    
+    if (password && confirmPassword) {
+        if (password.length < 6) {
+            showError('password', 'Пароль должен содержать минимум 6 символов');
+            return false;
+        } else if (password !== confirmPassword) {
+            showError('password', 'Пароли не совпадают');
+            return false;
+        } else {
+            showSuccess('password');
+            return true;
+        }
+    }
+    return false;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const phoneInput = document.getElementById('phone-input');
+    const loginInput = document.getElementById('login-input');
+    const emailInput = document.getElementById('email-input');
+    const passwordInput = document.getElementById('password-input');
+    const confirmPasswordInput = document.getElementById('confirm-password-input');
+    const form = document.getElementById('register-form');
     
     if (phoneInput) {
         phoneInput.addEventListener('input', function(e) {
@@ -163,6 +322,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 newCursorPosition = Math.max(0, Math.min(newCursorPosition, formatted.length));
                 e.target.setSelectionRange(newCursorPosition, newCursorPosition);
+                
+                if (digits.length === 10) {
+                    checkUniqueness('phone', digits);
+                } else {
+                    resetField('phone');
+                }
             }, 0);
         });
         
@@ -172,24 +337,128 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        phoneInput.addEventListener('keydown', function(e) {
-            const cursorPosition = this.selectionStart;
+        if (phoneInput.value) {
+            const digits = phoneInput.value.replace(/\D/g, '');
+            const cleanDigits = digits.startsWith('7') || digits.startsWith('8') ? digits.substring(1) : digits;
+            if (cleanDigits.length === 10) {
+                checkUniqueness('phone', cleanDigits);
+            }
+        }
+    }
+    
+    if (loginInput) {
+        let loginTimeout;
+        loginInput.addEventListener('input', function() {
+            clearTimeout(loginTimeout);
+            const value = this.value.trim();
             
-            if (e.key === 'Backspace' && cursorPosition === 5) {
-                e.preventDefault();
-                this.value = '+7 ';
-                this.setSelectionRange(3, 3);
+            if (value.length < 3 && value.length > 0) {
+                showError('login', 'Логин должен содержать минимум 3 символа');
+                return;
+            } else if (value.length === 0) {
+                resetField('login');
+                return;
             }
             
-            if (e.key === 'Delete' && cursorPosition === 4) {
-                e.preventDefault();
-                const digits = this.value.replace(/\D/g, '').substring(1);
-                if (digits.length >= 3) {
-                    this.value = '+7 (' + digits.substring(0, 3) + ') ' + digits.substring(3);
-                } else {
-                    this.value = '+7 (' + digits;
+            loginTimeout = setTimeout(() => {
+                checkUniqueness('login', value);
+            }, 500);
+        });
+        
+        if (loginInput.value && loginInput.value.length >= 3) {
+            checkUniqueness('login', loginInput.value.trim());
+        }
+    }
+    
+    if (emailInput) {
+        let emailTimeout;
+        emailInput.addEventListener('input', function() {
+            clearTimeout(emailTimeout);
+            const value = this.value.trim();
+            
+            if (!value) {
+                resetField('email');
+                return;
+            }
+            
+            if (!validateEmail(value)) {
+                showError('email', 'Введите корректный email');
+                return;
+            }
+            
+            resetField('email');
+            
+            emailTimeout = setTimeout(() => {
+                checkUniqueness('email', value);
+            }, 500);
+        });
+        
+        if (emailInput.value && validateEmail(emailInput.value.trim())) {
+            checkUniqueness('email', emailInput.value.trim());
+        }
+    }
+    
+    if (passwordInput && confirmPasswordInput) {
+        passwordInput.addEventListener('input', function() {
+            if (this.value.length > 0 && this.value.length < 6) {
+                showError('password', 'Пароль должен содержать минимум 6 символов');
+            } else if (confirmPasswordInput.value) {
+                validatePasswords();
+            } else {
+                resetField('password');
+            }
+        });
+        
+        confirmPasswordInput.addEventListener('input', validatePasswords);
+    }
+    
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            let hasErrors = false;
+            
+            if (!loginInput.value || loginInput.value.length < 3) {
+                showError('login', 'Логин должен содержать минимум 3 символа');
+                hasErrors = true;
+            }
+            
+            if (!emailInput.value || !validateEmail(emailInput.value)) {
+                showError('email', 'Введите корректный email');
+                hasErrors = true;
+            }
+            
+            if (!phoneInput.value) {
+                showError('phone', 'Введите номер телефона');
+                hasErrors = true;
+            } else {
+                const digits = phoneInput.value.replace(/\D/g, '');
+                const cleanDigits = digits.startsWith('7') || digits.startsWith('8') ? digits.substring(1) : digits;
+                if (cleanDigits.length !== 10) {
+                    showError('phone', 'Номер телефона должен содержать 10 цифр');
+                    hasErrors = true;
                 }
-                this.setSelectionRange(5, 5);
+            }
+            
+            if (!passwordInput.value || passwordInput.value.length < 6) {
+                showError('password', 'Пароль должен содержать минимум 6 символов');
+                hasErrors = true;
+            }
+            
+            if (!validatePasswords()) {
+                hasErrors = true;
+            }
+            
+            const invalidFields = document.querySelectorAll('.is-invalid');
+            if (invalidFields.length > 0) {
+                hasErrors = true;
+            }
+            
+            if (hasErrors) {
+                e.preventDefault();
+                const firstError = document.querySelector('.is-invalid');
+                if (firstError) {
+                    firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstError.focus();
+                }
             }
         });
     }

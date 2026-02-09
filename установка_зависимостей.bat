@@ -31,6 +31,9 @@ pip install werkzeug
 echo Устанавливаем flask-mail...
 pip install flask-mail
 
+echo Устанавливаем dnspython...
+pip install dnspython
+
 echo.
 echo Все зависимости успешно установлены!
 echo.

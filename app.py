@@ -880,6 +880,67 @@ def resend_verification():
         conn.close()
         return jsonify({'success': False, 'message': str(e)})
 
+@app.route('/resend-password-code', methods=['POST'])
+@login_required
+def resend_password_code():
+    """Повторная отправка кода смены пароля"""
+    code = secrets.randbelow(900000) + 100000
+    session['password_change_code'] = str(code)
+    session['password_change_expires'] = (datetime.now() + timedelta(minutes=15)).timestamp()
+    
+    msg = Message(
+        subject='Повторный код смены пароля - SoundGoodizer',
+        recipients=[session['user_email']]
+    )
+    
+    msg.html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #667eea; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+            .code {{ font-size: 32px; font-weight: bold; color: #667eea; text-align: center; padding: 20px; background: #f8f9fa; border-radius: 5px; margin: 20px 0; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>SoundGoodizer</h1>
+                <p>Повторный код смены пароля</p>
+            </div>
+            
+            <p>Здравствуйте, {session['user_name']}!</p>
+            <p>Вы запросили новый код для смены пароля в вашем аккаунте SoundGoodizer.</p>
+            
+            <p>Ваш новый код подтверждения:</p>
+            <div class="code">{code}</div>
+            
+            <p>Введите этот 6-значный код на странице профиля.</p>
+            
+            <p><strong>Код действителен 15 минут.</strong></p>
+            
+            <p>Если вы не запрашивали смену пароля, немедленно обратитесь в поддержку.</p>
+            
+            <hr>
+            
+            <p style="color: #666; font-size: 12px;">
+                © SoundGoodizer. Все права защищены.<br>
+                Это письмо отправлено автоматически, пожалуйста, не отвечайте на него.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    try:
+        mail.send(msg)
+        return jsonify({'success': True, 'message': 'Новый код отправлен на вашу почту'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Ошибка отправки email: {str(e)}'})
+    
 @app.route('/logout')
 def logout():
     """Выход из системы"""
@@ -897,100 +958,148 @@ def profile():
     
     try:
         cursor = conn.cursor()
-        
-        cursor.execute("SELECT avatar_url, password_hash FROM users WHERE user_id = ?", (session['user_id'],))
-        current_data = cursor.fetchone()
-        current_avatar_path = current_data[0] if current_data and current_data[0] else None
-        current_password_hash = current_data[1] if current_data else None
-        
         if request.method == 'POST':
-            import os
-            import uuid
-            
-            if request.form.get('delete_avatar'):
-                if current_avatar_path:
-                    file_path = os.path.join('static', current_avatar_path)
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                
-                cursor.execute(
-                    "UPDATE users SET avatar_url = NULL WHERE user_id = ?",
-                    (session['user_id'],)
-                )
-                conn.commit()
-                session['user_avatar'] = None
-                
-                flash('Фото профиля удалено', 'info')
-                return redirect(url_for('profile'))
-            
-            if 'avatar' in request.files:
-                file = request.files['avatar']
-                
-                if file.filename != '':
-                    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-                    file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
-                    
-                    if file_ext not in allowed_extensions:
-                        flash('Разрешены только файлы: PNG, JPG, JPEG, GIF, WEBP', 'danger')
-                    else:
-                        if current_avatar_path:
-                            old_file_path = os.path.join('static', current_avatar_path)
-                            if os.path.exists(old_file_path):
-                                os.remove(old_file_path)
-                        
-                        username = session['username']
-                        safe_username = "".join(c for c in username if c.isalnum() or c in ('-', '_')).lower()
-                        
-                        filename = f"{safe_username}_{uuid.uuid4().hex[:8]}.{file_ext}"
-                        upload_folder = 'static/uploads/avatars'
-                        
-                        os.makedirs(upload_folder, exist_ok=True)
-                        
-                        file_path = os.path.join(upload_folder, filename)
-                        file.save(file_path)
-                        
-                        avatar_url = f'uploads/avatars/{filename}'
-                        
-                        cursor.execute(
-                            "UPDATE users SET avatar_url = ? WHERE user_id = ?",
-                            (avatar_url, session['user_id'])
-                        )
-                        conn.commit()
-                        
-                        session['user_avatar'] = avatar_url
-                        
-                        flash('Фото профиля успешно обновлено!', 'success')
-                        return redirect(url_for('profile'))
-                else:
-                    flash('Файл не выбран', 'warning')
-            
             if request.form.get('change_password'):
                 current_password = request.form.get('current_password', '').strip()
                 new_password = request.form.get('new_password', '').strip()
                 confirm_password = request.form.get('confirm_password', '').strip()
+                verification_code = request.form.get('verification_code', '').strip()
                 
+                cursor.execute("SELECT password_hash FROM users WHERE user_id = ?", (session['user_id'],))
+                current_password_hash = cursor.fetchone()[0]
+                
+                errors = []
                 if not current_password or not new_password or not confirm_password:
-                    flash('Заполните все поля', 'danger')
+                    errors.append('Заполните все поля')
                 elif new_password != confirm_password:
-                    flash('Новые пароли не совпадают', 'danger')
+                    errors.append('Новые пароли не совпадают')
                 elif len(new_password) < 6:
-                    flash('Новый пароль должен содержать минимум 6 символов', 'danger')
+                    errors.append('Новый пароль должен содержать минимум 6 символов')
                 else:
                     current_password_hash_input = hashlib.sha256(current_password.encode()).hexdigest()
-                    
                     if current_password_hash_input != current_password_hash:
-                        flash('Текущий пароль неверен', 'danger')
-                    else:
+                        errors.append('Текущий пароль неверен')
+                
+                if errors:
+                    for error in errors:
+                        flash(error, 'danger')
+                    
+                    form_data = {
+                        'current_password': current_password,
+                        'new_password': new_password,
+                        'confirm_password': confirm_password,
+                        'verification_code': verification_code if verification_code else ''
+                    }
+                    
+                    conn.close()
+                    return redirect(url_for('profile', form_data=form_data))
+                
+                if 'password_change_code' not in session:
+                    code = secrets.randbelow(900000) + 100000
+                    session['password_change_code'] = str(code)
+                    session['password_change_expires'] = (datetime.now() + timedelta(minutes=15)).timestamp()
+                    
+                    msg = Message(
+                        subject='Подтверждение смены пароля - SoundGoodizer',
+                        recipients=[session['user_email']]
+                    )
+                    
+                    msg.html = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <style>
+                            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                            .header {{ background: #667eea; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+                            .code {{ font-size: 32px; font-weight: bold; color: #667eea; text-align: center; padding: 20px; background: #f8f9fa; border-radius: 5px; margin: 20px 0; }}
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h1>SoundGoodizer</h1>
+                                <p>Подтверждение смены пароля</p>
+                            </div>
+                            
+                            <p>Здравствуйте, {session['user_name']}!</p>
+                            <p>Для смены пароля в вашем аккаунте SoundGoodizer необходим код подтверждения.</p>
+                            
+                            <p>Ваш код подтверждения:</p>
+                            <div class="code">{code}</div>
+                            
+                            <p>Введите этот 6-значный код на странице профиля.</p>
+                            
+                            <p><strong>Код действителен 15 минут.</strong></p>
+                            
+                            <p>Если вы не запрашивали смену пароля, немедленно обратитесь в поддержку.</p>
+                            
+                            <hr>
+                            
+                            <p style="color: #666; font-size: 12px;">
+                                © SoundGoodizer. Все права защищены.<br>
+                                Это письмо отправлено автоматически, пожалуйста, не отвечайте на него.
+                            </p>
+                        </div>
+                    </body>
+                    </html>
+                    """
+                    
+                    msg.body = f"""
+                    Здравствуйте, {session['user_name']}!
+                    
+                    Для смены пароля в вашем аккаунте SoundGoodizer необходим код подтверждения.
+                    
+                    Ваш код подтверждения: {code}
+                    
+                    Введите этот 6-значный код на странице профиля.
+                    
+                    Код действителен 15 минут.
+                    
+                    Если вы не запрашивали смену пароля, немедленно обратитесь в поддержку.
+                    
+                    © SoundGoodizer
+                    """
+                    
+                    try:
+                        mail.send(msg)
+                        flash('Код подтверждения отправлен на вашу почту. Введите его для смены пароля.', 'info')
+                    except Exception as e:
+                        flash(f'Ошибка отправки email: {str(e)}', 'danger')
+                    
+                    conn.close()
+                    return redirect(url_for('profile'))
+                
+                if verification_code:
+                    if 'password_change_expires' in session and datetime.now().timestamp() > session['password_change_expires']:
+                        session.pop('password_change_code', None)
+                        session.pop('password_change_expires', None)
+                        flash('Срок действия кода истек. Запросите новый код.', 'danger')
+                        conn.close()
+                        return redirect(url_for('profile'))
+                    
+                    if verification_code == session.get('password_change_code'):
                         new_password_hash = hashlib.sha256(new_password.encode()).hexdigest()
-                        
                         cursor.execute(
                             "UPDATE users SET password_hash = ? WHERE user_id = ?",
                             (new_password_hash, session['user_id'])
                         )
                         conn.commit()
                         
+                        session.pop('password_change_code', None)
+                        session.pop('password_change_expires', None)
+                        
                         flash('Пароль успешно изменен!', 'success')
-                        return redirect(url_for('profile'))
+                        conn.close()
+                        return redirect(url_for('profile') + '?password_changed=true')
+                    else:
+                        flash('Неверный код подтверждения', 'danger')
+                else:
+                    flash('Введите код подтверждения из письма', 'warning')
+                
+                conn.close()
+                return redirect(url_for('profile'))
         
         cursor.execute("""
             SELECT u.*, r.role_name 
@@ -1026,12 +1135,15 @@ def profile():
         
         conn.close()
         
+        has_password_code = 'password_change_code' in session
+        
         return render_template('profile.html',
                              user=user,
                              cart_items=cart_items,
                              orders_count=orders_count,
                              rentals_count=rentals_count,
-                             recent_orders=recent_orders)
+                             recent_orders=recent_orders,
+                             has_password_code=has_password_code)
         
     except Exception as e:
         conn.close()

@@ -12,9 +12,15 @@
         margin-bottom: 2rem;
     }
     
-    .profile-avatar {
+    .profile-avatar-container {
         width: 150px;
         height: 150px;
+        margin: 0 auto;
+    }
+    
+    .profile-avatar {
+        width: 100%;
+        height: 100%;
         border-radius: 50%;
         border: 5px solid white;
         object-fit: cover;
@@ -134,8 +140,8 @@
     }
     
     .no-avatar {
-        width: 150px;
-        height: 150px;
+        width: 100%;
+        height: 100%;
         border-radius: 50%;
         border: 5px solid white;
         background-color: var(--light-color);
@@ -167,6 +173,53 @@
         background-color: #28a745;
         width: 100%;
     }
+    
+    .is-valid {
+        border-color: #28a745 !important;
+        padding-right: calc(1.5em + .75rem);
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right calc(.375em + .1875rem) center;
+        background-size: calc(.75em + .375rem) calc(.75em + .375rem);
+    }
+    
+    .is-invalid {
+        border-color: #dc3545 !important;
+        padding-right: calc(1.5em + .75rem);
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23dc3545' viewBox='0 0 12 12'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right calc(.375em + .1875rem) center;
+        background-size: calc(.75em + .375rem) calc(.75em + .375rem);
+    }
+    
+    .verification-code-container {
+        max-width: 350px;
+    }
+    
+    .code-input {
+        letter-spacing: 10px;
+        font-size: 1.5rem;
+        text-align: center;
+        font-weight: bold;
+        font-family: monospace;
+    }
+    
+    .password-form-container {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .resend-code-btn {
+        text-decoration: none;
+        cursor: pointer;
+        color: #0d6efd;
+    }
+    
+    .resend-code-btn:hover {
+        text-decoration: underline;
+    }
 </style>
 {% endblock %}
 
@@ -175,15 +228,17 @@
     <div class="profile-header">
         <div class="row align-items-center">
             <div class="col-md-3 text-center">
-                {% if user.avatar_url %}
-                <img src="{{ url_for('static', filename=user.avatar_url) }}" 
-                     class="profile-avatar" 
-                     alt="Аватар {{ user.first_name }}">
-                {% else %}
-                <div class="no-avatar">
-                    <i class="bi bi-person-circle"></i>
+                <div class="profile-avatar-container">
+                    {% if user.avatar_url %}
+                    <img src="{{ url_for('static', filename=user.avatar_url) }}" 
+                         class="profile-avatar" 
+                         alt="Аватар {{ user.first_name }}">
+                    {% else %}
+                    <div class="no-avatar">
+                        <i class="bi bi-person-circle"></i>
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
                 
                 <div class="mt-3">
                     <div class="profile-actions">
@@ -308,52 +363,75 @@
         </div>
     </div>
     
-<div class="card mb-4">
-    <div class="card-header bg-primary text-white">
-        <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Безопасность</h5>
-    </div>
-    <div class="card-body">
-        <h6 class="mb-3">Смена пароля</h6>
-        <form method="POST" class="needs-validation" novalidate>
-            <input type="hidden" name="change_password" value="1">
-            
-            <div class="row g-3 align-items-end">
-                <div class="col-lg-3 col-md-6">
-                    <label class="form-label small fw-bold">Текущий пароль</label>
-                    <input type="password" class="form-control form-control-sm" 
-                           name="current_password" required>
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Безопасность</h5>
+        </div>
+        <div class="card-body">
+            <h6 class="mb-3">Смена пароля</h6>
+            <form method="POST" id="passwordForm" class="password-form-container">
+                <input type="hidden" name="change_password" value="1">
+                
+                <div class="row g-3 mb-4">
+                    <div class="col-lg-4 col-md-6">
+                        <label class="form-label small fw-bold">Текущий пароль</label>
+                        <input type="password" class="form-control" 
+                               name="current_password" id="currentPassword" required>
+                        <div id="currentPasswordError" class="invalid-feedback" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="col-lg-4 col-md-6">
+                        <label class="form-label small fw-bold">Новый пароль</label>
+                        <input type="password" class="form-control" 
+                               name="new_password" id="newPassword" required minlength="6">
+                        <div id="newPasswordError" class="invalid-feedback" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="col-lg-4 col-md-6">
+                        <label class="form-label small fw-bold">Подтверждение</label>
+                        <input type="password" class="form-control" 
+                               name="confirm_password" id="confirmPassword" required>
+                        <div id="confirmPasswordError" class="invalid-feedback" style="display: none;"></div>
+                    </div>
                 </div>
                 
-                <div class="col-lg-3 col-md-6">
-                    <label class="form-label small fw-bold">Новый пароль</label>
-                    <input type="password" class="form-control form-control-sm" 
-                           name="new_password" id="newPassword" 
-                           required minlength="6">
+                {% if has_password_code %}
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold">Код подтверждения из письма</label>
+                        <div class="input-group verification-code-container">
+                            <input type="text" class="form-control code-input" 
+                                   name="verification_code" id="verificationCode" 
+                                   maxlength="6" required>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle me-1"></i>Подтвердить
+                            </button>
+                        </div>
+                        <small class="text-muted">Введите 6-значный код отправленный на {{ user.email }}</small>
+                        <div class="mt-2">
+                            <small class="text-muted">Код действителен 15 минут. 
+                                <a href="#" class="resend-code-btn" onclick="resendPasswordCode()">Отправить повторно</a>
+                            </small>
+                        </div>
+                    </div>
                 </div>
+                {% endif %}
                 
-                <div class="col-lg-3 col-md-6">
-                    <label class="form-label small fw-bold">Подтверждение</label>
-                    <input type="password" class="form-control form-control-sm" 
-                           name="confirm_password" id="confirmPassword" required>
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="password-strength" id="passwordStrength"></div>
+                        <small class="text-muted">Минимум 6 символов</small>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        {% if not has_password_code %}
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-key me-1"></i>Запросить код подтверждения
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
-                
-                <div class="col-lg-3 col-md-6">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-key me-1"></i>Сменить пароль
-                    </button>
-                </div>
-            </div>
-            
-            <div class="row mt-2">
-                <div class="col-md-6">
-                    <div class="password-strength" id="passwordStrength"></div>
-                    <small class="text-muted">Минимум 6 символов</small>
-                </div>
-                <div class="col-md-6">
-                    <div class="text-danger small" id="passwordMatch"></div>
-                </div>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -380,54 +458,276 @@
 </div>
 
 <script>
+const PASSWORD_FORM_KEY = 'passwordFormData';
+
+function saveFormData() {
+    const formData = {
+        currentPassword: document.getElementById('currentPassword').value,
+        newPassword: document.getElementById('newPassword').value,
+        confirmPassword: document.getElementById('confirmPassword').value,
+        verificationCode: document.getElementById('verificationCode') ? document.getElementById('verificationCode').value : ''
+    };
+    localStorage.setItem(PASSWORD_FORM_KEY, JSON.stringify(formData));
+}
+
+function loadFormData() {
+    try {
+        const savedData = localStorage.getItem(PASSWORD_FORM_KEY);
+        if (savedData) {
+            const formData = JSON.parse(savedData);
+            
+            document.getElementById('currentPassword').value = formData.currentPassword || '';
+            document.getElementById('newPassword').value = formData.newPassword || '';
+            document.getElementById('confirmPassword').value = formData.confirmPassword || '';
+            
+            const verificationCodeInput = document.getElementById('verificationCode');
+            if (verificationCodeInput && formData.verificationCode) {
+                verificationCodeInput.value = formData.verificationCode;
+            }
+            
+            if (formData.currentPassword) validateCurrentPassword();
+            if (formData.newPassword) {
+                validateNewPassword();
+                checkPasswordStrength(formData.newPassword);
+            }
+            if (formData.confirmPassword) validateConfirmPassword();
+        }
+    } catch (e) {
+        console.error('Ошибка при загрузке данных формы:', e);
+    }
+}
+
+function clearFormData() {
+    localStorage.removeItem(PASSWORD_FORM_KEY);
+    
+    document.getElementById('currentPassword').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('confirmPassword').value = '';
+    
+    const verificationCodeInput = document.getElementById('verificationCode');
+    if (verificationCodeInput) {
+        verificationCodeInput.value = '';
+    }
+    
+    resetField('currentPassword');
+    resetField('newPassword');
+    resetField('confirmPassword');
+    if (verificationCodeInput) resetField('verificationCode');
+    
+    document.getElementById('passwordStrength').style.width = '0';
+    document.getElementById('passwordStrength').className = 'password-strength';
+}
+
+function resendPasswordCode() {
+    fetch('/resend-password-code', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Новый код отправлен на вашу почту');
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка отправки запроса');
+    });
+}
+
+function showError(fieldId, message) {
+    const errorElement = document.getElementById(fieldId + 'Error');
+    const inputElement = document.getElementById(fieldId);
+    
+    if (errorElement) {
+        errorElement.textContent = message;
+        errorElement.style.display = 'block';
+    }
+    if (inputElement) {
+        inputElement.classList.remove('is-valid');
+        inputElement.classList.add('is-invalid');
+    }
+}
+
+function showSuccess(fieldId) {
+    const errorElement = document.getElementById(fieldId + 'Error');
+    const inputElement = document.getElementById(fieldId);
+    
+    if (errorElement) {
+        errorElement.style.display = 'none';
+    }
+    if (inputElement) {
+        inputElement.classList.remove('is-invalid');
+        inputElement.classList.add('is-valid');
+    }
+}
+
+function resetField(fieldId) {
+    const errorElement = document.getElementById(fieldId + 'Error');
+    const inputElement = document.getElementById(fieldId);
+    
+    if (errorElement) {
+        errorElement.style.display = 'none';
+    }
+    if (inputElement) {
+        inputElement.classList.remove('is-invalid', 'is-valid');
+    }
+}
+
+function validateCurrentPassword() {
+    const password = document.getElementById('currentPassword').value;
+    if (!password) {
+        showError('currentPassword', 'Введите текущий пароль');
+        return false;
+    } else if (password.length < 6) {
+        showError('currentPassword', 'Пароль должен содержать минимум 6 символов');
+        return false;
+    } else {
+        showSuccess('currentPassword');
+        return true;
+    }
+}
+
+function validateNewPassword() {
+    const password = document.getElementById('newPassword').value;
+    if (!password) {
+        showError('newPassword', 'Введите новый пароль');
+        return false;
+    } else if (password.length < 6) {
+        showError('newPassword', 'Пароль должен содержать минимум 6 символов');
+        return false;
+    } else {
+        showSuccess('newPassword');
+        return true;
+    }
+}
+
+function validateConfirmPassword() {
+    const password = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    
+    if (!confirmPassword) {
+        showError('confirmPassword', 'Подтвердите пароль');
+        return false;
+    } else if (password !== confirmPassword) {
+        showError('confirmPassword', 'Пароли не совпадают');
+        return false;
+    } else {
+        showSuccess('confirmPassword');
+        return true;
+    }
+}
+
+function checkPasswordStrength(password) {
+    let strength = 0;
+    
+    if (password.length >= 6) strength++;
+    if (password.length >= 8) strength++;
+    if (/[A-Z]/.test(password)) strength++;
+    if (/[0-9]/.test(password)) strength++;
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+    
+    const passwordStrength = document.getElementById('passwordStrength');
+    passwordStrength.className = 'password-strength';
+    
+    if (password.length === 0) {
+        passwordStrength.style.width = '0';
+    } else if (strength <= 2) {
+        passwordStrength.classList.add('strength-weak');
+    } else if (strength <= 4) {
+        passwordStrength.classList.add('strength-medium');
+    } else {
+        passwordStrength.classList.add('strength-strong');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    const currentPassword = document.getElementById('currentPassword');
     const newPassword = document.getElementById('newPassword');
     const confirmPassword = document.getElementById('confirmPassword');
-    const passwordStrength = document.getElementById('passwordStrength');
-    const passwordMatch = document.getElementById('passwordMatch');
+    const verificationCode = document.getElementById('verificationCode');
+    const form = document.getElementById('passwordForm');
     
-    function checkPasswordStrength(password) {
-        let strength = 0;
-        
-        if (password.length >= 6) strength++;
-        if (password.length >= 8) strength++;
-        if (/[A-Z]/.test(password)) strength++;
-        if (/[0-9]/.test(password)) strength++;
-        if (/[^A-Za-z0-9]/.test(password)) strength++;
-        
-        passwordStrength.className = 'password-strength';
-        
-        if (password.length === 0) {
-            passwordStrength.style.width = '0';
-        } else if (strength <= 2) {
-            passwordStrength.classList.add('strength-weak');
-        } else if (strength <= 4) {
-            passwordStrength.classList.add('strength-medium');
-        } else {
-            passwordStrength.classList.add('strength-strong');
-        }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('password_changed') && urlParams.get('password_changed') === 'true') {
+        clearFormData();
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+        loadFormData();
     }
     
-    function checkPasswordMatch() {
-        if (newPassword.value && confirmPassword.value) {
-            if (newPassword.value === confirmPassword.value) {
-                passwordMatch.textContent = 'Пароли совпадают';
-                passwordMatch.className = 'text-success small mt-1';
-            } else {
-                passwordMatch.textContent = 'Пароли не совпадают';
-                passwordMatch.className = 'text-danger small mt-1';
+    if (currentPassword) {
+        currentPassword.addEventListener('blur', function() {
+            validateCurrentPassword();
+            saveFormData();
+        });
+        currentPassword.addEventListener('input', function() {
+            if (this.value) resetField('currentPassword');
+            saveFormData();
+        });
+    }
+    
+    if (newPassword) {
+        newPassword.addEventListener('blur', function() {
+            validateNewPassword();
+            saveFormData();
+        });
+        newPassword.addEventListener('input', function() {
+            if (this.value) {
+                resetField('newPassword');
+                checkPasswordStrength(this.value);
             }
-        } else {
-            passwordMatch.textContent = '';
-        }
+            validateConfirmPassword();
+            saveFormData();
+        });
     }
     
-    newPassword.addEventListener('input', function() {
-        checkPasswordStrength(this.value);
-        checkPasswordMatch();
-    });
+    if (confirmPassword) {
+        confirmPassword.addEventListener('blur', function() {
+            validateConfirmPassword();
+            saveFormData();
+        });
+        confirmPassword.addEventListener('input', function() {
+            if (this.value) resetField('confirmPassword');
+            validateConfirmPassword();
+            saveFormData();
+        });
+    }
     
-    confirmPassword.addEventListener('input', checkPasswordMatch);
+    if (verificationCode) {
+        verificationCode.addEventListener('input', function() {
+            this.value = this.value.replace(/\D/g, '').substring(0, 6);
+            saveFormData();
+        });
+    }
+    
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            let isValid = true;
+            
+            if (!validateCurrentPassword()) isValid = false;
+            if (!validateNewPassword()) isValid = false;
+            if (!validateConfirmPassword()) isValid = false;
+            
+            if (!isValid) {
+                e.preventDefault();
+                const firstError = document.querySelector('.is-invalid');
+                if (firstError) {
+                    firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstError.focus();
+                }
+            }
+        });
+    }
+    
+    window.addEventListener('beforeunload', function() {
+        if (!urlParams.has('password_changed') || urlParams.get('password_changed') !== 'true') {
+            saveFormData();
+        }
+    });
 });
 </script>
 {% endblock %}

@@ -9,8 +9,12 @@ from datetime import datetime, timedelta
 import os
 import dns.resolver
 
+UPLOAD_FOLDER = 'static/uploads/avatars'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
 app = Flask(__name__)
 app.secret_key = 'soundgoodizer-secret-key-2025-super-secure'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -55,6 +59,36 @@ def admin_required(f):
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def save_avatar(file, username):
+    if not allowed_file(file.filename):
+        return None
+    
+    extension = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"{username}.{extension}"
+    
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
+    
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+    
+    return f"uploads/avatars/{filename}"
+
+def delete_old_avatar(username):
+    folder = app.config['UPLOAD_FOLDER']
+    
+    if not os.path.exists(folder):
+        return
+    
+    for ext in ALLOWED_EXTENSIONS:
+        old_file = os.path.join(folder, f"{username}.{ext}")
+        if os.path.exists(old_file):
+            os.remove(old_file)
+            break
 
 def get_instruments(where_clause="", params=()):
     conn = get_db_connection()
@@ -112,7 +146,6 @@ def get_instruments(where_clause="", params=()):
         return []
 
 def send_verification_email(email, verification_code):
-    """Отправка email с кодом подтверждения"""
     try:
         msg = Message(
             subject='Подтверждение email - SoundGoodizer',
@@ -440,7 +473,6 @@ def instrument_detail(instrument_id):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Вход в систему"""
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
@@ -519,7 +551,6 @@ def login():
 
 @app.route('/api/check-unique', methods=['POST'])
 def api_check_unique():
-    """API: проверка уникальности поля"""
     data = request.get_json()
     field = data.get('field')
     value = data.get('value', '').strip()
@@ -579,7 +610,6 @@ def api_check_unique():
 
 @app.route('/api/check-email-dns', methods=['POST'])
 def api_check_email_dns():
-    """API: проверка email через DNS"""
     data = request.get_json()
     email = data.get('email', '').strip()
     
@@ -614,7 +644,6 @@ def api_check_email_dns():
     
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    """Регистрация нового пользователя"""
     if request.method == 'POST':
         login = request.form.get('login', '').strip()
         email = request.form.get('email', '').strip()
@@ -752,7 +781,6 @@ def register():
 
 @app.route('/verify-email', methods=['GET', 'POST'])
 def verify_email():
-    """Страница подтверждения email"""
     email = session.get('pending_verification_email')
     user_id = session.get('pending_user_id')
     
@@ -837,7 +865,6 @@ def verify_email():
 
 @app.route('/resend-verification', methods=['POST'])
 def resend_verification():
-    """Повторная отправка кода подтверждения"""
     email = session.get('pending_verification_email')
     user_id = session.get('pending_user_id')
     
@@ -883,7 +910,6 @@ def resend_verification():
 @app.route('/resend-password-code', methods=['POST'])
 @login_required
 def resend_password_code():
-    """Повторная отправка кода смены пароля"""
     code = secrets.randbelow(900000) + 100000
     session['password_change_code'] = str(code)
     session['password_change_expires'] = (datetime.now() + timedelta(minutes=15)).timestamp()
@@ -943,7 +969,6 @@ def resend_password_code():
     
 @app.route('/logout')
 def logout():
-    """Выход из системы"""
     session.clear()
     flash('Вы вышли из системы', 'info')
     return redirect(url_for('index'))
@@ -958,7 +983,56 @@ def profile():
     
     try:
         cursor = conn.cursor()
+        
         if request.method == 'POST':
+            if 'avatar' in request.files:
+                file = request.files['avatar']
+                if file and file.filename != '':
+                    avatar_path = save_avatar(file, session['username'])
+                    if avatar_path:
+                        cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (session['user_id'],))
+                        old_avatar = cursor.fetchone()[0]
+                        
+                        if old_avatar:
+                            old_filename = old_avatar.split('/')[-1]
+                            old_username = old_filename.split('.')[0]
+                            if old_username != session['username']:
+                                old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], old_filename)
+                                if os.path.exists(old_filepath):
+                                    os.remove(old_filepath)
+                        
+                        cursor.execute("UPDATE users SET avatar_url = ? WHERE user_id = ?", 
+                                     (avatar_path, session['user_id']))
+                        conn.commit()
+                        
+                        session['user_avatar'] = avatar_path
+                        flash('Фото профиля успешно обновлено', 'success')
+                    else:
+                        flash('Недопустимый формат файла', 'danger')
+                        
+                    conn.close()
+                    return redirect(url_for('profile'))
+            
+            if request.form.get('delete_avatar'):
+                cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (session['user_id'],))
+                old_avatar = cursor.fetchone()[0]
+                
+                if old_avatar:
+                    old_filename = old_avatar.split('/')[-1]
+                    old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], old_filename)
+                    if os.path.exists(old_filepath):
+                        os.remove(old_filepath)
+                
+                cursor.execute("UPDATE users SET avatar_url = NULL WHERE user_id = ?", 
+                             (session['user_id'],))
+                conn.commit()
+                
+                session['user_avatar'] = None
+                flash('Фото профиля удалено', 'success')
+                
+                conn.close()
+                return redirect(url_for('profile'))
+            
             if request.form.get('change_password'):
                 current_password = request.form.get('current_password', '').strip()
                 new_password = request.form.get('new_password', '').strip()
@@ -1153,7 +1227,6 @@ def profile():
 @app.route('/cart')
 @login_required
 def cart():
-    """Корзина пользователя"""
     conn = get_db_connection()
     if not conn:
         flash('Ошибка подключения к базе данных', 'danger')
@@ -1198,7 +1271,6 @@ def cart():
 @app.route('/add_to_cart/<int:instrument_id>')
 @login_required
 def add_to_cart(instrument_id):
-    """Добавление товара в корзину"""
     conn = get_db_connection()
     if not conn:
         flash('Ошибка подключения к базе данных', 'danger')
@@ -1247,7 +1319,6 @@ def add_to_cart(instrument_id):
 @app.route('/remove_from_cart/<int:cart_item_id>')
 @login_required
 def remove_from_cart(cart_item_id):
-    """Удаление товара из корзины"""
     conn = get_db_connection()
     if not conn:
         flash('Ошибка подключения к базе данных', 'danger')
@@ -1271,7 +1342,6 @@ def remove_from_cart(cart_item_id):
 @login_required
 @admin_required
 def admin_dashboard():
-    """Административная панель"""
     conn = get_db_connection()
     if not conn:
         flash('Ошибка подключения к базе данных', 'danger')
@@ -1326,7 +1396,6 @@ def admin_dashboard():
 @login_required
 @admin_required
 def admin_instruments():
-    """Управление инструментами"""
     conn = get_db_connection()
     if not conn:
         flash('Ошибка подключения к базе данных', 'danger')
@@ -1383,7 +1452,6 @@ def admin_instruments():
 
 @app.route('/api/cart_count')
 def api_cart_count():
-    """API: количество товаров в корзине"""
     if 'user_id' not in session:
         return jsonify({'count': 0})
     
@@ -1405,7 +1473,6 @@ def api_cart_count():
 
 @app.route('/api/categories')
 def api_categories():
-    """API: все категории"""
     conn = get_db_connection()
     if not conn:
         return jsonify([])

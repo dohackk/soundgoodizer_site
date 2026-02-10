@@ -152,28 +152,6 @@
         color: var(--secondary-color);
     }
     
-    .password-strength {
-        height: 5px;
-        margin-top: 5px;
-        border-radius: 3px;
-        transition: all 0.3s;
-    }
-    
-    .strength-weak {
-        background-color: #dc3545;
-        width: 33%;
-    }
-    
-    .strength-medium {
-        background-color: #ffc107;
-        width: 66%;
-    }
-    
-    .strength-strong {
-        background-color: #28a745;
-        width: 100%;
-    }
-    
     .is-valid {
         border-color: #28a745 !important;
         padding-right: calc(1.5em + .75rem);
@@ -419,7 +397,6 @@
                 
                 <div class="row align-items-center">
                     <div class="col-md-6">
-                        <div class="password-strength" id="passwordStrength"></div>
                         <small class="text-muted">Минимум 6 символов</small>
                     </div>
                     <div class="col-md-6 text-end">
@@ -486,10 +463,7 @@ function loadFormData() {
             }
             
             if (formData.currentPassword) validateCurrentPassword();
-            if (formData.newPassword) {
-                validateNewPassword();
-                checkPasswordStrength(formData.newPassword);
-            }
+            if (formData.newPassword) validateNewPassword();
             if (formData.confirmPassword) validateConfirmPassword();
         }
     } catch (e) {
@@ -513,9 +487,6 @@ function clearFormData() {
     resetField('newPassword');
     resetField('confirmPassword');
     if (verificationCodeInput) resetField('verificationCode');
-    
-    document.getElementById('passwordStrength').style.width = '0';
-    document.getElementById('passwordStrength').className = 'password-strength';
 }
 
 function resendPasswordCode() {
@@ -621,29 +592,6 @@ function validateConfirmPassword() {
     }
 }
 
-function checkPasswordStrength(password) {
-    let strength = 0;
-    
-    if (password.length >= 6) strength++;
-    if (password.length >= 8) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
-    if (/[^A-Za-z0-9]/.test(password)) strength++;
-    
-    const passwordStrength = document.getElementById('passwordStrength');
-    passwordStrength.className = 'password-strength';
-    
-    if (password.length === 0) {
-        passwordStrength.style.width = '0';
-    } else if (strength <= 2) {
-        passwordStrength.classList.add('strength-weak');
-    } else if (strength <= 4) {
-        passwordStrength.classList.add('strength-medium');
-    } else {
-        passwordStrength.classList.add('strength-strong');
-    }
-}
-
 document.addEventListener('DOMContentLoaded', function() {
     const currentPassword = document.getElementById('currentPassword');
     const newPassword = document.getElementById('newPassword');
@@ -676,10 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
             saveFormData();
         });
         newPassword.addEventListener('input', function() {
-            if (this.value) {
-                resetField('newPassword');
-                checkPasswordStrength(this.value);
-            }
+            if (this.value) resetField('newPassword');
             validateConfirmPassword();
             saveFormData();
         });

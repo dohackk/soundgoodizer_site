@@ -7,7 +7,9 @@ from flask_mail import Mail, Message
 import secrets
 from datetime import datetime, timedelta
 import os
+from werkzeug.utils import secure_filename
 import dns.resolver
+import random
 
 UPLOAD_FOLDER = 'static/uploads/avatars'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
@@ -39,6 +41,12 @@ def get_db_connection():
         print(f"ОШИБКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ: {e}")
         return None
 
+def generate_order_number():
+    """Генерирует уникальный номер заказа"""
+    date_part = datetime.now().strftime('%Y%m%d')
+    random_part = random.randint(10000, 99999)
+    return f"ORD-{date_part}-{random_part}"
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -63,32 +71,34 @@ def hash_password(password):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def save_avatar(file, username):
+def save_avatar(file, login):
     if not allowed_file(file.filename):
         return None
     
     extension = file.filename.rsplit('.', 1)[1].lower()
-    filename = f"{username}.{extension}"
+    filename = f"{login}.{extension}"
     
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
+
+    delete_old_avatar(login)
     
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
     
     return f"uploads/avatars/{filename}"
 
-def delete_old_avatar(username):
+def delete_old_avatar(login):
     folder = app.config['UPLOAD_FOLDER']
     
     if not os.path.exists(folder):
         return
     
-    for ext in ALLOWED_EXTENSIONS:
-        old_file = os.path.join(folder, f"{username}.{ext}")
-        if os.path.exists(old_file):
-            os.remove(old_file)
-            break
+    for filename in os.listdir(folder):
+        if filename.startswith(login + '.'):
+            old_file = os.path.join(folder, filename)
+            if os.path.exists(old_file):
+                os.remove(old_file)
 
 def get_instruments(where_clause="", params=()):
     conn = get_db_connection()
@@ -988,19 +998,25 @@ def profile():
             if 'avatar' in request.files:
                 file = request.files['avatar']
                 if file and file.filename != '':
-                    avatar_path = save_avatar(file, session['username'])
+                    cursor.execute("SELECT login FROM users WHERE user_id = ?", (session['user_id'],))
+                    user_login = cursor.fetchone()[0]
+                    
+                    cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (session['user_id'],))
+                    old_avatar = cursor.fetchone()
+                    old_avatar_path = old_avatar[0] if old_avatar else None
+                    
+                    if old_avatar_path and old_avatar_path.startswith('uploads/avatars/'):
+                        old_filename = old_avatar_path.split('/')[-1]
+                        old_filepath = os.path.join(app.root_path, 'static', old_avatar_path)
+                        if os.path.exists(old_filepath):
+                            try:
+                                os.remove(old_filepath)
+                            except:
+                                pass
+                    
+                    avatar_path = save_avatar(file, user_login)
+                    
                     if avatar_path:
-                        cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (session['user_id'],))
-                        old_avatar = cursor.fetchone()[0]
-                        
-                        if old_avatar:
-                            old_filename = old_avatar.split('/')[-1]
-                            old_username = old_filename.split('.')[0]
-                            if old_username != session['username']:
-                                old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], old_filename)
-                                if os.path.exists(old_filepath):
-                                    os.remove(old_filepath)
-                        
                         cursor.execute("UPDATE users SET avatar_url = ? WHERE user_id = ?", 
                                      (avatar_path, session['user_id']))
                         conn.commit()
@@ -1009,19 +1025,23 @@ def profile():
                         flash('Фото профиля успешно обновлено', 'success')
                     else:
                         flash('Недопустимый формат файла', 'danger')
-                        
+                    
                     conn.close()
                     return redirect(url_for('profile'))
             
             if request.form.get('delete_avatar'):
                 cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (session['user_id'],))
-                old_avatar = cursor.fetchone()[0]
+                old_avatar = cursor.fetchone()
                 
-                if old_avatar:
-                    old_filename = old_avatar.split('/')[-1]
-                    old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], old_filename)
-                    if os.path.exists(old_filepath):
-                        os.remove(old_filepath)
+                if old_avatar and old_avatar[0]:
+                    old_avatar_path = old_avatar[0]
+                    if old_avatar_path.startswith('uploads/avatars/'):
+                        old_filepath = os.path.join(app.root_path, 'static', old_avatar_path)
+                        if os.path.exists(old_filepath):
+                            try:
+                                os.remove(old_filepath)
+                            except:
+                                pass
                 
                 cursor.execute("UPDATE users SET avatar_url = NULL WHERE user_id = ?", 
                              (session['user_id'],))
@@ -1176,12 +1196,26 @@ def profile():
                 return redirect(url_for('profile'))
         
         cursor.execute("""
-            SELECT u.*, r.role_name 
+            SELECT u.user_id, u.login, u.email, 
+                   u.first_name, u.last_name, u.middle_name, 
+                   u.phone, u.address, u.city, u.postal_code, 
+                   u.avatar_url, u.is_email_verified, u.role_id, 
+                   u.is_active, u.created_at,
+                   r.role_name 
             FROM users u
             JOIN roles r ON u.role_id = r.role_id
             WHERE u.user_id = ?
         """, (session['user_id'],))
-        user = cursor.fetchone()
+        
+        columns = [column[0] for column in cursor.description]
+        user_row = cursor.fetchone()
+        
+        if not user_row:
+            flash('Пользователь не найден', 'danger')
+            conn.close()
+            return redirect(url_for('index'))
+        
+        user = dict(zip(columns, user_row))
         
         cursor.execute("""
             SELECT COUNT(*) FROM cart_items WHERE user_id = ?
@@ -1199,12 +1233,25 @@ def profile():
         rentals_count = cursor.fetchone()[0] or 0
         
         cursor.execute("""
-            SELECT TOP 5 po.*, os.status_name 
+            SELECT TOP 5 
+                po.order_number, 
+                po.order_id,
+                po.instrument_id,
+                po.quantity,
+                po.order_date,
+                po.total_price,
+                po.status_id,
+                os.status_name,
+                po.shipping_first_name,
+                po.shipping_last_name,
+                po.delivery_method,
+                po.delivery_cost
             FROM purchase_orders po
             JOIN order_statuses os ON po.status_id = os.status_id
             WHERE po.user_id = ?
             ORDER BY po.order_date DESC
         """, (session['user_id'],))
+        
         recent_orders = cursor.fetchall()
         
         conn.close()
@@ -1220,9 +1267,98 @@ def profile():
                              has_password_code=has_password_code)
         
     except Exception as e:
-        conn.close()
+        if conn:
+            conn.close()
+        print(f"Error in profile: {e}")
         flash(f'Ошибка при загрузке профиля: {str(e)}', 'danger')
         return redirect(url_for('index'))
+
+@app.route('/orders')
+@login_required
+def orders():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        purchase_sql = """
+        SELECT 
+            po.order_id,
+            po.order_number,
+            po.order_date,
+            po.quantity,
+            po.total_price,
+            os.status_name,
+            os.color_code as status_color,
+            i.name as instrument_name,
+            i.instrument_id,
+            b.brand_name
+        FROM purchase_orders po
+        JOIN order_statuses os ON po.status_id = os.status_id
+        JOIN instruments i ON po.instrument_id = i.instrument_id
+        LEFT JOIN brands b ON i.brand_id = b.brand_id
+        WHERE po.user_id = ?
+        ORDER BY po.order_date DESC
+        """
+        cursor.execute(purchase_sql, (session['user_id'],))
+        purchase_orders = cursor.fetchall()
+        
+        rental_sql = """
+        SELECT 
+            ro.rental_id,
+            ro.rental_number,
+            ro.created_at,
+            ro.rental_start_date,
+            ro.rental_end_date,
+            ro.total_amount,
+            ro.total_days,
+            rs.status_name,
+            rs.color_code as status_color,
+            i.name as instrument_name,
+            i.instrument_id,
+            b.brand_name
+        FROM rental_orders ro
+        JOIN rental_statuses rs ON ro.status_id = rs.status_id
+        JOIN instruments i ON ro.instrument_id = i.instrument_id
+        LEFT JOIN brands b ON i.brand_id = b.brand_id
+        WHERE ro.user_id = ?
+        ORDER BY ro.created_at DESC
+        """
+        cursor.execute(rental_sql, (session['user_id'],))
+        rental_orders = cursor.fetchall()
+        
+        repair_sql = """
+        SELECT 
+            rr.request_id,
+            rr.request_number,
+            rr.created_at,
+            rr.customer_instrument_name,
+            rr.brand,
+            rr.model,
+            rr.problem_description,
+            rr.actual_cost,
+            rs.status_name
+        FROM repair_requests rr
+        JOIN repair_statuses rs ON rr.status_id = rs.status_id
+        WHERE rr.user_id = ?
+        ORDER BY rr.created_at DESC
+        """
+        cursor.execute(repair_sql, (session['user_id'],))
+        repair_requests = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('orders.html',
+                             purchase_orders=purchase_orders,
+                             rental_orders=rental_orders,
+                             repair_requests=repair_requests)
+    except Exception as e:
+        conn.close()
+        flash(f'Ошибка при загрузке заказов: {str(e)}', 'danger')
+        return redirect(url_for('profile'))
 
 @app.route('/cart')
 @login_required
@@ -1234,12 +1370,21 @@ def cart():
     
     try:
         cursor = conn.cursor()
-        
+
         sql = """
-        SELECT ci.*, i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
+        SELECT 
+            ci.cart_item_id,
+            ci.instrument_id,
+            ci.quantity,
+            i.name, 
+            i.purchase_price, 
+            i.main_image_url, 
+            i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ?
+        WHERE ci.user_id = ? 
+        AND ci.cart_item_id IS NOT NULL  -- Добавляем проверку
+        AND ci.quantity > 0  -- И проверку на положительное количество
         """
         cursor.execute(sql, (session['user_id'],))
         cart_items = cursor.fetchall()
@@ -1247,16 +1392,24 @@ def cart():
         total = 0
         items_list = []
         for item in cart_items:
-            item_total = item[2] * item[3]
+            if not item or len(item) < 7:
+                continue
+                
+            item_total = item[2] * item[4]
             total += item_total
+            
+            image_url = item[5]
+            if not image_url or image_url == 'NULL':
+                image_url = 'img/default-instrument.jpg'
+            
             items_list.append({
                 'id': item[0],
-                'instrument_id': item[2],
-                'name': item[7],
-                'price': item[8],
-                'quantity': item[3],
-                'image': item[9],
-                'stock': item[10],
+                'instrument_id': item[1],
+                'name': item[3],
+                'price': item[4],
+                'quantity': item[2],
+                'image': image_url,
+                'stock': item[6],
                 'total': item_total
             })
         
@@ -1279,33 +1432,49 @@ def add_to_cart(instrument_id):
     try:
         cursor = conn.cursor()
         
-        cursor.execute("SELECT quantity_in_stock FROM instruments WHERE instrument_id = ?", 
-                      (instrument_id,))
-        stock = cursor.fetchone()
+        cursor.execute("""
+            SELECT quantity_in_stock, name 
+            FROM instruments 
+            WHERE instrument_id = ? AND is_available_for_sale = 1
+        """, (instrument_id,))
+        result = cursor.fetchone()
         
-        if not stock or stock[0] <= 0:
+        if not result:
+            flash('Товар не найден или недоступен для покупки', 'warning')
+            conn.close()
+            return redirect(request.referrer or url_for('catalog'))
+        
+        stock, instrument_name = result
+        
+        if stock <= 0:
             flash('Товар отсутствует в наличии', 'warning')
             conn.close()
             return redirect(request.referrer or url_for('catalog'))
         
-        sql = "SELECT cart_item_id, quantity FROM cart_items WHERE user_id = ? AND instrument_id = ?"
-        cursor.execute(sql, (session['user_id'], instrument_id))
+        cursor.execute("""
+            SELECT cart_item_id, quantity 
+            FROM cart_items 
+            WHERE user_id = ? AND instrument_id = ? AND cart_item_id IS NOT NULL
+        """, (session['user_id'], instrument_id))
         existing = cursor.fetchone()
         
         if existing:
             new_quantity = existing[1] + 1
-            if new_quantity <= stock[0]:
-                cursor.execute("UPDATE cart_items SET quantity = ? WHERE cart_item_id = ?",
-                             (new_quantity, existing[0]))
-                flash('Товар добавлен в корзину', 'success')
+            if new_quantity <= stock:
+                cursor.execute("""
+                    UPDATE cart_items 
+                    SET quantity = ? 
+                    WHERE cart_item_id = ?
+                """, (new_quantity, existing[0]))
+                flash(f'Добавлена еще одна единица "{instrument_name}"', 'success')
             else:
-                flash('Недостаточно товара на складе', 'warning')
+                flash(f'Недостаточно товара на складе. Осталось: {stock} шт.', 'warning')
         else:
             cursor.execute("""
                 INSERT INTO cart_items (user_id, instrument_id, quantity, is_for_rental)
                 VALUES (?, ?, 1, 0)
             """, (session['user_id'], instrument_id))
-            flash('Товар добавлен в корзину', 'success')
+            flash(f'Товар "{instrument_name}" добавлен в корзину', 'success')
         
         conn.commit()
         conn.close()
@@ -1337,6 +1506,209 @@ def remove_from_cart(cart_item_id):
         flash(f'Ошибка при удалении из корзины: {str(e)}', 'danger')
     
     return redirect(url_for('cart'))
+
+@app.route('/update_cart_item', methods=['POST'])
+@login_required
+def update_cart_item():
+    data = request.get_json()
+    item_id = data.get('item_id')
+    quantity = data.get('quantity')
+    
+    if not item_id or not quantity or quantity < 1:
+        return jsonify({'success': False})
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'success': False})
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        SELECT ci.instrument_id, i.quantity_in_stock 
+        FROM cart_items ci
+        JOIN instruments i ON ci.instrument_id = i.instrument_id
+        WHERE ci.cart_item_id = ? AND ci.user_id = ?
+        """, (item_id, session['user_id']))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return jsonify({'success': False})
+        
+        stock = result[1]
+        if quantity > stock:
+            quantity = stock
+        
+        # Обновляем количество
+        cursor.execute("""
+        UPDATE cart_items 
+        SET quantity = ? 
+        WHERE cart_item_id = ? AND user_id = ?
+        """, (quantity, item_id, session['user_id']))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False})
+
+@app.route('/checkout')
+@login_required
+def checkout():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('cart'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        sql = """
+        SELECT ci.cart_item_id, ci.instrument_id, ci.quantity,
+               i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
+        FROM cart_items ci
+        JOIN instruments i ON ci.instrument_id = i.instrument_id
+        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0
+        """
+        cursor.execute(sql, (session['user_id'],))
+        cart_items = cursor.fetchall()
+        
+        if not cart_items:
+            flash('Корзина пуста', 'warning')
+            conn.close()
+            return redirect(url_for('cart'))
+        
+        total = 0
+        items_list = []
+        for item in cart_items:
+            item_total = item[2] * item[4]
+            total += item_total
+            
+            items_list.append({
+                'id': item[0],
+                'instrument_id': item[1],
+                'name': item[3],
+                'price': item[4],
+                'quantity': item[2],
+                'image': item[5] if item[5] and item[5] != 'NULL' else 'img/default-instrument.jpg',
+                'stock': item[6],
+                'total': item_total
+            })
+        
+        conn.close()
+        
+        return render_template('checkout.html', cart_items=items_list, total=total)
+        
+    except Exception as e:
+        conn.close()
+        flash(f'Ошибка при оформлении заказа: {str(e)}', 'danger')
+        return redirect(url_for('cart'))
+
+@app.route('/create_order', methods=['POST'])
+@login_required
+def create_order():
+    try:
+        data = request.get_json()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        SELECT ci.instrument_id, ci.quantity, i.purchase_price, i.name, i.quantity_in_stock
+        FROM cart_items ci
+        JOIN instruments i ON ci.instrument_id = i.instrument_id
+        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL
+        """, (session['user_id'],))
+        
+        cart_items = cursor.fetchall()
+        
+        if not cart_items:
+            return jsonify({'success': False, 'message': 'Корзина пуста'})
+        
+        order_numbers = [] 
+        
+        for index, item in enumerate(cart_items):
+            instrument_id, quantity, price, name, stock = item
+            
+            if stock < quantity:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False, 
+                    'message': f'Товар "{name}" доступен только в количестве {stock} шт.'
+                })
+            
+            item_total = price * quantity
+            
+            delivery_cost = data.get('delivery_cost', 0) if index == 0 else 0
+            total_with_delivery = item_total + delivery_cost
+            
+            cursor.execute("""
+            SELECT COUNT(*) + 1 
+            FROM purchase_orders 
+            WHERE CONVERT(DATE, order_date) = CONVERT(DATE, GETDATE())
+            """)
+            today_order_count = cursor.fetchone()[0]
+            order_number = f"PO-{datetime.now().strftime('%Y%m%d')}-{today_order_count + index:04d}"
+            
+            cursor.execute("""
+            INSERT INTO purchase_orders 
+            (order_number, user_id, instrument_id, quantity, unit_price, total_price, 
+             shipping_first_name, shipping_last_name, shipping_phone, 
+             shipping_address, shipping_city, shipping_postal_code,
+             delivery_method, delivery_cost, status_id, order_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, GETDATE())
+            """, (
+                order_number,
+                session['user_id'],
+                instrument_id,
+                quantity,
+                price,
+                total_with_delivery,
+                data.get('first_name'),
+                data.get('last_name'),
+                data.get('phone'),
+                data.get('address'),
+                data.get('city'),
+                data.get('postal_code'),
+                data.get('delivery_method'),
+                delivery_cost
+            ))
+            
+            order_numbers.append(order_number)
+            
+            cursor.execute("""
+            UPDATE instruments 
+            SET quantity_in_stock = quantity_in_stock - ?
+            WHERE instrument_id = ?
+            """, (quantity, instrument_id))
+        
+        cursor.execute("DELETE FROM cart_items WHERE user_id = ?", (session['user_id'],))
+        
+        conn.commit()
+        conn.close()
+        
+        if len(order_numbers) > 1:
+            main_order = order_numbers[0] + f" (+{len(order_numbers)-1})"
+        else:
+            main_order = order_numbers[0]
+        
+        return jsonify({
+            'success': True, 
+            'order_number': main_order,
+            'all_orders': order_numbers,
+            'message': f'Создано {len(order_numbers)} заказ(ов). Основной номер: {main_order}'
+        })
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        print(f"Error creating order: {e}")
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin')
 @login_required

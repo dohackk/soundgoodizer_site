@@ -373,13 +373,11 @@ footer a:hover {
     background-color: #f8f9fa;
     border-color: #dee2e6;
 }
-/* Делаем цифру на активной странице видимой */
 .page-item.active .page-link {
     color: white !important;
     font-weight: bold;
 }
 
-/* Увеличиваем размер цифры на активной странице */
 .page-item.active .page-link {
     font-size: 1.1em;
 }

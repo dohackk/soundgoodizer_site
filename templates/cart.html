@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Корзина - SoundGoodizer{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Корзина покупок</h1>
+    
+    {% if cart_items %}
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Товары в корзине</h5>
+                </div>
+                <div class="card-body">
+                    {% for item in cart_items %}
+                    <div class="row align-items-center mb-4 pb-4 border-bottom cart-item" data-price="{{ item.price }}">
+                        <div class="col-md-3 col-4">
+                            {% if item.image %}
+                            <img src="{{ url_for('static', filename=item.image) }}" 
+                                 class="img-fluid rounded" alt="{{ item.name }}">
+                            {% else %}
+                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                 class="img-fluid rounded" alt="No image">
+                            {% endif %}
+                        </div>
+                        <div class="col-md-5 col-8">
+                            <h6 class="mb-1">{{ item.name }}</h6>
+                            <p class="text-muted small mb-2">
+                                Артикул: {{ item.instrument_id }}
+                            </p>
+                            <p class="price mb-0">{{ "%.2f"|format(item.price) }} ₽</p>
+                        </div>
+                        <div class="col-md-2 col-6 mt-3 mt-md-0">
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control text-center qty-input" 
+                                       value="{{ item.quantity }}" min="1" max="{{ item.stock }}"
+                                       data-item-id="{{ item['id'] }}">
+                            </div>
+                            <small class="text-muted">В наличии: {{ item.stock }}</small>
+                        </div>
+                        <div class="col-md-2 col-6 mt-3 mt-md-0 text-end">
+                            <div class="h6 mb-2 item-total">{{ "%.2f"|format(item.total) }} ₽</div>
+                            <a href="{{ url_for('remove_from_cart', cart_item_id=item['id']) }}" 
+                               class="btn btn-link btn-sm text-danger">
+                                <i class="bi bi-trash"></i> Удалить
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('catalog') }}" class="btn btn-outline-primary">
+                    <i class="bi bi-arrow-left me-2"></i>Продолжить покупки
+                </a>
+                <a href="{{ url_for('orders') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-clock-history me-2"></i>История заказов
+                </a>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">К оформлению</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Товары:</span>
+                            <span>{{ "%.2f"|format(total) }} ₽</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Доставка:</span>
+                            <span>Рассчитывается при оформлении</span>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between fw-bold">
+                            <span>Примерная сумма:</span>
+                            <span class="h5 total-price">{{ "%.2f"|format(total) }} ₽</span>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary w-100 btn-lg" id="checkoutBtn">
+                        <i class="bi bi-truck me-2"></i>Оформить доставку
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Информация</h6>
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item px-0 border-0">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-truck fs-5 text-primary me-3"></i>
+                                <div>
+                                    <small class="fw-bold">Доставка</small>
+                                    <p class="mb-0 text-muted small">Рассчитывается при оформлении</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="list-group-item px-0 border-0">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-credit-card fs-5 text-success me-3"></i>
+                                <div>
+                                    <small class="fw-bold">Оплата</small>
+                                    <p class="mb-0 text-muted small">Наличными или картой при получении</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+        <i class="bi bi-cart display-1 text-muted mb-4"></i>
+        <h3 class="mb-3">Корзина пуста</h3>
+        <p class="text-muted mb-4">Добавьте товары из каталога, чтобы они появились здесь</p>
+        <a href="{{ url_for('catalog') }}" class="btn btn-primary btn-lg">
+            <i class="bi bi-grid me-2"></i>Перейти в каталог
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkoutBtn = document.getElementById('checkoutBtn');
+    if (checkoutBtn) {
+        checkoutBtn.addEventListener('click', function() {
+            window.location.href = "{{ url_for('checkout') }}";
+        });
+    }
+    
+    function updateCartItem(itemId, quantity) {
+        fetch('/update_cart_item', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                item_id: itemId,
+                quantity: quantity
+            })
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            if (data.success) {
+                updateCartTotal();
+                setTimeout(function() {
+                    location.reload();
+                }, 500);
+            } else {
+                alert('Ошибка обновления количества: ' + (data.message || 'Неизвестная ошибка'));
+            }
+        })
+        .catch(function(error) {
+            console.error('Error:', error);
+            alert('Ошибка соединения с сервером');
+        });
+    }
+    
+    function updateCartTotal() {
+        let newTotal = 0;
+        document.querySelectorAll('.cart-item').forEach(function(item) {
+            const price = parseFloat(item.dataset.price);
+            const quantityInput = item.querySelector('.qty-input');
+            if (!quantityInput) return;
+            
+            const quantity = parseInt(quantityInput.value);
+            const itemTotal = price * quantity;
+            
+            const itemTotalEl = item.querySelector('.item-total');
+            if (itemTotalEl) {
+                itemTotalEl.textContent = itemTotal.toFixed(2) + ' ₽';
+            }
+            
+            newTotal += itemTotal;
+        });
+        
+        const totalEl = document.querySelector('.total-price');
+        if (totalEl) {
+            totalEl.textContent = newTotal.toFixed(2) + ' ₽';
+        }
+    }
+    
+    document.querySelectorAll('.qty-input').forEach(function(input) {
+        input.addEventListener('change', function() {
+            const itemId = this.dataset.itemId;
+            const quantity = parseInt(this.value);
+            
+            if (quantity < 1) {
+                alert('Количество должно быть не менее 1');
+                this.value = 1;
+                return;
+            }
+            
+            updateCartItem(itemId, quantity);
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -274,7 +274,7 @@
         </li>
         <li><hr class="dropdown-divider"></li>
         <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bi bi-person me-2"></i>Профиль</a></li>
-        <li><a class="dropdown-item" href="#"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('orders') }}"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
         {% if session.user_role == 'admin' %}
         <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
             <i class="bi bi-speedometer2 me-2"></i>Админ-панель

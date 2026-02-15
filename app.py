@@ -394,13 +394,14 @@ def catalog():
 
 @app.route('/instrument/<int:instrument_id>')
 def instrument_detail(instrument_id):
-    conn = get_db_connection()
-    if not conn:
-        return render_template('error.html', error="Ошибка подключения к базе данных")
-    
-    cursor = conn.cursor()
-    
+    conn = None
     try:
+        conn = get_db_connection()
+        if not conn:
+            return render_template('error.html', error="Ошибка подключения к базе данных")
+        
+        cursor = conn.cursor()
+        
         cursor.execute("UPDATE instruments SET views_count = views_count + 1 WHERE instrument_id = ?", 
                       (instrument_id,))
         conn.commit()
@@ -437,12 +438,17 @@ def instrument_detail(instrument_id):
         WHERE i.instrument_id = ?
         """
         cursor.execute(sql, (instrument_id,))
-        instrument = cursor.fetchone()
+        instrument_row = cursor.fetchone()
         
-        if not instrument:
-            conn.close()
+        if not instrument_row:
             flash('Инструмент не найден', 'danger')
+            conn.close()
             return redirect(url_for('catalog'))
+        
+        columns = [column[0] for column in cursor.description]
+        instrument = {}
+        for i, col in enumerate(columns):
+            instrument[col] = instrument_row[i]
         
         similar_sql = """
         SELECT TOP 4 
@@ -469,18 +475,32 @@ def instrument_detail(instrument_id):
         AND i.is_available_for_sale = 1 
         ORDER BY NEWID()
         """
-        cursor.execute(similar_sql, (instrument[22], instrument_id))
+        cursor.execute(similar_sql, (instrument['category_id'], instrument_id))
         similar = cursor.fetchall()
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        if 'rental_price_per_day' not in instrument or instrument['rental_price_per_day'] is None:
+            instrument['rental_price_per_day'] = 0
         
         conn.close()
         
         return render_template('instrument.html', 
                              instrument=instrument, 
-                             similar=similar)
+                             similar=similar,
+                             today=today)
+        
     except Exception as e:
-        conn.close()
+        print(f"Error in instrument_detail: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
         return render_template('error.html', error=f"Ошибка при загрузке инструмента: {str(e)}")
-
+    
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -1360,6 +1380,74 @@ def orders():
         flash(f'Ошибка при загрузке заказов: {str(e)}', 'danger')
         return redirect(url_for('profile'))
 
+@app.route('/add_to_rental_cart', methods=['POST'])
+@login_required
+def add_to_rental_cart():
+    try:
+        data = request.get_json()
+        print(f"Received rental cart data: {data}")
+        
+        instrument_id = data.get('instrument_id')
+        rental_start = data.get('rental_start')
+        rental_end = data.get('rental_end')
+        quantity = data.get('quantity', 1)
+        
+        if not all([instrument_id, rental_start, rental_end]):
+            return jsonify({'success': False, 'message': 'Missing required fields'})
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT quantity_in_stock, is_available_for_rent 
+            FROM instruments 
+            WHERE instrument_id = ?
+        """, (instrument_id,))
+        
+        result = cursor.fetchone()
+        if not result or result[1] == 0 or result[0] < quantity:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Инструмент недоступен для аренды'})
+        
+        cursor.execute("""
+            SELECT cart_item_id, quantity 
+            FROM cart_items 
+            WHERE user_id = ? AND instrument_id = ? AND is_for_rental = 1
+        """, (session['user_id'], instrument_id))
+        
+        existing = cursor.fetchone()
+        
+        if existing:
+            cursor.execute("""
+                UPDATE cart_items 
+                SET quantity = quantity + ?, 
+                    rental_start_date = ?,
+                    rental_end_date = ?
+                WHERE cart_item_id = ?
+            """, (quantity, rental_start, rental_end, existing[0]))
+            print(f"Updated existing cart item: {existing[0]}")
+        else:
+            cursor.execute("""
+                INSERT INTO cart_items 
+                (user_id, instrument_id, quantity, is_for_rental, rental_start_date, rental_end_date)
+                VALUES (?, ?, ?, 1, ?, ?)
+            """, (session['user_id'], instrument_id, quantity, rental_start, rental_end))
+            print(f"Created new cart item")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error in add_to_rental_cart: {e}")
+        import traceback
+        traceback.print_exc()
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
 @app.route('/cart')
 @login_required
 def cart():
@@ -1370,8 +1458,8 @@ def cart():
     
     try:
         cursor = conn.cursor()
-
-        sql = """
+        
+        purchase_sql = """
         SELECT 
             ci.cart_item_id,
             ci.instrument_id,
@@ -1382,27 +1470,39 @@ def cart():
             i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ? 
-        AND ci.cart_item_id IS NOT NULL  -- Добавляем проверку
-        AND ci.quantity > 0  -- И проверку на положительное количество
+        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 0
         """
-        cursor.execute(sql, (session['user_id'],))
-        cart_items = cursor.fetchall()
+        cursor.execute(purchase_sql, (session['user_id'],))
+        purchase_items = cursor.fetchall()
         
-        total = 0
-        items_list = []
-        for item in cart_items:
-            if not item or len(item) < 7:
-                continue
-                
+        rental_sql = """
+        SELECT 
+            ci.cart_item_id,
+            ci.instrument_id,
+            ci.quantity,
+            i.name, 
+            i.rental_price_per_day,
+            i.main_image_url, 
+            i.quantity_in_stock,
+            ci.rental_start_date,
+            ci.rental_end_date,
+            i.purchase_price  -- Добавляем purchase_price для расчета залога
+        FROM cart_items ci
+        JOIN instruments i ON ci.instrument_id = i.instrument_id
+        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 1
+        """
+        cursor.execute(rental_sql, (session['user_id'],))
+        rental_items_raw = cursor.fetchall()
+        
+        purchase_list = []
+        purchase_total = 0
+        for item in purchase_items:
             item_total = item[2] * item[4]
-            total += item_total
+            purchase_total += item_total
             
-            image_url = item[5]
-            if not image_url or image_url == 'NULL':
-                image_url = 'img/default-instrument.jpg'
+            image_url = item[5] if item[5] and item[5] != 'NULL' else 'img/default-instrument.jpg'
             
-            items_list.append({
+            purchase_list.append({
                 'id': item[0],
                 'instrument_id': item[1],
                 'name': item[3],
@@ -1410,14 +1510,71 @@ def cart():
                 'quantity': item[2],
                 'image': image_url,
                 'stock': item[6],
-                'total': item_total
+                'total': item_total,
+                'is_for_rental': False
+            })
+        
+        rental_list = []
+        rental_total = 0
+        deposit_total = 0
+        total_days = 0
+        
+        for item in rental_items_raw:
+            if item[7] and item[8]:
+                try:
+                    from datetime import datetime
+                    start = datetime.strptime(str(item[7]), '%Y-%m-%d')
+                    end = datetime.strptime(str(item[8]), '%Y-%m-%d')
+                    days = (end - start).days
+                    if days < 1:
+                        days = 1
+                except:
+                    days = 1
+            else:
+                days = 1
+            
+            item_total = item[4] * days * item[2]
+            
+            deposit = item[9] * 0.1 * item[2]
+            
+            rental_total += item_total
+            deposit_total += deposit
+            total_days += days
+            
+            image_url = item[5] if item[5] and item[5] != 'NULL' else 'img/default-instrument.jpg'
+            
+            rental_list.append({
+                'id': item[0],
+                'instrument_id': item[1],
+                'name': item[3],
+                'daily_price': item[4],
+                'quantity': item[2],
+                'image': image_url,
+                'stock': item[6],
+                'rental_start': item[7] if item[7] else '',
+                'rental_end': item[8] if item[8] else '',
+                'purchase_price': item[9],
+                'days': days,
+                'total': item_total,
+                'deposit': deposit,
+                'is_for_rental': True
             })
         
         conn.close()
         
-        return render_template('cart.html', cart_items=items_list, total=total)
+        return render_template('cart.html', 
+                             cart_items=purchase_list,
+                             rental_items=rental_list,
+                             purchase_total=purchase_total,
+                             rental_total=rental_total,
+                             deposit_total=deposit_total,
+                             total_days=total_days)
     except Exception as e:
-        conn.close()
+        print(f"Error in cart: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.close()
         flash(f'Ошибка при загрузке корзины: {str(e)}', 'danger')
         return redirect(url_for('index'))
     
@@ -1540,7 +1697,6 @@ def update_cart_item():
         if quantity > stock:
             quantity = stock
         
-        # Обновляем количество
         cursor.execute("""
         UPDATE cart_items 
         SET quantity = ? 
@@ -1571,13 +1727,13 @@ def checkout():
                i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0
+        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 0
         """
         cursor.execute(sql, (session['user_id'],))
         cart_items = cursor.fetchall()
         
         if not cart_items:
-            flash('Корзина пуста', 'warning')
+            flash('Нет товаров для покупки', 'warning')
             conn.close()
             return redirect(url_for('cart'))
         
@@ -1708,6 +1864,205 @@ def create_order():
             conn.rollback()
             conn.close()
         print(f"Error creating order: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/rental_checkout')
+@login_required
+def rental_checkout():
+    from datetime import datetime, timedelta
+    
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('cart'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                ci.cart_item_id,
+                ci.instrument_id,
+                ci.quantity,
+                i.name,
+                i.rental_price_per_day,
+                i.main_image_url,
+                b.brand_name,
+                i.purchase_price
+            FROM cart_items ci
+            JOIN instruments i ON ci.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            WHERE ci.user_id = ? AND ci.is_for_rental = 1
+        """, (session['user_id'],))
+        
+        rental_items_raw = cursor.fetchall()
+        
+        if not rental_items_raw:
+            flash('Нет товаров для аренды', 'warning')
+            conn.close()
+            return redirect(url_for('cart'))
+        
+        items = []
+        total_deposit = 0
+        
+        for item in rental_items_raw:
+            items.append({
+                'cart_item_id': item[0],
+                'instrument_id': item[1],
+                'quantity': item[2],
+                'name': item[3],
+                'daily_price': item[4],
+                'image': item[5] if item[5] and item[5] != 'NULL' else 'img/default-instrument.jpg',
+                'brand': item[6] if len(item) > 6 else '',
+                'purchase_price': item[7]
+            })
+            
+            total_deposit += item[7] * 0.1 * item[2]
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        next_week = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        conn.close()
+        
+        return render_template('rental_checkout.html',
+                             rental_items=items,
+                             today=today,
+                             default_start=tomorrow,
+                             default_end=next_week,
+                             total_deposit=total_deposit)
+        
+    except Exception as e:
+        print(f"Error in rental_checkout: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке: {str(e)}', 'danger')
+        return redirect(url_for('cart'))
+
+@app.route('/create_rental_order', methods=['POST'])
+@login_required
+def create_rental_order():
+    try:
+        data = request.get_json()
+        
+        rental_start = data.get('rental_start')
+        rental_end = data.get('rental_end')
+        
+        if not rental_start or not rental_end:
+            return jsonify({'success': False, 'message': 'Не выбраны даты аренды'})
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT ci.instrument_id, ci.quantity, i.rental_price_per_day, i.purchase_price
+            FROM cart_items ci
+            JOIN instruments i ON ci.instrument_id = i.instrument_id
+            WHERE ci.user_id = ? AND ci.is_for_rental = 1
+        """, (session['user_id'],))
+        
+        rental_items = cursor.fetchall()
+        
+        if not rental_items:
+            return jsonify({'success': False, 'message': 'Нет товаров для аренды'})
+        
+        from datetime import datetime
+        
+        if hasattr(rental_start, 'strftime'):
+            start_date = rental_start
+            end_date = rental_end
+        else:
+            start_date = datetime.strptime(str(rental_start), '%Y-%m-%d').date()
+            end_date = datetime.strptime(str(rental_end), '%Y-%m-%d').date()
+        
+        days = (end_date - start_date).days
+        if days < 1:
+            days = 1
+        
+        rental_subtotal = 0
+        deposit_total = 0
+        first_rental_id = None
+        
+        for index, item in enumerate(rental_items):
+            subtotal = item[2] * days * item[1]
+            deposit = item[3] * 0.1 * item[1]
+            
+            rental_subtotal += subtotal
+            deposit_total += deposit
+            
+            temp_number = f"TEMP-{datetime.now().strftime('%Y%m%d%H%M%S')}-{index}"
+            
+            cursor.execute("""
+                INSERT INTO rental_orders 
+                (rental_number, user_id, instrument_id, rental_start_date, rental_end_date,
+                 daily_price, deposit_amount, total_amount,
+                 delivery_address, status_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, GETDATE())
+            """, (
+                temp_number,
+                session['user_id'],
+                item[0],
+                str(start_date),
+                str(end_date),
+                item[2],
+                deposit,
+                subtotal + deposit,
+                data.get('delivery_address'),
+            ))
+            
+            cursor.execute("SELECT @@IDENTITY")
+            result = cursor.fetchone()
+            if result and result[0]:
+                rental_id = int(result[0])
+                if first_rental_id is None:
+                    first_rental_id = rental_id
+            else:
+                print(f"Warning: Could not get rental_id for item {index}")
+            
+            cursor.execute("""
+                UPDATE instruments 
+                SET quantity_in_stock = quantity_in_stock - ?
+                WHERE instrument_id = ?
+            """, (item[1], item[0]))
+        
+        if first_rental_id is None:
+            conn.rollback()
+            conn.close()
+            return jsonify({'success': False, 'message': 'Не удалось создать запись аренды'})
+        
+        cursor.execute("SELECT rental_number FROM rental_orders WHERE rental_id = ?", (first_rental_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            rental_number = result[0]
+        else:
+            rental_number = "Неизвестный номер"
+        
+        cursor.execute("""
+            DELETE FROM cart_items 
+            WHERE user_id = ? AND is_for_rental = 1
+        """, (session['user_id'],))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'rental_number': rental_number,
+            'total': rental_subtotal + deposit_total,
+            'deposit': deposit_total
+        })
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        print(f"Error creating rental: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin')

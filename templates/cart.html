@@ -4,35 +4,38 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h1 class="mb-4">Корзина покупок</h1>
+    <h1 class="mb-4">Корзина</h1>
     
-    {% if cart_items %}
+    {% if cart_items or rental_items %}
     <div class="row">
         <div class="col-lg-8">
-            <div class="card mb-4">
-                <div class="card-header bg-light">
-                    <h5 class="mb-0">Товары в корзине</h5>
+            {% if cart_items %}
+            <div class="card mb-4 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-cart3 me-2"></i>Покупка</h5>
                 </div>
                 <div class="card-body">
                     {% for item in cart_items %}
                     <div class="row align-items-center mb-4 pb-4 border-bottom cart-item" data-price="{{ item.price }}">
-                        <div class="col-md-3 col-4">
+                        <div class="col-md-2 col-3">
                             {% if item.image %}
                             <img src="{{ url_for('static', filename=item.image) }}" 
-                                 class="img-fluid rounded" alt="{{ item.name }}">
+                                 class="img-fluid rounded" alt="{{ item.name }}"
+                                 style="height: 80px; object-fit: cover;">
                             {% else %}
                             <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
-                                 class="img-fluid rounded" alt="No image">
+                                 class="img-fluid rounded" alt="No image"
+                                 style="height: 80px; object-fit: cover;">
                             {% endif %}
                         </div>
-                        <div class="col-md-5 col-8">
+                        <div class="col-md-5 col-9">
                             <h6 class="mb-1">{{ item.name }}</h6>
                             <p class="text-muted small mb-2">
                                 Артикул: {{ item.instrument_id }}
                             </p>
                             <p class="price mb-0">{{ "%.2f"|format(item.price) }} ₽</p>
                         </div>
-                        <div class="col-md-2 col-6 mt-3 mt-md-0">
+                        <div class="col-md-3 col-6 mt-3 mt-md-0">
                             <div class="input-group input-group-sm">
                                 <input type="number" class="form-control text-center qty-input" 
                                        value="{{ item.quantity }}" min="1" max="{{ item.stock }}"
@@ -51,6 +54,56 @@
                     {% endfor %}
                 </div>
             </div>
+            {% endif %}
+            
+            {% if rental_items %}
+            <div class="card mb-4 border-info">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Аренда</h5>
+                </div>
+                <div class="card-body">
+                    {% for item in rental_items %}
+                    <div class="row align-items-center mb-4 pb-4 border-bottom">
+                        <div class="col-md-2 col-3">
+                            {% if item.image %}
+                            <img src="{{ url_for('static', filename=item.image) }}" 
+                                 class="img-fluid rounded" alt="{{ item.name }}"
+                                 style="height: 80px; object-fit: cover;">
+                            {% else %}
+                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                 class="img-fluid rounded" alt="No image"
+                                 style="height: 80px; object-fit: cover;">
+                            {% endif %}
+                        </div>
+                        <div class="col-md-5 col-9">
+                            <h6 class="mb-1">{{ item.name }}</h6>
+                            <p class="text-muted small mb-1">
+                                <i class="bi bi-calendar me-1"></i> {{ item.rental_start }} — {{ item.rental_end }}
+                            </p>
+                            <p class="small mb-0">
+                                <span class="badge bg-info">{{ item.days }} дн.</span>
+                                <span class="ms-2">{{ "%.2f"|format(item.daily_price) }} ₽/день</span>
+                            </p>
+                        </div>
+                        <div class="col-md-3 col-6 mt-3 mt-md-0">
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control text-center rental-qty-input" 
+                                       value="{{ item.quantity }}" min="1" max="10"
+                                       data-item-id="{{ item['id'] }}">
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-6 mt-3 mt-md-0 text-end">
+                            <div class="h6 mb-2">{{ "%.2f"|format(item.total) }} ₽</div>
+                            <a href="{{ url_for('remove_from_cart', cart_item_id=item['id']) }}" 
+                               class="btn btn-link btn-sm text-danger">
+                                <i class="bi bi-trash"></i> Удалить
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             
             <div class="d-flex justify-content-between">
                 <a href="{{ url_for('catalog') }}" class="btn btn-outline-primary">
@@ -69,24 +122,60 @@
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
+                        {% if cart_items %}
                         <div class="d-flex justify-content-between mb-2">
-                            <span>Товары:</span>
-                            <span>{{ "%.2f"|format(total) }} ₽</span>
+                            <span>Товары (покупка):</span>
+                            <span class="fw-bold">{{ "%.2f"|format(purchase_total) }} ₽</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if rental_items %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Аренда:</span>
+                            <span class="fw-bold">{{ "%.2f"|format(rental_total) }} ₽</span>
                         </div>
                         <div class="d-flex justify-content-between mb-2">
+                            <span class="text-info">Залог (10%):</span>
+                            <span class="fw-bold text-info">{{ "%.2f"|format(deposit_total) }} ₽</span>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="d-flex justify-content-between mb-2">
                             <span>Доставка:</span>
-                            <span>Рассчитывается при оформлении</span>
+                            <span class="text-muted">Рассчитывается при оформлении</span>
                         </div>
                         <hr>
                         <div class="d-flex justify-content-between fw-bold">
                             <span>Примерная сумма:</span>
-                            <span class="h5 total-price">{{ "%.2f"|format(total) }} ₽</span>
+                            <span class="h5 total-price">{{ "%.2f"|format(purchase_total + rental_total + deposit_total) }} ₽</span>
                         </div>
+                        {% if rental_items %}
+                        <div class="small text-muted mt-2">
+                            <i class="bi bi-info-circle"></i> Включая залог {{ "%.2f"|format(deposit_total) }} ₽ (возвращается)
+                        </div>
+                        {% endif %}
                     </div>
                     
-                    <button class="btn btn-primary w-100 btn-lg" id="checkoutBtn">
-                        <i class="bi bi-truck me-2"></i>Оформить доставку
-                    </button>
+                    <div class="d-grid gap-2">
+                        {% if cart_items %}
+                        <button class="btn btn-primary w-100 btn-lg" id="checkoutPurchaseBtn">
+                            <i class="bi bi-truck me-2"></i>Оформить покупку
+                        </button>
+                        {% endif %}
+                        
+                        {% if rental_items %}
+                        <button class="btn btn-info text-white w-100 btn-lg" id="checkoutRentalBtn">
+                            <i class="bi bi-calendar-check me-2"></i>Оформить аренду
+                        </button>
+                        {% endif %}
+                    </div>
+                    
+                    {% if rental_items %}
+                    <div class="alert alert-info mt-3 mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <small>При оформлении аренды вы сможете выбрать единые даты для всех товаров.</small>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             
@@ -100,6 +189,15 @@
                                 <div>
                                     <small class="fw-bold">Доставка</small>
                                     <p class="mb-0 text-muted small">Рассчитывается при оформлении</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="list-group-item px-0 border-0">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-calendar-check fs-5 text-info me-3"></i>
+                                <div>
+                                    <small class="fw-bold">Аренда</small>
+                                    <p class="mb-0 text-muted small">Залог 10% от стоимости инструмента</p>
                                 </div>
                             </div>
                         </div>
@@ -131,10 +229,17 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const checkoutBtn = document.getElementById('checkoutBtn');
-    if (checkoutBtn) {
-        checkoutBtn.addEventListener('click', function() {
+    const checkoutPurchaseBtn = document.getElementById('checkoutPurchaseBtn');
+    if (checkoutPurchaseBtn) {
+        checkoutPurchaseBtn.addEventListener('click', function() {
             window.location.href = "{{ url_for('checkout') }}";
+        });
+    }
+    
+    const checkoutRentalBtn = document.getElementById('checkoutRentalBtn');
+    if (checkoutRentalBtn) {
+        checkoutRentalBtn.addEventListener('click', function() {
+            window.location.href = "{{ url_for('rental_checkout') }}";
         });
     }
     
@@ -154,7 +259,6 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(function(data) {
             if (data.success) {
-                updateCartTotal();
                 setTimeout(function() {
                     location.reload();
                 }, 500);
@@ -168,31 +272,22 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    function updateCartTotal() {
-        let newTotal = 0;
-        document.querySelectorAll('.cart-item').forEach(function(item) {
-            const price = parseFloat(item.dataset.price);
-            const quantityInput = item.querySelector('.qty-input');
-            if (!quantityInput) return;
+    document.querySelectorAll('.qty-input').forEach(function(input) {
+        input.addEventListener('change', function() {
+            const itemId = this.dataset.itemId;
+            const quantity = parseInt(this.value);
             
-            const quantity = parseInt(quantityInput.value);
-            const itemTotal = price * quantity;
-            
-            const itemTotalEl = item.querySelector('.item-total');
-            if (itemTotalEl) {
-                itemTotalEl.textContent = itemTotal.toFixed(2) + ' ₽';
+            if (quantity < 1) {
+                alert('Количество должно быть не менее 1');
+                this.value = 1;
+                return;
             }
             
-            newTotal += itemTotal;
+            updateCartItem(itemId, quantity);
         });
-        
-        const totalEl = document.querySelector('.total-price');
-        if (totalEl) {
-            totalEl.textContent = newTotal.toFixed(2) + ' ₽';
-        }
-    }
+    });
     
-    document.querySelectorAll('.qty-input').forEach(function(input) {
+    document.querySelectorAll('.rental-qty-input').forEach(function(input) {
         input.addEventListener('change', function() {
             const itemId = this.dataset.itemId;
             const quantity = parseInt(this.value);

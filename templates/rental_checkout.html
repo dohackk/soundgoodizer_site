@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+
+{% block title %}Оформление аренды - SoundGoodizer{% endblock %}
+
+{% block content %}
+<div id="rental-data" 
+     data-items='{{ rental_items|tojson|safe }}' 
+     data-deposit="{{ total_deposit }}"
+     style="display: none;"></div>
+
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="text-primary fw-bold mb-3"><i class="bi bi-calendar-check me-2"></i>Оформление аренды</h1>
+            <div class="progress mb-4" style="height: 8px;">
+                <div class="progress-bar bg-primary" role="progressbar" style="width: 100%;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h5 class="mb-0 fw-bold text-dark">
+                        <i class="bi bi-geo-alt me-2 text-primary"></i>Данные для аренды
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form id="rentalForm" class="needs-validation" novalidate>
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Имя *</label>
+                                <input type="text" class="form-control" name="first_name" required
+                                       value="{{ session.user_name.split(' ')[0] if session.user_name else '' }}">
+                                <div class="invalid-feedback">Введите ваше имя</div>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Фамилия *</label>
+                                <input type="text" class="form-control" name="last_name" required
+                                       value="{{ session.user_name.split(' ')[1] if session.user_name and ' ' in session.user_name else '' }}">
+                                <div class="invalid-feedback">Введите вашу фамилию</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Телефон *</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light">+7</span>
+                                    <input type="tel" class="form-control" name="phone" required id="phoneInput"
+                                           value="{{ session.get('user_phone', '') }}"
+                                           placeholder="(999) 123-45-67">
+                                </div>
+                                <div class="invalid-feedback">Введите ваш телефон</div>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Email *</label>
+                                <input type="email" class="form-control" name="email" required
+                                       value="{{ session.user_email }}">
+                                <div class="invalid-feedback">Введите ваш email</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Город *</label>
+                                <input type="text" class="form-control" name="city" required id="cityInput" value="Новокузнецк">
+                                <div class="form-text text-muted small">При вводе другого города даты аренды автоматически сдвинутся</div>
+                                <div class="invalid-feedback">Введите город</div>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Индекс *</label>
+                                <input type="text" class="form-control" name="postal_code" required id="postalCode" placeholder="654000" maxlength="6">
+                                <div class="form-text text-muted small">6 цифр почтового индекса</div>
+                                <div class="invalid-feedback">Введите индекс</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3" id="addressContainer">
+                            <label class="form-label fw-bold">Адрес доставки</label>
+                            <textarea class="form-control" name="delivery_address" rows="2" id="deliveryAddress"
+                                      placeholder="Улица, дом, квартира (для доставки)"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold mb-3">Способ получения *</label>
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <div class="card h-100 border" onclick="document.getElementById('delivery').click()" id="deliveryCard">
+                                        <div class="card-body text-center py-3">
+                                            <div class="mb-2">
+                                                <i class="bi bi-truck text-primary" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="delivery_method" 
+                                                       id="delivery" value="delivery">
+                                                <label class="form-check-label fw-bold" for="delivery">
+                                                    Доставка<br>
+                                                    <span class="text-muted small" id="deliveryPriceText">(+300 ₽)</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <div class="card h-100 border" onclick="document.getElementById('pickup').click()" id="pickupCard">
+                                        <div class="card-body text-center py-3">
+                                            <div class="mb-2">
+                                                <i class="bi bi-shop text-primary" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="delivery_method" 
+                                                       id="pickup" value="pickup" checked>
+                                                <label class="form-check-label fw-bold" for="pickup">
+                                                    Самовывоз<br>
+                                                    <span class="text-success small">Бесплатно</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-2" id="deliveryTimeInfo">
+                                <div class="alert alert-info py-2 mb-0 small">
+                                    <i class="bi bi-clock me-1"></i>
+                                    <strong>Срок доставки:</strong> 
+                                    <span id="deliveryTimeText">1-3 дня</span>
+                                    <div id="dateShiftNotice" class="text-primary small fw-bold mt-1" style="display: none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h5 class="mb-0 fw-bold text-dark">
+                        <i class="bi bi-calendar-range me-2 text-primary"></i>Даты аренды
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Дата начала *</label>
+                        <input type="date" class="form-control" id="rentalStartDate" required min="{{ today }}" value="{{ default_start }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Дата окончания *</label>
+                        <input type="date" class="form-control" id="rentalEndDate" required min="{{ today }}" value="{{ default_end }}">
+                    </div>
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle"></i> Единые даты для всех товаров
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h5 class="mb-0 fw-bold text-dark">
+                        <i class="bi bi-music-note me-2 text-primary"></i>Товары в аренде
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    {% for item in rental_items %}
+                    <div class="d-flex align-items-center mb-2 pb-2 border-bottom">
+                        <img src="{{ url_for('static', filename=item.image) }}" 
+                             class="rounded me-2" alt="{{ item.name }}"
+                             style="width: 40px; height: 40px; object-fit: cover;">
+                        <div class="flex-grow-1">
+                            <div class="small fw-bold">{{ item.name }}</div>
+                            <div class="text-muted small">{{ item.quantity }} шт.</div>
+                            <div class="small">
+                                <span class="text-primary">{{ "%.2f"|format(item.daily_price) }} ₽/день</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <div class="bg-light p-3 rounded-3 mt-3">
+                        <div class="d-flex justify-content-between mb-2 small">
+                            <span class="text-muted">Количество дней:</span>
+                            <span class="fw-bold" id="daysCount">1</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 small">
+                            <span class="text-muted">Аренда:</span>
+                            <span class="fw-bold" id="rentalTotal">0 ₽</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 small">
+                            <span class="text-muted">Залог (10%):</span>
+                            <span class="fw-bold text-info" id="depositTotal">0 ₽</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 small">
+                            <span class="text-muted">Доставка:</span>
+                            <span id="deliveryCost">0 ₽</span>
+                        </div>
+                        <hr class="my-2">
+                        <div class="d-flex justify-content-between fw-bold">
+                            <span>Итого к оплате:</span>
+                            <span class="text-primary" id="grandTotal">0 ₽</span>
+                        </div>
+                        <div class="mt-2 small text-muted">
+                            <i class="bi bi-shield-check me-1"></i>Залог возвращается при возврате инструмента
+                        </div>
+                    </div>
+                    
+                    <button type="button" class="btn btn-success w-100 py-2 mt-3 fw-bold" id="confirmRentalBtn">
+                        <i class="bi bi-check-circle me-2"></i>Подтвердить аренду
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-2 small"><i class="bi bi-info-circle me-2 text-primary"></i>Условия аренды</h6>
+                    <ul class="list-unstyled mb-0 small">
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            Залог 10% от стоимости
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            Залог возвращается при возврате
+                        </li>
+                        <li class="mb-0">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            Для др. городов +4 дня к доставке
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var rentalItems = JSON.parse(document.getElementById('rental-data').getAttribute('data-items'));
+    var totalDeposit = parseFloat(document.getElementById('rental-data').getAttribute('data-deposit'));
+    
+    var cityInput = document.getElementById('cityInput');
+    var postalCode = document.getElementById('postalCode');
+    var deliveryAddress = document.getElementById('deliveryAddress');
+    var addressContainer = document.getElementById('addressContainer');
+    var pickupRadio = document.getElementById('pickup');
+    var deliveryRadio = document.getElementById('delivery');
+    var pickupCard = document.getElementById('pickupCard');
+    var deliveryCard = document.getElementById('deliveryCard');
+    var confirmBtn = document.getElementById('confirmRentalBtn');
+    var form = document.getElementById('rentalForm');
+    var phoneInput = document.getElementById('phoneInput');
+    var deliveryPriceText = document.getElementById('deliveryPriceText');
+    var deliveryTimeText = document.getElementById('deliveryTimeText');
+    var dateShiftNotice = document.getElementById('dateShiftNotice');
+    var deliveryCostSpan = document.getElementById('deliveryCost');
+    var daysCountSpan = document.getElementById('daysCount');
+    var rentalTotalSpan = document.getElementById('rentalTotal');
+    var grandTotalSpan = document.getElementById('grandTotal');
+    var depositTotalSpan = document.getElementById('depositTotal');
+    
+    var rentalStart = document.getElementById('rentalStartDate');
+    var rentalEnd = document.getElementById('rentalEndDate');
+    
+    depositTotalSpan.textContent = totalDeposit.toFixed(2) + ' ₽';
+    
+    var originalStartDate = rentalStart.value;
+    var originalEndDate = rentalEnd.value;
+    
+    function calculateDeliveryCost() {
+        var city = cityInput.value.trim().toLowerCase();
+        return city === 'новокузнецк' ? 300 : 1500;
+    }
+    
+    function calculateDays() {
+        var start = rentalStart.value;
+        var end = rentalEnd.value;
+        
+        if (!start || !end) return 1;
+        
+        var startDate = new Date(start);
+        var endDate = new Date(end);
+        
+        if (endDate <= startDate) return 1;
+        
+        var diffTime = endDate - startDate;
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+    
+    function calculateRentalTotal() {
+        var days = calculateDays();
+        var total = 0;
+        
+        for (var i = 0; i < rentalItems.length; i++) {
+            total += rentalItems[i].daily_price * days * rentalItems[i].quantity;
+        }
+        
+        return total;
+    }
+    
+    function shiftDatesForDelivery() {
+        var city = cityInput.value.trim().toLowerCase();
+        var isNovokuznetsk = city === 'новокузнецк';
+        
+        if (!isNovokuznetsk && deliveryRadio && deliveryRadio.checked) {
+            var startDate = new Date(originalStartDate);
+            var endDate = new Date(originalEndDate);
+            
+            startDate.setDate(startDate.getDate() + 4);
+            endDate.setDate(endDate.getDate() + 4);
+            
+            rentalStart.value = startDate.toISOString().split('T')[0];
+            rentalEnd.value = endDate.toISOString().split('T')[0];
+            
+            dateShiftNotice.style.display = 'block';
+            dateShiftNotice.textContent = '⚠️ Даты сдвинуты на 4 дня (с учетом доставки)';
+        } else {
+            rentalStart.value = originalStartDate;
+            rentalEnd.value = originalEndDate;
+            dateShiftNotice.style.display = 'none';
+        }
+        
+        updateTotals();
+    }
+    
+    function updateTotals() {
+        var days = calculateDays();
+        var rentalTotal = calculateRentalTotal();
+        var deliveryCost = deliveryRadio && deliveryRadio.checked ? calculateDeliveryCost() : 0;
+        var grandTotal = rentalTotal + totalDeposit + deliveryCost;
+        
+        daysCountSpan.textContent = days;
+        rentalTotalSpan.textContent = rentalTotal.toFixed(2) + ' ₽';
+        deliveryCostSpan.textContent = deliveryCost === 0 ? '0 ₽' : deliveryCost + ' ₽';
+        grandTotalSpan.textContent = grandTotal.toFixed(2) + ' ₽';
+    }
+    
+    function updateDeliveryOptions() {
+        var city = cityInput.value.trim().toLowerCase();
+        var isNovokuznetsk = city === 'новокузнецк';
+        
+        if (deliveryPriceText) {
+            deliveryPriceText.textContent = isNovokuznetsk ? '(+300 ₽)' : '(+1500 ₽)';
+        }
+        
+        if (deliveryTimeText) {
+            deliveryTimeText.textContent = isNovokuznetsk ? '1-3 дня' : '3-7 дней';
+        }
+        
+        if (isNovokuznetsk) {
+            pickupRadio.disabled = false;
+            pickupCard.style.opacity = '1';
+            pickupCard.style.pointerEvents = 'auto';
+        } else {
+            pickupRadio.disabled = true;
+            pickupCard.style.opacity = '0.5';
+            pickupCard.style.pointerEvents = 'none';
+            
+            if (pickupRadio.checked) {
+                deliveryRadio.checked = true;
+                updateCardSelection();
+                if (addressContainer) addressContainer.style.display = 'block';
+            }
+        }
+        
+        shiftDatesForDelivery();
+    }
+    
+    function updateCardSelection() {
+        pickupCard.classList.remove('border-primary');
+        deliveryCard.classList.remove('border-primary');
+        
+        if (pickupRadio && pickupRadio.checked && !pickupRadio.disabled) {
+            pickupCard.classList.add('border-primary');
+        } else if (deliveryRadio && deliveryRadio.checked) {
+            deliveryCard.classList.add('border-primary');
+        }
+    }
+    
+    pickupRadio.addEventListener('change', function() {
+        if (!pickupRadio.disabled) {
+            updateCardSelection();
+            if (addressContainer) addressContainer.style.display = 'none';
+            shiftDatesForDelivery();
+        }
+    });
+    
+    deliveryRadio.addEventListener('change', function() {
+        updateCardSelection();
+        if (addressContainer) addressContainer.style.display = 'block';
+        shiftDatesForDelivery();
+    });
+    
+    cityInput.addEventListener('input', function() {
+        clearTimeout(window.cityTimeout);
+        window.cityTimeout = setTimeout(updateDeliveryOptions, 500);
+    });
+    
+    rentalStart.addEventListener('change', function() {
+        originalStartDate = this.value;
+        if (cityInput.value.trim().toLowerCase() !== 'новокузнецк' && deliveryRadio.checked) {
+            shiftDatesForDelivery();
+        } else {
+            updateTotals();
+        }
+    });
+    
+    rentalEnd.addEventListener('change', function() {
+        originalEndDate = this.value;
+        if (cityInput.value.trim().toLowerCase() !== 'новокузнецк' && deliveryRadio.checked) {
+            shiftDatesForDelivery();
+        } else {
+            updateTotals();
+        }
+    });
+    
+    if (postalCode) {
+        postalCode.addEventListener('input', function() {
+            this.value = this.value.replace(/\D/g, '').slice(0, 6);
+        });
+    }
+    
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function(e) {
+            var value = this.value.replace(/\D/g, '');
+            
+            if (value.length > 0) {
+                if (value.length <= 3) {
+                    value = '(' + value;
+                } else if (value.length <= 6) {
+                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3);
+                } else if (value.length <= 8) {
+                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + '-' + value.substring(6);
+                } else {
+                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + '-' + value.substring(6, 8) + '-' + value.substring(8, 10);
+                }
+            }
+            
+            this.value = value;
+        });
+    }
+    
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+            if (!form) return;
+            
+            if (!form.checkValidity()) {
+                form.classList.add('was-validated');
+                alert('Пожалуйста, заполните все обязательные поля');
+                return;
+            }
+            
+            var formData = new FormData(form);
+            var deliveryCost = deliveryRadio && deliveryRadio.checked ? calculateDeliveryCost() : 0;
+            var days = calculateDays();
+            var rentalTotal = calculateRentalTotal();
+            var grandTotal = rentalTotal + totalDeposit + deliveryCost;
+            
+            var city = cityInput.value.trim();
+            var cityText = city.toLowerCase() === 'новокузнецк' ? 'Новокузнецк' : city;
+            var deliveryMethod = deliveryRadio && deliveryRadio.checked ? 'delivery' : 'pickup';
+            
+            var confirmMessage = 'Подтвердите аренду:\n\n';
+            confirmMessage += 'Город: ' + cityText + '\n';
+            confirmMessage += 'Способ: ' + (deliveryMethod === 'delivery' ? 'Доставка' : 'Самовывоз') + '\n';
+            confirmMessage += 'Даты: ' + rentalStart.value + ' — ' + rentalEnd.value + ' (' + days + ' дн.)\n';
+            confirmMessage += 'Аренда: ' + rentalTotal.toFixed(2) + ' ₽\n';
+            confirmMessage += 'Залог (10%): ' + totalDeposit.toFixed(2) + ' ₽\n';
+            confirmMessage += 'Доставка: ' + (deliveryCost === 0 ? 'бесплатно' : deliveryCost + ' ₽') + '\n\n';
+            confirmMessage += 'Итого к оплате: ' + grandTotal.toFixed(2) + ' ₽';
+            
+            if (city.toLowerCase() !== 'новокузнецк' && deliveryMethod === 'delivery') {
+                confirmMessage += '\n\n⚠️ Даты аренды сдвинуты на 4 дня с учетом доставки';
+            }
+            
+            if (confirm(confirmMessage)) {
+                var data = {
+                    first_name: formData.get('first_name'),
+                    last_name: formData.get('last_name'),
+                    phone: formData.get('phone'),
+                    email: formData.get('email'),
+                    city: cityInput.value,
+                    postal_code: postalCode.value,
+                    delivery_address: deliveryAddress.value || '',
+                    delivery_method: deliveryMethod,
+                    delivery_cost: deliveryCost,
+                    notes: formData.get('notes'),
+                    rental_start: rentalStart.value,
+                    rental_end: rentalEnd.value
+                };
+                
+                fetch('/create_rental_order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(function(response) {
+                    return response.json();
+                })
+                .then(function(data) {
+                    if (data.success) {
+                        alert('✅ Аренда успешно оформлена!\n\nНомер заказа: ' + data.rental_number);
+                        window.location.href = "{{ url_for('orders') }}";
+                    } else {
+                        alert('❌ Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Error:', error);
+                    alert('❌ Ошибка соединения с сервером');
+                });
+            }
+        });
+    }
+    
+    if (pickupRadio) {
+        pickupRadio.checked = true;
+        pickupCard.classList.add('border-primary');
+    }
+    if (addressContainer) {
+        addressContainer.style.display = 'none';
+    }
+    
+    updateTotals();
+    setTimeout(updateDeliveryOptions, 100);
+});
+</script>
+{% endblock %}

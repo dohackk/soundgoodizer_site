@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block title %}Управление пользователями - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .user-avatar-placeholder {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .table th {
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        border-top: none;
+    }
+    .table td {
+        vertical-align: middle;
+    }
+    .badge {
+        padding: 0.5em 1em;
+        border-radius: 20px;
+        font-weight: 500;
+    }
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="bi bi-people text-primary me-2"></i>Управление пользователями
+        </h1>
+        <p class="text-muted mb-0">Всего пользователей: {{ users|length }}</p>
+    </div>
+    <div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+            <i class="bi bi-plus-circle me-2"></i>Добавить пользователя
+        </button>
+    </div>
+</div>
+
+<div class="filter-section">
+    <div class="row g-3">
+        <div class="col-md-4">
+            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по имени или email...">
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="roleFilter">
+                <option value="">Все роли</option>
+                <option value="admin">Администратор</option>
+                <option value="technician">Мастер</option>
+                <option value="customer">Клиент</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="statusFilter">
+                <option value="">Все статусы</option>
+                <option value="1">Активные</option>
+                <option value="0">Неактивные</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                <i class="bi bi-x-circle me-2"></i>Сброс
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="usersTable">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="py-3 px-4">Пользователь</th>
+                        <th class="py-3">Контакты</th>
+                        <th class="py-3">Роль</th>
+                        <th class="py-3">Статус</th>
+                        <th class="py-3">Дата регистрации</th>
+                        <th class="py-3 text-end px-4">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td class="px-4">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    {% if user[9] and user[9] != '' and user[9] != 'NULL' %}
+                                    <img src="{{ url_for('static', filename=user[9]) }}" 
+                                         class="user-avatar" alt="{{ user[3] }}">
+                                    {% else %}
+                                    <div class="user-avatar-placeholder">
+                                        {{ user[3][0] }}{{ user[4][0] if user[4] else '' }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="ms-3">
+                                    <div class="fw-bold">{{ user[3] }} {{ user[4] }}</div>
+                                    <small class="text-muted">@{{ user[1] }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div><i class="bi bi-envelope me-1 text-muted"></i>{{ user[2] }}</div>
+                            <div><i class="bi bi-telephone me-1 text-muted"></i>{{ user[5] or 'Не указан' }}</div>
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if user[8] == 'admin' %}bg-danger
+                                {% elif user[8] == 'manager' %}bg-warning text-dark
+                                {% elif user[8] == 'technician' %}bg-info
+                                {% else %}bg-secondary{% endif %}">
+                                {% if user[8] == 'admin' %}Администратор
+                                {% elif user[8] == 'technician' %}Мастер
+                                {% else %}Клиент{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            {% if user[6] %}
+                            <span class="badge bg-success">Активен</span>
+                            {% else %}
+                            <span class="badge bg-danger">Заблокирован</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user[7].strftime('%d.%m.%Y') if user[7] else 'Н/Д' }}</td>
+                        <td class="text-end px-4">
+                            <button class="btn btn-sm btn-outline-primary edit-user-btn" 
+                                    data-user-id="{{ user[0] }}"
+                                    data-bs-toggle="modal" data-bs-target="#editUserModal">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-user-btn" 
+                                    data-user-id="{{ user[0] }}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить пользователя</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin_add_user') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Логин</label>
+                        <input type="text" class="form-control" name="login" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Имя</label>
+                            <input type="text" class="form-control" name="first_name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Фамилия</label>
+                            <input type="text" class="form-control" name="last_name" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Телефон</label>
+                        <input type="tel" class="form-control" name="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Пароль</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Роль</label>
+                        <select class="form-select" name="role_id" required>
+                            <option value="4">Клиент</option>
+                            <option value="3">Мастер</option>
+                            <option value="1">Администратор</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Создать</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редактировать пользователя</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin_edit_user') }}" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" name="user_id" id="edit_user_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Логин</label>
+                        <input type="text" class="form-control" name="login" id="edit_login" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email" id="edit_email" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Имя</label>
+                            <input type="text" class="form-control" name="first_name" id="edit_first_name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Фамилия</label>
+                            <input type="text" class="form-control" name="last_name" id="edit_last_name" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Телефон</label>
+                        <input type="tel" class="form-control" name="phone" id="edit_phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Новый пароль</label>
+                        <input type="password" class="form-control" name="password" placeholder="Оставьте пустым, чтобы не менять">
+                        <small class="text-muted">Заполняйте только если хотите изменить пароль</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Роль</label>
+                        <select class="form-select" name="role_id" id="edit_role_id" required>
+                            <option value="4">Клиент</option>
+                            <option value="3">Мастер</option>
+                            <option value="1">Администратор</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Статус</label>
+                        <select class="form-select" name="is_active" id="edit_is_active" required>
+                            <option value="1">Активен</option>
+                            <option value="0">Заблокирован</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Аватар</label>
+                        <input type="file" class="form-control" name="avatar" accept="image/*">
+                        <small class="text-muted">Оставьте пустым, чтобы не менять</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.edit-user-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.dataset.userId;
+            
+            fetch(`/admin/get_user/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const user = data.user;
+                        
+                        document.getElementById('edit_user_id').value = user.user_id;
+                        document.getElementById('edit_login').value = user.login;
+                        document.getElementById('edit_email').value = user.email;
+                        document.getElementById('edit_first_name').value = user.first_name;
+                        document.getElementById('edit_last_name').value = user.last_name;
+                        document.getElementById('edit_phone').value = user.phone || '';
+                        document.getElementById('edit_role_id').value = user.role_id;
+                        document.getElementById('edit_is_active').value = user.is_active;
+                        
+                        new bootstrap.Modal(document.getElementById('editUserModal')).show();
+                    } else {
+                        alert('Ошибка загрузки данных пользователя');
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка соединения');
+                });
+        });
+    });
+    
+    document.querySelectorAll('.delete-user-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.dataset.userId;
+            if (confirm('Вы уверены, что хотите удалить пользователя?')) {
+                fetch('/admin/delete_user', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Пользователь удален');
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка соединения');
+                });
+            }
+        });
+    });
+    
+    function resetFilters() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('roleFilter').value = '';
+        document.getElementById('statusFilter').value = '';
+        filterTable();
+    }
+    
+    function filterTable() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const role = document.getElementById('roleFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const rows = document.querySelectorAll('#usersTable tbody tr');
+        
+        rows.forEach(row => {
+            const name = row.querySelector('td:first-child .fw-bold').textContent.toLowerCase();
+            const email = row.querySelector('td:nth-child(2) .bi-envelope').parentElement.textContent.toLowerCase();
+            const userRole = row.querySelector('td:nth-child(3) .badge').textContent.trim();
+            const userStatus = row.querySelector('td:nth-child(4) .badge').textContent === 'Активен' ? '1' : '0';
+            
+            let show = true;
+            if (search && !name.includes(search) && !email.includes(search)) show = false;
+            if (role && userRole !== role) show = false;
+            if (status && userStatus !== status) show = false;
+            
+            row.style.display = show ? '' : 'none';
+        });
+    }
+    
+    document.getElementById('searchInput').addEventListener('input', filterTable);
+    document.getElementById('roleFilter').addEventListener('change', filterTable);
+    document.getElementById('statusFilter').addEventListener('change', filterTable);
+    
+    window.resetFilters = resetFilters;
+});
+</script>
+{% endblock %}

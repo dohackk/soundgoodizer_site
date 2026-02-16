@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Детали заказа #{{ order.order_number }} - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .detail-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        margin-bottom: 0.25rem;
+    }
+    .detail-value {
+        font-size: 1rem;
+        font-weight: 500;
+    }
+    .product-image {
+        width: 100px;
+        height: 100px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+    }
+    .status-badge {
+        padding: 0.5em 1.5em;
+        border-radius: 30px;
+        font-weight: 500;
+        display: inline-block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="bi bi-cart text-warning me-2"></i>Детали заказа #{{ order.order_number }}
+        </h1>
+        <p class="text-muted mb-0">Просмотр и управление заказом</p>
+    </div>
+    <div>
+        <a href="{{ url_for('admin_orders') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>К списку заказов
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card detail-card">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2 text-primary"></i>Информация о заказе</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Номер заказа</div>
+                        <div class="detail-value">{{ order.order_number }}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Дата заказа</div>
+                        <div class="detail-value">{{ order.order_date.strftime('%d.%m.%Y %H:%M') if order.order_date else 'Н/Д' }}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Статус</div>
+                        <div>
+                            <select class="form-select status-select" style="width: auto; display: inline-block;" data-order-id="{{ order.order_id }}">
+                                {% for status in statuses %}
+                                <option value="{{ status[0] }}" {% if status[1] == order.status_name %}selected{% endif %}>
+                                    {{ status[1] }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Способ доставки</div>
+                        <div class="detail-value">
+                            {% if order.delivery_method == 'pickup' %}
+                                <span class="badge bg-info">Самовывоз</span>
+                            {% elif order.delivery_method == 'delivery' %}
+                                <span class="badge bg-primary">Доставка курьером</span>
+                            {% elif order.delivery_method == 'transport' %}
+                                <span class="badge bg-warning">Транспортная компания</span>
+                            {% else %}
+                                {{ order.delivery_method }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="fw-bold">Информация об инструменте</h6>
+                        <div class="d-flex align-items-center mt-3">
+                            {% if order.main_image_url and order.main_image_url != '' and order.main_image_url != 'NULL' %}
+                            <img src="{{ url_for('static', filename=order.main_image_url) }}" 
+                                 class="product-image me-3" alt="{{ order.instrument_name }}">
+                            {% else %}
+                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                 class="product-image me-3" alt="No image">
+                            {% endif %}
+                            <div>
+                                <div class="fw-bold">{{ order.instrument_name }}</div>
+                                <div class="text-muted">{{ order.brand_name or 'Без бренда' }}</div>
+                                <div class="mt-2">
+                                    <span class="badge bg-light text-dark">Количество: {{ order.quantity }} шт.</span>
+                                    <span class="badge bg-light text-dark">Цена: {{ "%.2f"|format(order.unit_price) }} ₽</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6 class="fw-bold">Финансовая информация</h6>
+                        <table class="table table-sm mt-3">
+                            <tr>
+                                <td>Стоимость товаров:</td>
+                                <td class="text-end">{{ "%.2f"|format(order.total_price - order.delivery_cost) }} ₽</td>
+                            </tr>
+                            <tr>
+                                <td>Доставка:</td>
+                                <td class="text-end">{{ "%.2f"|format(order.delivery_cost) }} ₽</td>
+                            </tr>
+                            <tr class="fw-bold">
+                                <td>ИТОГО:</td>
+                                <td class="text-end text-primary">{{ "%.2f"|format(order.total_price) }} ₽</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                {% if order.shipped_date or order.delivered_date or order.cancelled_date %}
+                <hr>
+                <div class="row">
+                    <h6 class="fw-bold mb-3">История статусов</h6>
+                    <div class="col-md-4">
+                        <div class="detail-label">Дата отправки</div>
+                        <div class="detail-value">{{ order.shipped_date.strftime('%d.%m.%Y %H:%M') if order.shipped_date else '—' }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="detail-label">Дата доставки</div>
+                        <div class="detail-value">{{ order.delivered_date.strftime('%d.%m.%Y %H:%M') if order.delivered_date else '—' }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="detail-label">Дата отмены</div>
+                        <div class="detail-value">{{ order.cancelled_date.strftime('%d.%m.%Y %H:%M') if order.cancelled_date else '—' }}</div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card detail-card mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-person me-2 text-primary"></i>Покупатель</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="detail-label">Имя</div>
+                    <div class="detail-value">{{ order.shipping_first_name }} {{ order.shipping_last_name }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Телефон</div>
+                    <div class="detail-value">{{ order.shipping_phone or 'Не указан' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value">{{ order.email }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Логин</div>
+                    <div class="detail-value">{{ order.login }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card detail-card">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>Адрес доставки</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="detail-label">Город</div>
+                    <div class="detail-value">{{ order.shipping_city or 'Не указан' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Адрес</div>
+                    <div class="detail-value">{{ order.shipping_address or 'Не указан' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Индекс</div>
+                    <div class="detail-value">{{ order.shipping_postal_code or 'Не указан' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusSelect = document.querySelector('.status-select');
+    if (statusSelect) {
+        statusSelect.addEventListener('change', function() {
+            const orderId = this.dataset.orderId;
+            const statusId = this.value;
+            
+            if (!confirm('Изменить статус заказа?')) {
+                const previousValue = this.querySelector('option[selected]')?.value;
+                if (previousValue) this.value = previousValue;
+                return;
+            }
+            
+            fetch('/admin/update_order_status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    order_id: orderId,
+                    status_id: statusId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Статус обновлен');
+                    this.querySelectorAll('option').forEach(opt => opt.removeAttribute('selected'));
+                    this.querySelector(`option[value="${statusId}"]`).setAttribute('selected', 'selected');
+                    location.reload();
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка соединения');
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

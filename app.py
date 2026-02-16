@@ -19,10 +19,13 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 REPAIR_PHOTOS_FOLDER = 'static/uploads/repair_photos'
 ALLOWED_REPAIR_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
+INSTRUMENT_IMAGES_FOLDER = 'static/img/instruments'
+
 app = Flask(__name__)
 app.secret_key = 'soundgoodizer-secret-key-2025-super-secure'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
+app.config['INSTRUMENT_IMAGES_FOLDER'] = INSTRUMENT_IMAGES_FOLDER
 
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -59,6 +62,18 @@ def login_required(f):
         if 'user_id' not in session:
             flash('Сначала войдите в систему', 'warning')
             return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def technician_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Сначала войдите в систему', 'warning')
+            return redirect(url_for('login'))
+        if session.get('user_role') not in ['admin', 'technician']:
+            flash('Доступ запрещен. Требуются права мастера или администратора', 'danger')
+            return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -294,8 +309,13 @@ def index():
 @app.route('/catalog')
 def catalog():
     category_id = request.args.get('category_id')
-    search = request.args.get('search', '')
+    search = request.args.get('search', '').strip()
     brand_id = request.args.get('brand_id')
+    price_min = request.args.get('price_min')
+    price_max = request.args.get('price_max')
+    in_stock = request.args.get('in_stock')
+    for_rent = request.args.get('for_rent')
+    sort = request.args.get('sort', 'name_asc')
     page = request.args.get('page', 1, type=int)
     per_page = 12
     
@@ -307,15 +327,41 @@ def catalog():
         search_term = f"%{search}%"
         params.extend([search_term, search_term, search_term])
     
-    if category_id:
+    if category_id and category_id.isdigit():
         where_conditions.append("i.category_id = ?")
-        params.append(category_id)
+        params.append(int(category_id))
     
-    if brand_id:
+    if brand_id and brand_id.isdigit():
         where_conditions.append("i.brand_id = ?")
-        params.append(brand_id)
+        params.append(int(brand_id))
+    
+    if price_min and price_min.isdigit():
+        where_conditions.append("i.purchase_price >= ?")
+        params.append(int(price_min))
+    
+    if price_max and price_max.isdigit():
+        where_conditions.append("i.purchase_price <= ?")
+        params.append(int(price_max))
+    
+    if in_stock == '1':
+        where_conditions.append("i.quantity_in_stock > 0")
+    
+    if for_rent == '1':
+        where_conditions.append("i.is_available_for_rent = 1")
     
     where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+    
+    order_by = "i.name" 
+    if sort == 'name_desc':
+        order_by = "i.name DESC"
+    elif sort == 'price_asc':
+        order_by = "i.purchase_price ASC"
+    elif sort == 'price_desc':
+        order_by = "i.purchase_price DESC"
+    elif sort == 'newest':
+        order_by = "i.created_at DESC"
+    elif sort == 'popular':
+        order_by = "i.views_count DESC"
     
     conn = get_db_connection()
     if not conn:
@@ -359,7 +405,7 @@ def catalog():
     LEFT JOIN categories c ON i.category_id = c.category_id
     LEFT JOIN instrument_conditions ic ON i.condition_id = ic.condition_id
     {where_clause}
-    ORDER BY i.name
+    ORDER BY {order_by}
     OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
     """
     
@@ -370,10 +416,10 @@ def catalog():
     Instrument = namedtuple('Instrument', columns)
     instruments = [Instrument(*row) for row in cursor.fetchall()]
     
-    cursor.execute("SELECT * FROM categories ORDER BY category_name")
+    cursor.execute("SELECT category_id, category_name FROM categories ORDER BY category_name")
     categories = cursor.fetchall()
     
-    cursor.execute("SELECT * FROM brands ORDER BY brand_name")
+    cursor.execute("SELECT brand_id, brand_name FROM brands ORDER BY brand_name")
     brands = cursor.fetchall()
     
     conn.close()
@@ -388,8 +434,7 @@ def catalog():
         'has_prev': page > 1,
         'has_next': page < total_pages,
         'prev_num': page - 1 if page > 1 else None,
-        'next_num': page + 1 if page < total_pages else None,
-        'iter_pages': range(max(1, page - 2), min(total_pages, page + 2) + 1)
+        'next_num': page + 1 if page < total_pages else None
     }
     
     return render_template('catalog.html',
@@ -1246,42 +1291,43 @@ def profile():
         
         user = dict(zip(columns, user_row))
         
-        cursor.execute("""
-            SELECT COUNT(*) FROM cart_items WHERE user_id = ?
-        """, (session['user_id'],))
+        cursor.execute("SELECT COUNT(*) FROM cart_items WHERE user_id = ?", (session['user_id'],))
         cart_items = cursor.fetchone()[0] or 0
         
-        cursor.execute("""
-            SELECT COUNT(*) FROM purchase_orders WHERE user_id = ?
-        """, (session['user_id'],))
+        cursor.execute("SELECT COUNT(*) FROM purchase_orders WHERE user_id = ?", (session['user_id'],))
         orders_count = cursor.fetchone()[0] or 0
         
-        cursor.execute("""
-            SELECT COUNT(*) FROM rental_orders WHERE user_id = ?
-        """, (session['user_id'],))
+        cursor.execute("SELECT COUNT(*) FROM rental_orders WHERE user_id = ?", (session['user_id'],))
         rentals_count = cursor.fetchone()[0] or 0
         
+        cursor.execute("SELECT COUNT(*) FROM repair_requests WHERE user_id = ?", (session['user_id'],))
+        repair_count = cursor.fetchone()[0] or 0
+
         cursor.execute("""
-            SELECT TOP 5 
-                po.order_number, 
-                po.order_id,
-                po.instrument_id,
-                po.quantity,
-                po.order_date,
-                po.total_price,
-                po.status_id,
-                os.status_name,
-                po.shipping_first_name,
-                po.shipping_last_name,
-                po.delivery_method,
-                po.delivery_cost
+            SELECT 'purchase' as type, order_number as number, order_date as date, status_name as status
             FROM purchase_orders po
             JOIN order_statuses os ON po.status_id = os.status_id
             WHERE po.user_id = ?
-            ORDER BY po.order_date DESC
-        """, (session['user_id'],))
-        
-        recent_orders = cursor.fetchall()
+            
+            UNION ALL
+            
+            SELECT 'rental' as type, rental_number as number, created_at as date, status_name as status
+            FROM rental_orders ro
+            JOIN rental_statuses rs ON ro.status_id = rs.status_id
+            WHERE ro.user_id = ?
+            
+            UNION ALL
+            
+            SELECT 'repair' as type, request_number as number, created_at as date, status_name as status
+            FROM repair_requests rr
+            JOIN repair_statuses rs ON rr.status_id = rs.status_id
+            WHERE rr.user_id = ?
+            
+            ORDER BY date DESC
+            OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY
+        """, (session['user_id'], session['user_id'], session['user_id']))
+
+        recent_activities = cursor.fetchall()
         
         conn.close()
         
@@ -1292,13 +1338,16 @@ def profile():
                              cart_items=cart_items,
                              orders_count=orders_count,
                              rentals_count=rentals_count,
-                             recent_orders=recent_orders,
+                             repair_count=repair_count,
+                             recent_activities=recent_activities,
                              has_password_code=has_password_code)
         
     except Exception as e:
         if conn:
             conn.close()
         print(f"Error in profile: {e}")
+        import traceback
+        traceback.print_exc()
         flash(f'Ошибка при загрузке профиля: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
@@ -1313,7 +1362,6 @@ def orders():
     try:
         cursor = conn.cursor()
         
-        # Покупки с main_image_url
         purchase_sql = """
         SELECT 
             po.order_id,
@@ -1337,7 +1385,6 @@ def orders():
         cursor.execute(purchase_sql, (session['user_id'],))
         purchase_orders = cursor.fetchall()
         
-        # Аренда с main_image_url
         rental_sql = """
         SELECT 
             ro.rental_id,
@@ -1362,8 +1409,7 @@ def orders():
         """
         cursor.execute(rental_sql, (session['user_id'],))
         rental_orders = cursor.fetchall()
-        
-        # Ремонт с фото
+
         repair_sql = """
         SELECT 
             rr.request_id,
@@ -2091,48 +2137,38 @@ def create_repair_request():
     """Создание заявки на ремонт"""
     if request.method == 'POST':
         try:
-            # Получаем данные из формы
             instrument_name = request.form.get('instrument_name', '').strip()
             brand = request.form.get('brand', '').strip()
             model = request.form.get('model', '').strip()
             problem_description = request.form.get('problem_description', '').strip()
             
-            # Валидация
             if not instrument_name or not problem_description:
                 return jsonify({'success': False, 'message': 'Заполните все обязательные поля'})
             
-            # Обработка загруженных фото
             photos = request.files.getlist('photos')
             photo_urls = []
             
             if photos and photos[0].filename:
-                # Создаем папку для фото, если её нет
                 os.makedirs(app.config['REPAIR_PHOTOS_FOLDER'], exist_ok=True)
                 
                 for photo in photos:
                     if photo and allowed_repair_file(photo.filename):
-                        # Генерируем уникальное имя файла
                         filename = secure_filename(photo.filename)
                         ext = filename.rsplit('.', 1)[1].lower()
                         new_filename = f"repair_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
                         
-                        # Сохраняем файл
                         filepath = os.path.join(app.config['REPAIR_PHOTOS_FOLDER'], new_filename)
                         photo.save(filepath)
                         
-                        # Добавляем URL фото
                         photo_urls.append(f"uploads/repair_photos/{new_filename}")
             
-            # Преобразуем список фото в строку
             photos_json = ','.join(photo_urls) if photo_urls else None
             
-            # Генерируем временный номер
             temp_number = f"TEMP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # Вставляем заявку
             cursor.execute("""
                 INSERT INTO repair_requests 
                 (request_number, user_id, customer_instrument_name, brand, model, 
@@ -2148,11 +2184,9 @@ def create_repair_request():
                 photos_json
             ))
             
-            # Получаем ID созданной заявки
             cursor.execute("SELECT @@IDENTITY")
             request_id = cursor.fetchone()[0]
             
-            # Получаем сгенерированный триггером номер
             cursor.execute("SELECT request_number FROM repair_requests WHERE request_id = ?", (request_id,))
             request_number = cursor.fetchone()[0]
             
@@ -2170,7 +2204,6 @@ def create_repair_request():
             traceback.print_exc()
             return jsonify({'success': False, 'message': str(e)})
     
-    # GET запрос - показываем форму
     return render_template('create_repair_request.html')
 
 @app.route('/repair_requests')
@@ -2243,8 +2276,68 @@ def admin_dashboard():
         cursor.execute("SELECT COUNT(*) FROM repair_requests")
         stats['repairs'] = cursor.fetchone()[0]
         
+        cursor.execute("SELECT SUM(quantity_in_stock) FROM instruments")
+        stats['instruments_stock'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM purchase_orders 
+            WHERE CONVERT(DATE, order_date) = CONVERT(DATE, GETDATE())
+        """)
+        stats['orders_today'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM users 
+            WHERE CONVERT(DATE, created_at) = CONVERT(DATE, GETDATE())
+        """)
+        stats['users_today'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM rental_orders 
+            WHERE CONVERT(DATE, created_at) = CONVERT(DATE, GETDATE())
+        """)
+        stats['rentals_today'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM repair_requests 
+            WHERE CONVERT(DATE, created_at) = CONVERT(DATE, GETDATE())
+        """)
+        stats['repairs_today'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT SUM(total_price) FROM purchase_orders 
+            WHERE order_date >= DATEADD(month, -1, GETDATE())
+        """)
+        stats['monthly_revenue'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT AVG(total_price) FROM purchase_orders
+        """)
+        stats['avg_order'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM rental_orders 
+            WHERE status_id = (SELECT status_id FROM rental_statuses WHERE status_name = 'active')
+        """)
+        stats['active_rentals'] = cursor.fetchone()[0] or 0
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM repair_requests 
+            WHERE status_id IN (
+                SELECT status_id FROM repair_statuses 
+                WHERE status_name IN ('new', 'diagnosed', 'in_progress')
+            )
+        """)
+        stats['in_repair'] = cursor.fetchone()[0] or 0
+        
         sql = """
-        SELECT TOP 10 po.*, u.login, os.status_name 
+        SELECT TOP 10 
+            po.order_id,
+            po.order_number,
+            po.order_date,
+            po.total_price,
+            u.login,
+            os.status_name,
+            u.avatar_url
         FROM purchase_orders po
         JOIN users u ON po.user_id = u.user_id
         JOIN order_statuses os ON po.status_id = os.status_id
@@ -2253,20 +2346,794 @@ def admin_dashboard():
         cursor.execute(sql)
         recent_orders = cursor.fetchall()
         
-        sql = "SELECT TOP 5 * FROM users ORDER BY created_at DESC"
+        sql = """
+        SELECT TOP 5 
+            u.user_id,
+            u.login,
+            u.first_name,
+            u.last_name,
+            u.created_at,
+            u.avatar_url
+        FROM users u 
+        ORDER BY u.created_at DESC
+        """
         cursor.execute(sql)
         recent_users = cursor.fetchall()
         
         conn.close()
         
+        now = datetime.now()
+        
         return render_template('admin/dashboard.html', 
                              stats=stats, 
                              recent_orders=recent_orders,
-                             recent_users=recent_users)
+                             recent_users=recent_users,
+                             now=now)
     except Exception as e:
-        conn.close()
+        print(f"Error in admin_dashboard: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.close()
         flash(f'Ошибка при загрузке админ-панели: {str(e)}', 'danger')
         return redirect(url_for('index'))
+
+@app.route('/admin/users')
+@login_required
+@admin_required
+def admin_users():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT u.user_id, u.login, u.email, u.first_name, u.last_name,
+                   u.phone, u.is_active, u.created_at, r.role_name, u.avatar_url
+            FROM users u
+            JOIN roles r ON u.role_id = r.role_id
+            ORDER BY u.created_at DESC
+        """)
+        users = cursor.fetchall()
+        conn.close()
+        
+        return render_template('admin/users.html', users=users)
+    except Exception as e:
+        print(f"Error in admin_users: {e}")
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке пользователей: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+@app.route('/admin/get_user/<int:user_id>')
+@login_required
+@admin_required
+def admin_get_user(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'success': False, 'message': 'Ошибка подключения к БД'})
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id, login, email, first_name, last_name, phone, role_id, is_active
+            FROM users WHERE user_id = ?
+        """, (user_id,))
+        
+        columns = [column[0] for column in cursor.description]
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Пользователь не найден'})
+        
+        user = dict(zip(columns, row))
+        conn.close()
+        
+        return jsonify({'success': True, 'user': user})
+    except Exception as e:
+        if conn:
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+    
+@app.route('/admin/add_user', methods=['POST'])
+@login_required
+@admin_required
+def admin_add_user():
+    try:
+        login = request.form.get('login')
+        email = request.form.get('email')
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        phone = request.form.get('phone')
+        password = request.form.get('password')
+        role_id = request.form.get('role_id')
+        
+        if not all([login, email, first_name, last_name, password, role_id]):
+            flash('Заполните все обязательные поля', 'danger')
+            return redirect(url_for('admin_users'))
+        
+        password_hash = hash_password(password)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO users (login, email, password_hash, first_name, last_name, 
+                             phone, role_id, is_active, is_email_verified, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, GETDATE())
+        """, (login, email, password_hash, first_name, last_name, phone, role_id))
+        
+        conn.commit()
+        conn.close()
+        
+        flash('Пользователь успешно добавлен', 'success')
+        return redirect(url_for('admin_users'))
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        flash(f'Ошибка при добавлении пользователя: {str(e)}', 'danger')
+        return redirect(url_for('admin_users'))
+
+@app.route('/admin/edit_user', methods=['POST'])
+@login_required
+@admin_required
+def admin_edit_user():
+    try:
+        user_id = request.form.get('user_id')
+        login = request.form.get('login')
+        email = request.form.get('email')
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        phone = request.form.get('phone')
+        password = request.form.get('password')
+        role_id = request.form.get('role_id')
+        is_active = request.form.get('is_active')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT user_id FROM users 
+            WHERE (login = ? OR email = ?) AND user_id != ?
+        """, (login, email, user_id))
+        
+        if cursor.fetchone():
+            conn.close()
+            flash('Пользователь с таким логином или email уже существует', 'danger')
+            return redirect(url_for('admin_users'))
+        
+        if password:
+            password_hash = hash_password(password)
+            cursor.execute("""
+                UPDATE users 
+                SET login = ?, email = ?, first_name = ?, last_name = ?, 
+                    phone = ?, password_hash = ?, role_id = ?, is_active = ?
+                WHERE user_id = ?
+            """, (login, email, first_name, last_name, phone, password_hash, role_id, is_active, user_id))
+        else:
+            cursor.execute("""
+                UPDATE users 
+                SET login = ?, email = ?, first_name = ?, last_name = ?, 
+                    phone = ?, role_id = ?, is_active = ?
+                WHERE user_id = ?
+            """, (login, email, first_name, last_name, phone, role_id, is_active, user_id))
+        
+        avatar = request.files.get('avatar')
+        if avatar and avatar.filename:
+            cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (user_id,))
+            old_avatar = cursor.fetchone()
+            if old_avatar and old_avatar[0]:
+                old_path = os.path.join(app.root_path, 'static', old_avatar[0])
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+            
+            ext = avatar.filename.rsplit('.', 1)[1].lower()
+            filename = f"{login}.{ext}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            avatar.save(filepath)
+            
+            cursor.execute("UPDATE users SET avatar_url = ? WHERE user_id = ?", 
+                         (f"uploads/avatars/{filename}", user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        flash('Пользователь успешно обновлен', 'success')
+        return redirect(url_for('admin_users'))
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        flash(f'Ошибка при обновлении пользователя: {str(e)}', 'danger')
+        return redirect(url_for('admin_users'))
+
+@app.route('/admin/delete_user', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_user():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        if user_id == session['user_id']:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Нельзя удалить самого себя'})
+        
+        cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/orders')
+@login_required
+@admin_required
+def admin_orders():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT po.order_id, po.order_number, po.order_date,
+                   po.total_price, os.status_name, u.login,
+                   i.name as instrument_name, po.quantity,
+                   i.main_image_url
+            FROM purchase_orders po
+            JOIN order_statuses os ON po.status_id = os.status_id
+            JOIN users u ON po.user_id = u.user_id
+            JOIN instruments i ON po.instrument_id = i.instrument_id
+            ORDER BY po.order_date DESC
+        """)
+        orders = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM order_statuses")
+        statuses = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('admin/orders.html', orders=orders, statuses=statuses)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке заказов: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/order/<int:order_id>')
+@login_required
+@admin_required
+def admin_order_detail(order_id):
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_orders'))
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT po.*, u.login, u.email, u.first_name, u.last_name, u.phone,
+                   os.status_name, i.name as instrument_name,
+                   b.brand_name, i.main_image_url
+            FROM purchase_orders po
+            JOIN users u ON po.user_id = u.user_id
+            JOIN order_statuses os ON po.status_id = os.status_id
+            JOIN instruments i ON po.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            WHERE po.order_id = ?
+        """, (order_id,))
+        
+        columns = [column[0] for column in cursor.description]
+        order_row = cursor.fetchone()
+        
+        if not order_row:
+            flash('Заказ не найден', 'danger')
+            conn.close()
+            return redirect(url_for('admin_orders'))
+        
+        order = dict(zip(columns, order_row))
+        
+        cursor.execute("SELECT * FROM order_statuses")
+        statuses = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('admin/order_detail.html', order=order, statuses=statuses)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке заказа: {str(e)}', 'danger')
+        return redirect(url_for('admin_orders'))
+
+@app.route('/admin/update_order_status', methods=['POST'])
+@login_required
+@admin_required
+def admin_update_order_status():
+    try:
+        data = request.get_json()
+        order_id = data.get('order_id')
+        status_id = data.get('status_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT status_name FROM order_statuses WHERE status_id = ?", (status_id,))
+        status_name = cursor.fetchone()[0]
+        
+        if status_name == 'shipped':
+            cursor.execute("""
+                UPDATE purchase_orders 
+                SET status_id = ?, shipped_date = GETDATE()
+                WHERE order_id = ?
+            """, (status_id, order_id))
+        elif status_name == 'delivered':
+            cursor.execute("""
+                UPDATE purchase_orders 
+                SET status_id = ?, delivered_date = GETDATE()
+                WHERE order_id = ?
+            """, (status_id, order_id))
+        elif status_name == 'cancelled':
+            cursor.execute("""
+                UPDATE purchase_orders 
+                SET status_id = ?, cancelled_date = GETDATE()
+                WHERE order_id = ?
+            """, (status_id, order_id))
+        else:
+            cursor.execute("""
+                UPDATE purchase_orders 
+                SET status_id = ?
+                WHERE order_id = ?
+            """, (status_id, order_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/rentals')
+@login_required
+@admin_required
+def admin_rentals():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ro.rental_id, ro.rental_number, ro.rental_start_date,
+                   ro.rental_end_date, ro.total_amount, rs.status_name,
+                   u.login, i.name as instrument_name, i.main_image_url
+            FROM rental_orders ro
+            JOIN rental_statuses rs ON ro.status_id = rs.status_id
+            JOIN users u ON ro.user_id = u.user_id
+            JOIN instruments i ON ro.instrument_id = i.instrument_id
+            ORDER BY ro.created_at DESC
+        """)
+        rentals = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM rental_statuses")
+        statuses = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('admin/rentals.html', rentals=rentals, statuses=statuses)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке аренд: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+@app.route('/admin/update_rental_status', methods=['POST'])
+@login_required
+@admin_required
+def admin_update_rental_status():
+    try:
+        data = request.get_json()
+        rental_id = data.get('rental_id')
+        status_id = data.get('status_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT status_name FROM rental_statuses WHERE status_id = ?", (status_id,))
+        status_name = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            UPDATE rental_orders 
+            SET status_id = ?
+            WHERE rental_id = ?
+        """, (status_id, rental_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        print(f"Error updating rental status: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/rental/<int:rental_id>')
+@login_required
+@admin_required
+def admin_rental_detail(rental_id):
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_rentals'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT ro.*, u.login, u.email, u.first_name, u.last_name, u.phone,
+                   rs.status_name, i.name as instrument_name,
+                   b.brand_name, i.main_image_url
+            FROM rental_orders ro
+            JOIN users u ON ro.user_id = u.user_id
+            JOIN rental_statuses rs ON ro.status_id = rs.status_id
+            JOIN instruments i ON ro.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            WHERE ro.rental_id = ?
+        """, (rental_id,))
+        
+        columns = [column[0] for column in cursor.description]
+        rental_row = cursor.fetchone()
+        
+        if not rental_row:
+            flash('Аренда не найдена', 'danger')
+            conn.close()
+            return redirect(url_for('admin_rentals'))
+        
+        rental = dict(zip(columns, rental_row))
+        
+        cursor.execute("SELECT * FROM rental_statuses")
+        statuses = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('admin/rental_detail.html', rental=rental, statuses=statuses)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке аренды: {str(e)}', 'danger')
+        return redirect(url_for('admin_rentals'))
+
+@app.route('/admin/repair_requests')
+@login_required
+@admin_required
+def admin_repair_requests():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                rr.request_id,
+                rr.request_number,
+                rr.customer_instrument_name,
+                rr.brand,
+                rr.model,
+                rr.problem_description,
+                rr.created_at,
+                rr.actual_cost,
+                rs.status_name,
+                u.login,
+                u.first_name,
+                u.last_name,
+                u.phone,
+                u.email,
+                rr.problem_photos_urls,
+                rr.assigned_to
+            FROM repair_requests rr
+            JOIN repair_statuses rs ON rr.status_id = rs.status_id
+            JOIN users u ON rr.user_id = u.user_id
+            ORDER BY 
+                CASE 
+                    WHEN rs.sort_order <= 4 THEN 0 
+                    ELSE 1 
+                END,
+                rr.created_at DESC
+        """)
+        
+        requests = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM repair_statuses ORDER BY sort_order")
+        statuses = cursor.fetchall()
+        
+        cursor.execute("""
+            SELECT user_id, first_name, last_name 
+            FROM users 
+            WHERE role_id = (SELECT role_id FROM roles WHERE role_name = 'technician')
+        """)
+        technicians = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('admin/repair_requests.html', 
+                             requests=requests, 
+                             statuses=statuses,
+                             technicians=technicians)
+        
+    except Exception as e:
+        print(f"Error in admin_repair_requests: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке заявок: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/repair/<int:request_id>')
+@login_required
+@admin_required
+def admin_repair_detail(request_id):
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_repair_requests'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                rr.*,
+                u.login,
+                u.first_name,
+                u.last_name,
+                u.email,
+                u.phone,
+                rs.status_name,
+                tech.first_name as tech_first_name,
+                tech.last_name as tech_last_name
+            FROM repair_requests rr
+            JOIN users u ON rr.user_id = u.user_id
+            JOIN repair_statuses rs ON rr.status_id = rs.status_id
+            LEFT JOIN users tech ON rr.assigned_to = tech.user_id
+            WHERE rr.request_id = ?
+        """, (request_id,))
+        
+        columns = [column[0] for column in cursor.description]
+        repair_row = cursor.fetchone()
+        
+        if not repair_row:
+            flash('Заявка не найдена', 'danger')
+            conn.close()
+            return redirect(url_for('admin_repair_requests'))
+        
+        repair = dict(zip(columns, repair_row))
+        
+        cursor.execute("SELECT * FROM repair_statuses ORDER BY sort_order")
+        statuses = cursor.fetchall()
+        
+        cursor.execute("""
+            SELECT user_id, first_name, last_name 
+            FROM users 
+            WHERE role_id = (SELECT role_id FROM roles WHERE role_name = 'technician')
+        """)
+        technicians = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('admin/repair_detail.html', 
+                             repair=repair, 
+                             statuses=statuses,
+                             technicians=technicians)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке заявки: {str(e)}', 'danger')
+        return redirect(url_for('admin_repair_requests'))
+
+@app.route('/admin/update_repair_status', methods=['POST'])
+@login_required
+@admin_required
+def admin_update_repair_status():
+    try:
+        data = request.get_json()
+        request_id = data.get('request_id')
+        status_id = data.get('status_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT status_name FROM repair_statuses WHERE status_id = ?", (status_id,))
+        status_name = cursor.fetchone()[0]
+        
+        if status_name == 'completed':
+            cursor.execute("""
+                UPDATE repair_requests 
+                SET status_id = ?, completed_at = GETDATE()
+                WHERE request_id = ?
+            """, (status_id, request_id))
+        else:
+            cursor.execute("""
+                UPDATE repair_requests 
+                SET status_id = ?
+                WHERE request_id = ?
+            """, (status_id, request_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/assign_repair_technician', methods=['POST'])
+@login_required
+@admin_required
+def admin_assign_repair_technician():
+    try:
+        data = request.get_json()
+        request_id = data.get('request_id')
+        technician_id = data.get('technician_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE repair_requests 
+            SET assigned_to = ?
+            WHERE request_id = ?
+        """, (technician_id if technician_id else None, request_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/set_repair_cost', methods=['POST'])
+@login_required
+@admin_required
+def admin_set_repair_cost():
+    try:
+        data = request.get_json()
+        request_id = data.get('request_id')
+        cost = data.get('cost')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE repair_requests 
+            SET actual_cost = ?
+            WHERE request_id = ?
+        """, (cost, request_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/brands')
+@login_required
+@admin_required
+def admin_brands():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM brands ORDER BY brand_name")
+        brands = cursor.fetchall()
+        conn.close()
+        
+        return render_template('admin/brands.html', brands=brands)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке брендов: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/add_brand', methods=['POST'])
+@login_required
+@admin_required
+def admin_add_brand():
+    try:
+        brand_name = request.form.get('brand_name')
+        country = request.form.get('country')
+        description = request.form.get('description')
+        website = request.form.get('website')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO brands (brand_name, country, description, website)
+            VALUES (?, ?, ?, ?)
+        """, (brand_name, country, description, website))
+        
+        conn.commit()
+        conn.close()
+        
+        flash('Бренд успешно добавлен', 'success')
+        return redirect(url_for('admin_brands'))
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        flash(f'Ошибка при добавлении бренда: {str(e)}', 'danger')
+        return redirect(url_for('admin_brands'))
+
+@app.route('/admin/edit_brand', methods=['POST'])
+@login_required
+@admin_required
+def admin_edit_brand():
+    try:
+        brand_id = request.form.get('brand_id')
+        brand_name = request.form.get('brand_name')
+        country = request.form.get('country')
+        description = request.form.get('description')
+        website = request.form.get('website')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE brands 
+            SET brand_name = ?, country = ?, description = ?, website = ?
+            WHERE brand_id = ?
+        """, (brand_name, country, description, website, brand_id))
+        
+        conn.commit()
+        conn.close()
+        
+        flash('Бренд успешно обновлен', 'success')
+        return redirect(url_for('admin_brands'))
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        flash(f'Ошибка при обновлении бренда: {str(e)}', 'danger')
+        return redirect(url_for('admin_brands'))
 
 @app.route('/admin/instruments')
 @login_required
@@ -2325,6 +3192,349 @@ def admin_instruments():
         conn.close()
         flash(f'Ошибка при загрузке инструментов: {str(e)}', 'danger')
         return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/get_instrument/<int:instrument_id>')
+@login_required
+@admin_required
+def admin_get_instrument(instrument_id):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'success': False, 'message': 'Ошибка подключения к БД'})
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM instruments WHERE instrument_id = ?
+        """, (instrument_id,))
+        
+        columns = [column[0] for column in cursor.description]
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Инструмент не найден'})
+        
+        instrument = dict(zip(columns, row))
+        conn.close()
+        
+        return jsonify({'success': True, 'instrument': instrument})
+    except Exception as e:
+        if conn:
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+    
+@app.route('/admin/add_instrument', methods=['POST'])
+@login_required
+@admin_required
+def admin_add_instrument():
+    try:
+        name = request.form.get('name')
+        model = request.form.get('model')
+        brand_id = request.form.get('brand_id') or None
+        category_id = request.form.get('category_id') or None
+        year_of_manufacture = request.form.get('year_of_manufacture') or None
+        purchase_price = request.form.get('purchase_price')
+        rental_price_per_day = request.form.get('rental_price_per_day') or None
+        quantity_in_stock = request.form.get('quantity_in_stock') or 1
+        condition_id = request.form.get('condition_id') or None
+        description = request.form.get('description')
+        characteristics = request.form.get('characteristics')
+        is_available_for_sale = 1 if request.form.get('is_available_for_sale') else 0
+        is_available_for_rent = 1 if request.form.get('is_available_for_rent') else 0
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO instruments 
+            (name, model, brand_id, category_id, year_of_manufacture, purchase_price, 
+             rental_price_per_day, quantity_in_stock, condition_id, description, 
+             characteristics, is_available_for_sale, is_available_for_rent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
+        """, (name, model, brand_id, category_id, year_of_manufacture, purchase_price,
+              rental_price_per_day, quantity_in_stock, condition_id, description,
+              characteristics, is_available_for_sale, is_available_for_rent))
+        
+        cursor.execute("SELECT @@IDENTITY")
+        instrument_id = cursor.fetchone()[0]
+        
+        main_image = request.files.get('main_image')
+        if main_image and main_image.filename:
+            os.makedirs(app.config['INSTRUMENT_IMAGES_FOLDER'], exist_ok=True)
+            
+            ext = main_image.filename.rsplit('.', 1)[1].lower()
+            filename = f"{instrument_id}.{ext}"
+            filepath = os.path.join(app.config['INSTRUMENT_IMAGES_FOLDER'], filename)
+            
+            main_image.save(filepath)
+            
+            cursor.execute("""
+                UPDATE instruments 
+                SET main_image_url = ? 
+                WHERE instrument_id = ?
+            """, (f"img/instruments/{filename}", instrument_id))
+        
+        conn.commit()
+        conn.close()
+        
+        flash('Инструмент успешно добавлен', 'success')
+        return redirect(url_for('admin_instruments'))
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        flash(f'Ошибка при добавлении инструмента: {str(e)}', 'danger')
+        return redirect(url_for('admin_instruments'))
+
+@app.route('/admin/update_instrument', methods=['POST'])
+@login_required
+@admin_required
+def admin_update_instrument():
+    try:
+        instrument_id = request.form.get('instrument_id')
+        name = request.form.get('name')
+        model = request.form.get('model')
+        brand_id = request.form.get('brand_id') or None
+        category_id = request.form.get('category_id') or None
+        year_of_manufacture = request.form.get('year_of_manufacture') or None
+        purchase_price = request.form.get('purchase_price')
+        rental_price_per_day = request.form.get('rental_price_per_day') or None
+        quantity_in_stock = request.form.get('quantity_in_stock') or 1
+        condition_id = request.form.get('condition_id') or None
+        description = request.form.get('description')
+        characteristics = request.form.get('characteristics')
+        is_available_for_sale = 1 if request.form.get('is_available_for_sale') else 0
+        is_available_for_rent = 1 if request.form.get('is_available_for_rent') else 0
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        main_image = request.files.get('main_image')
+        
+        if main_image and main_image.filename:
+            os.makedirs(app.config['INSTRUMENT_IMAGES_FOLDER'], exist_ok=True)
+            
+            ext = main_image.filename.rsplit('.', 1)[1].lower()
+            filename = f"{instrument_id}.{ext}"
+            filepath = os.path.join(app.config['INSTRUMENT_IMAGES_FOLDER'], filename)
+            
+            cursor.execute("SELECT main_image_url FROM instruments WHERE instrument_id = ?", (instrument_id,))
+            old_image = cursor.fetchone()
+            if old_image and old_image[0]:
+                old_filepath = os.path.join('static', old_image[0])
+                if os.path.exists(old_filepath):
+                    os.remove(old_filepath)
+            
+            main_image.save(filepath)
+            
+            cursor.execute("""
+                UPDATE instruments 
+                SET name = ?, model = ?, brand_id = ?, category_id = ?, 
+                    year_of_manufacture = ?, purchase_price = ?, rental_price_per_day = ?,
+                    quantity_in_stock = ?, condition_id = ?, description = ?, 
+                    characteristics = ?, is_available_for_sale = ?, is_available_for_rent = ?,
+                    main_image_url = ?
+                WHERE instrument_id = ?
+            """, (name, model, brand_id, category_id, year_of_manufacture, purchase_price,
+                  rental_price_per_day, quantity_in_stock, condition_id, description,
+                  characteristics, is_available_for_sale, is_available_for_rent,
+                  f"img/instruments/{filename}", instrument_id))
+        else:
+            cursor.execute("""
+                UPDATE instruments 
+                SET name = ?, model = ?, brand_id = ?, category_id = ?, 
+                    year_of_manufacture = ?, purchase_price = ?, rental_price_per_day = ?,
+                    quantity_in_stock = ?, condition_id = ?, description = ?, 
+                    characteristics = ?, is_available_for_sale = ?, is_available_for_rent = ?
+                WHERE instrument_id = ?
+            """, (name, model, brand_id, category_id, year_of_manufacture, purchase_price,
+                  rental_price_per_day, quantity_in_stock, condition_id, description,
+                  characteristics, is_available_for_sale, is_available_for_rent, instrument_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/delete_instrument', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_instrument():
+    try:
+        data = request.get_json()
+        instrument_id = data.get('instrument_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM purchase_orders WHERE instrument_id = ?", (instrument_id,))
+        orders_count = cursor.fetchone()[0]
+        
+        if orders_count > 0:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Нельзя удалить инструмент, по которому есть заказы'})
+        
+        cursor.execute("DELETE FROM instruments WHERE instrument_id = ?", (instrument_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/technician/repair_requests')
+@login_required
+@technician_required
+def technician_repair_requests():
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        if session['user_role'] == 'technician':
+            cursor.execute("""
+                SELECT 
+                    rr.request_id,
+                    rr.request_number,
+                    rr.customer_instrument_name,
+                    rr.brand,
+                    rr.model,
+                    rr.problem_description,
+                    rr.created_at,
+                    rr.actual_cost,
+                    rs.status_name,
+                    u.login,
+                    u.first_name,
+                    u.last_name,
+                    u.phone,
+                    u.email,
+                    rr.problem_photos_urls
+                FROM repair_requests rr
+                JOIN repair_statuses rs ON rr.status_id = rs.status_id
+                JOIN users u ON rr.user_id = u.user_id
+                WHERE rr.assigned_to = ? OR rr.assigned_to IS NULL
+                ORDER BY 
+                    CASE 
+                        WHEN rr.assigned_to = ? THEN 0
+                        ELSE 1
+                    END,
+                    rr.created_at DESC
+            """, (session['user_id'], session['user_id']))
+        else:
+            cursor.execute("""
+                SELECT 
+                    rr.request_id,
+                    rr.request_number,
+                    rr.customer_instrument_name,
+                    rr.brand,
+                    rr.model,
+                    rr.problem_description,
+                    rr.created_at,
+                    rr.actual_cost,
+                    rs.status_name,
+                    u.login,
+                    u.first_name,
+                    u.last_name,
+                    u.phone,
+                    u.email,
+                    rr.problem_photos_urls,
+                    rr.assigned_to
+                FROM repair_requests rr
+                JOIN repair_statuses rs ON rr.status_id = rs.status_id
+                JOIN users u ON rr.user_id = u.user_id
+                ORDER BY 
+                    CASE 
+                        WHEN rs.sort_order <= 4 THEN 0 
+                        ELSE 1 
+                    END,
+                    rr.created_at DESC
+            """)
+        
+        requests = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM repair_statuses ORDER BY sort_order")
+        statuses = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('technician/repair_requests.html', 
+                             requests=requests, 
+                             statuses=statuses,
+                             is_technician=(session['user_role'] == 'technician'))
+        
+    except Exception as e:
+        print(f"Error in technician_repair_requests: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке заявок: {str(e)}', 'danger')
+        return redirect(url_for('index'))
+    
+@app.route('/technician/repair/<int:request_id>')
+@login_required
+@technician_required
+def technician_repair_detail(request_id):
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('technician_repair_requests'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                rr.*,
+                u.login,
+                u.first_name,
+                u.last_name,
+                u.email,
+                u.phone,
+                rs.status_name,
+                tech.first_name as tech_first_name,
+                tech.last_name as tech_last_name
+            FROM repair_requests rr
+            JOIN users u ON rr.user_id = u.user_id
+            JOIN repair_statuses rs ON rr.status_id = rs.status_id
+            LEFT JOIN users tech ON rr.assigned_to = tech.user_id
+            WHERE rr.request_id = ?
+        """, (request_id,))
+        
+        columns = [column[0] for column in cursor.description]
+        repair_row = cursor.fetchone()
+        
+        if not repair_row:
+            flash('Заявка не найдена', 'danger')
+            conn.close()
+            return redirect(url_for('technician_repair_requests'))
+        
+        repair = dict(zip(columns, repair_row))
+        
+        cursor.execute("SELECT * FROM repair_statuses ORDER BY sort_order")
+        statuses = cursor.fetchall()
+        
+        conn.close()
+        
+        return render_template('technician/repair_detail.html', 
+                             repair=repair, 
+                             statuses=statuses)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f'Ошибка при загрузке заявки: {str(e)}', 'danger')
+        return redirect(url_for('technician_repair_requests'))
 
 @app.route('/api/cart_count')
 def api_cart_count():

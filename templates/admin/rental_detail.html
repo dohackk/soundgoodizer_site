@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Детали аренды #{{ rental.rental_number }} - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .detail-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        margin-bottom: 0.25rem;
+    }
+    .detail-value {
+        font-size: 1rem;
+        font-weight: 500;
+    }
+    .product-image {
+        width: 100px;
+        height: 100px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="fas fa-calendar-check text-info me-2"></i>Детали аренды #{{ rental.rental_number }}
+        </h1>
+        <p class="text-muted mb-0">Просмотр и управление арендой</p>
+    </div>
+    <div>
+        <a href="{{ url_for('admin_rentals') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>К списку аренд
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card detail-card">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="fas fa-info-circle me-2 text-primary"></i>Информация об аренде</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Номер аренды</div>
+                        <div class="detail-value">{{ rental.rental_number }}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Дата оформления</div>
+                        <div class="detail-value">{{ rental.created_at.strftime('%d.%m.%Y %H:%M') if rental.created_at else 'Н/Д' }}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Статус</div>
+                        <div>
+                            <select class="form-select status-select" style="width: auto; display: inline-block;" data-rental-id="{{ rental.rental_id }}">
+                                {% for status in statuses %}
+                                <option value="{{ status[0] }}" {% if status[1] == rental.status_name %}selected{% endif %}>
+                                    {{ status[1] }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Период аренды</div>
+                        <div class="detail-value">
+                            {{ rental.rental_start_date.strftime('%d.%m.%Y') if rental.rental_start_date else 'Н/Д' }} - 
+                            {{ rental.rental_end_date.strftime('%d.%m.%Y') if rental.rental_end_date else 'Н/Д' }}
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="fw-bold">Информация об инструменте</h6>
+                        <div class="d-flex align-items-center mt-3">
+                            {% if rental.main_image_url and rental.main_image_url != '' and rental.main_image_url != 'NULL' %}
+                            <img src="{{ url_for('static', filename=rental.main_image_url) }}" 
+                                 class="product-image me-3" alt="{{ rental.instrument_name }}">
+                            {% else %}
+                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                 class="product-image me-3" alt="No image">
+                            {% endif %}
+                            <div>
+                                <div class="fw-bold">{{ rental.instrument_name }}</div>
+                                <div class="text-muted">{{ rental.brand_name or 'Без бренда' }}</div>
+                                <div class="mt-2">
+                                    <span class="badge bg-light text-dark">Цена за день: {{ "%.2f"|format(rental.daily_price) }} ₽</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6 class="fw-bold">Финансовая информация</h6>
+                        <table class="table table-sm mt-3">
+                            <tr>
+                                <td>Количество дней:</td>
+                                <td class="text-end">{{ rental.total_days or 0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Стоимость аренды:</td>
+                                <td class="text-end">{{ "%.2f"|format(rental.daily_price * rental.total_days) if rental.total_days else 0 }} ₽</td>
+                            </tr>
+                            <tr>
+                                <td>Залог (10%):</td>
+                                <td class="text-end">{{ "%.2f"|format(rental.deposit_amount) }} ₽</td>
+                            </tr>
+                            <tr class="fw-bold">
+                                <td>ИТОГО:</td>
+                                <td class="text-end text-primary">{{ "%.2f"|format(rental.total_amount) }} ₽</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card detail-card mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="fas fa-user me-2 text-primary"></i>Арендатор</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="detail-label">Имя</div>
+                    <div class="detail-value">{{ rental.first_name }} {{ rental.last_name }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Телефон</div>
+                    <div class="detail-value">{{ rental.phone or 'Не указан' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value">{{ rental.email }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Логин</div>
+                    <div class="detail-value">{{ rental.login }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card detail-card">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="fas fa-truck me-2 text-primary"></i>Адрес доставки</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="detail-label">Адрес доставки</div>
+                    <div class="detail-value">{{ rental.delivery_address or 'Не указан' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Адрес возврата</div>
+                    <div class="detail-value">{{ rental.return_address or 'Не указан' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusSelect = document.querySelector('.status-select');
+    if (statusSelect) {
+        statusSelect.addEventListener('change', function() {
+            const rentalId = this.dataset.rentalId;
+            const statusId = this.value;
+            
+            if (!confirm('Изменить статус аренды?')) {
+                const previousValue = this.querySelector('option[selected]')?.value;
+                if (previousValue) this.value = previousValue;
+                return;
+            }
+            
+            fetch('/admin/update_rental_status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    rental_id: rentalId,
+                    status_id: statusId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Статус обновлен');
+                    this.querySelectorAll('option').forEach(opt => opt.removeAttribute('selected'));
+                    this.querySelector(`option[value="${statusId}"]`).setAttribute('selected', 'selected');
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка соединения');
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

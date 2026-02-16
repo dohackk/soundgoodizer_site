@@ -11,10 +11,104 @@
     
     .instrument-card {
         transition: all 0.3s ease;
+        cursor: pointer;
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        overflow: hidden;
     }
     
     .instrument-card:hover {
-        transform: translateY(-5px);
+        transform: translateY(-8px);
+        box-shadow: 0 12px 24px rgba(0,0,0,0.12) !important;
+        border-color: var(--secondary-color);
+    }
+    
+    .instrument-card .card-img-top {
+        height: 220px;
+        object-fit: cover;
+        transition: transform 0.5s ease;
+    }
+    
+    .instrument-card:hover .card-img-top {
+        transform: scale(1.05);
+    }
+    
+    .badge-condition {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 2;
+    }
+    
+    .badge-stock {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 2;
+    }
+    
+    .price {
+        color: var(--accent-color);
+        font-weight: 700;
+        font-size: 1.3rem;
+    }
+    
+    .rental-price {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    .card-footer {
+        background: transparent;
+        border-top: 1px solid #e9ecef;
+        padding: 1rem;
+    }
+    
+    .sort-select {
+        min-width: 200px;
+        border-radius: 20px;
+        padding: 0.5rem 1rem;
+        border: 2px solid #e9ecef;
+        background-color: white;
+    }
+    
+    .sort-select:focus {
+        border-color: var(--secondary-color);
+        outline: none;
+    }
+    
+    .empty-state {
+        padding: 4rem 2rem;
+        text-align: center;
+        background: #f8f9fa;
+        border-radius: 16px;
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        color: #dee2e6;
+        margin-bottom: 1.5rem;
+    }
+    
+    .filter-badge {
+        background-color: var(--secondary-color);
+        color: white;
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+    }
+    
+    .filter-badge i {
+        cursor: pointer;
+        margin-left: 0.5rem;
+    }
+    
+    .active-filters {
+        background-color: #f8f9fa;
+        border-radius: 30px;
+        padding: 0.75rem 1.25rem;
     }
 </style>
 {% endblock %}
@@ -29,53 +123,92 @@
 
 <div class="row">
     <div class="col-lg-3 col-md-4 mb-4">
-        <div class="card filter-sidebar">
-            <div class="card-header bg-primary text-white">
+        <div class="card filter-sidebar border-0 shadow-sm">
+            <div class="card-header bg-primary text-white py-3">
                 <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Фильтры</h5>
             </div>
             <div class="card-body">
-                <form method="GET" action="{{ url_for('catalog') }}">
-                    <input type="hidden" name="page" value="1">
-                    
-                    <div class="mb-3">
+                <form method="GET" action="{{ url_for('catalog') }}" id="filterForm">
+                    <div class="mb-4">
                         <label class="form-label fw-semibold">Поиск</label>
-                        <input type="text" class="form-control" name="search" 
-                               placeholder="Название, модель..." 
-                               value="{{ search_term or '' }}">
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="search" 
+                                   placeholder="Название, модель..." 
+                                   value="{{ search_term or '' }}">
+                            <button class="btn btn-outline-primary" type="submit">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label fw-semibold">Категория</label>
-                        <select class="form-select" name="category_id">
+                        <select class="form-select" name="category_id" onchange="this.form.submit()">
                             <option value="">Все категории</option>
                             {% for category in categories %}
                             <option value="{{ category[0] }}" 
-                                    {% if selected_category == category[0]|string %}selected{% endif %}>
+                                    {% if selected_category and selected_category|string == category[0]|string %}selected{% endif %}>
                                 {{ category[1] }}
                             </option>
                             {% endfor %}
                         </select>
                     </div>
                     
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label fw-semibold">Бренд</label>
-                        <select class="form-select" name="brand_id">
+                        <select class="form-select" name="brand_id" onchange="this.form.submit()">
                             <option value="">Все бренды</option>
                             {% for brand in brands %}
                             <option value="{{ brand[0] }}" 
-                                    {% if selected_brand == brand[0]|string %}selected{% endif %}>
+                                    {% if selected_brand and selected_brand|string == brand[0]|string %}selected{% endif %}>
                                 {{ brand[1] }}
                             </option>
                             {% endfor %}
                         </select>
                     </div>
                     
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Цена</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="number" class="form-control" name="price_min" 
+                                       placeholder="От" value="{{ request.args.get('price_min', '') }}">
+                            </div>
+                            <div class="col-6">
+                                <input type="number" class="form-control" name="price_max" 
+                                       placeholder="До" value="{{ request.args.get('price_max', '') }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Наличие</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="in_stock" 
+                                   value="1" id="inStock" 
+                                   {% if request.args.get('in_stock') == '1' %}checked{% endif %}>
+                            <label class="form-check-label" for="inStock">
+                                Только в наличии
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="for_rent" 
+                                   value="1" id="forRent"
+                                   {% if request.args.get('for_rent') == '1' %}checked{% endif %}>
+                            <label class="form-check-label" for="forRent">
+                                Доступно для аренды
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" name="sort" id="sortInput" value="{{ request.args.get('sort', 'name_asc') }}">
+                    
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-search me-2"></i>Применить фильтры
+                            <i class="bi bi-search me-2"></i>Применить
                         </button>
                         <a href="{{ url_for('catalog') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-x-circle me-2"></i>Сбросить
+                            <i class="bi bi-x-circle me-2"></i>Сбросить все
                         </a>
                     </div>
                 </form>
@@ -88,64 +221,142 @@
             <div>
                 <h1 class="h2 mb-2">Каталог инструментов</h1>
                 {% if search_term %}
-                <p class="text-muted mb-0">Результаты поиска по запросу: "{{ search_term }}"</p>
+                <p class="text-muted mb-0">Результаты поиска: "{{ search_term }}"</p>
                 {% endif %}
             </div>
-            <div class="mt-2 mt-md-0">
-                <div class="text-muted small">
-                    Всего инструментов: <strong>{{ pagination.total if pagination else instruments|length }}</strong>
-                </div>
+            <div class="d-flex gap-2 mt-2 mt-md-0">
+                <select class="sort-select" id="sortSelect">
+                    <option value="name_asc" {% if request.args.get('sort') == 'name_asc' %}selected{% endif %}>
+                        По названию (A-Z)
+                    </option>
+                    <option value="name_desc" {% if request.args.get('sort') == 'name_desc' %}selected{% endif %}>
+                        По названию (Z-A)
+                    </option>
+                    <option value="price_asc" {% if request.args.get('sort') == 'price_asc' %}selected{% endif %}>
+                        Сначала дешевле
+                    </option>
+                    <option value="price_desc" {% if request.args.get('sort') == 'price_desc' %}selected{% endif %}>
+                        Сначала дороже
+                    </option>
+                    <option value="newest" {% if request.args.get('sort') == 'newest' %}selected{% endif %}>
+                        Сначала новинки
+                    </option>
+                    <option value="popular" {% if request.args.get('sort') == 'popular' %}selected{% endif %}>
+                        По популярности
+                    </option>
+                </select>
             </div>
         </div>
+        
+        {% if search_term or selected_category or selected_brand or request.args.get('price_min') or request.args.get('price_max') or request.args.get('in_stock') or request.args.get('for_rent') %}
+        <div class="active-filters mb-4 d-flex flex-wrap gap-2 align-items-center">
+            <span class="text-muted small me-2">Активные фильтры:</span>
+            
+            {% if search_term %}
+            <span class="filter-badge">
+                Поиск: "{{ search_term }}" 
+                <i class="bi bi-x" onclick="removeFilter('search')"></i>
+            </span>
+            {% endif %}
+            
+            {% if selected_category %}
+            {% for category in categories %}
+                {% if category[0]|string == selected_category %}
+                <span class="filter-badge">
+                    Категория: {{ category[1] }}
+                    <i class="bi bi-x" onclick="removeFilter('category_id')"></i>
+                </span>
+                {% endif %}
+            {% endfor %}
+            {% endif %}
+            
+            {% if selected_brand %}
+            {% for brand in brands %}
+                {% if brand[0]|string == selected_brand %}
+                <span class="filter-badge">
+                    Бренд: {{ brand[1] }}
+                    <i class="bi bi-x" onclick="removeFilter('brand_id')"></i>
+                </span>
+                {% endif %}
+            {% endfor %}
+            {% endif %}
+            
+            {% if request.args.get('price_min') or request.args.get('price_max') %}
+            <span class="filter-badge">
+                Цена: {{ request.args.get('price_min') or '0' }} - {{ request.args.get('price_max') or '∞' }} ₽
+                <i class="bi bi-x" onclick="removeFilter('price_min'); removeFilter('price_max')"></i>
+            </span>
+            {% endif %}
+            
+            {% if request.args.get('in_stock') %}
+            <span class="filter-badge">
+                Только в наличии
+                <i class="bi bi-x" onclick="removeFilter('in_stock')"></i>
+            </span>
+            {% endif %}
+            
+            {% if request.args.get('for_rent') %}
+            <span class="filter-badge">
+                Доступно для аренды
+                <i class="bi bi-x" onclick="removeFilter('for_rent')"></i>
+            </span>
+            {% endif %}
+        </div>
+        {% endif %}
         
         {% if instruments %}
-        <div class="alert alert-info d-flex align-items-center mb-4">
-            <i class="bi bi-info-circle me-2"></i>
-            <div>
-                Показано инструментов: <strong>{{ instruments|length }}</strong>
-                {% if pagination %}
-                <span class="ms-2">(страница {{ pagination.page }} из {{ pagination.pages }})</span>
-                {% endif %}
-            </div>
+        <div class="text-muted small mb-3">
+            Найдено инструментов: <strong>{{ pagination.total if pagination else instruments|length }}</strong>
+            {% if pagination %}
+            <span class="ms-2">(страница {{ pagination.page }} из {{ pagination.pages }})</span>
+            {% endif %}
         </div>
         
-        <div class="row g-4">
+        <div class="row g-4" id="instrumentsContainer">
             {% for instrument in instruments %}
-            <div class="col-xl-4 col-lg-6 col-md-6">
-                <div class="card instrument-card h-100">
-                    <div class="position-relative">
+            <div class="col-xl-4 col-lg-6 col-md-6 instrument-col" 
+                 data-href="{{ url_for('instrument_detail', instrument_id=instrument.instrument_id) }}">
+                <div class="card instrument-card h-100 shadow-sm">
+                    <div class="position-relative overflow-hidden">
                         {% if instrument.main_image_url %}
                         <img src="{{ url_for('static', filename=instrument.main_image_url) }}" 
-                             class="card-img-top" alt="{{ instrument.name }}" 
-                             style="height: 200px; object-fit: cover;">
+                             class="card-img-top" alt="{{ instrument.name }}">
                         {% else %}
                         <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
-                             style="height: 200px;">
+                             style="height: 220px;">
                             <i class="bi bi-music-note-beamed display-4 text-secondary"></i>
                         </div>
                         {% endif %}
                         
-                        <div class="position-absolute top-0 end-0 m-2">
+                        <div class="badge-stock">
                             {% if instrument.quantity_in_stock > 0 %}
-                            <span class="badge bg-success">
+                            <span class="badge bg-success px-3 py-2">
                                 <i class="bi bi-check-circle me-1"></i>В наличии
                             </span>
                             {% else %}
-                            <span class="badge bg-danger">
+                            <span class="badge bg-danger px-3 py-2">
                                 <i class="bi bi-x-circle me-1"></i>Нет в наличии
                             </span>
                             {% endif %}
                         </div>
                         
                         {% if instrument.condition_name and instrument.condition_name != 'new' %}
-                        <div class="position-absolute top-0 start-0 m-2">
-                            <span class="badge bg-warning text-dark">{{ instrument.condition_name }}</span>
+                        <div class="badge-condition">
+                            <span class="badge bg-warning text-dark px-3 py-2">
+                                {{ instrument.condition_name }}
+                            </span>
                         </div>
                         {% endif %}
                     </div>
                     
                     <div class="card-body">
-                        <h5 class="card-title mb-1">{{ instrument.name }}</h5>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h5 class="card-title mb-0">{{ instrument.name }}</h5>
+                            <span class="text-muted small">
+                                <i class="bi bi-eye me-1"></i>{{ instrument.views_count or 0 }}
+                            </span>
+                        </div>
+                        
                         <p class="card-text text-muted small mb-2">
                             <i class="bi bi-tag me-1"></i>{{ instrument.brand_name or 'Без бренда' }}
                             {% if instrument.category_name %}
@@ -155,22 +366,22 @@
                             {% endif %}
                         </p>
                         
-                        <p class="card-text mb-3">
-                            {{ instrument.description[:80] if instrument.description else 'Описание отсутствует' }}
-                            {% if instrument.description and instrument.description|length > 80 %}...{% endif %}
+                        <p class="card-text mb-3 small">
+                            {{ instrument.description[:100] if instrument.description else 'Описание отсутствует' }}
+                            {% if instrument.description and instrument.description|length > 100 %}...{% endif %}
                         </p>
                         
-                        <div class="d-flex justify-content-between align-items-center mt-auto">
+                        <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <span class="price h5 mb-0">{{ "{:,.0f}".format(instrument.purchase_price) }} ₽</span>
+                                <div class="price">{{ "{:,.0f}".format(instrument.purchase_price) }} ₽</div>
                                 {% if instrument.rental_price_per_day %}
-                                <div class="text-muted small">
+                                <div class="rental-price">
                                     <i class="bi bi-calendar me-1"></i>{{ "{:,.0f}".format(instrument.rental_price_per_day) }} ₽/день
                                 </div>
                                 {% endif %}
                             </div>
                             
-                            <div class="btn-group">
+                            <div class="btn-group" onclick="event.stopPropagation();">
                                 <a href="{{ url_for('instrument_detail', instrument_id=instrument.instrument_id) }}" 
                                    class="btn btn-sm btn-outline-primary" title="Подробнее">
                                     <i class="bi bi-eye"></i>
@@ -186,17 +397,12 @@
                     </div>
                     
                     <div class="card-footer bg-white border-top-0 pt-0">
-                        <div class="d-flex justify-content-between align-items-center small">
-                            <div>
-                                {% if instrument.quantity_in_stock > 0 %}
-                                <span class="text-success">
-                                    <i class="bi bi-box-seam me-1"></i>{{ instrument.quantity_in_stock }} шт.
-                                </span>
-                                {% endif %}
-                            </div>
-                            <div class="text-muted">
-                                <i class="bi bi-eye me-1"></i>{{ instrument.views_count or 0 }}
-                            </div>
+                        <div class="d-flex align-items-center small">
+                            {% if instrument.quantity_in_stock > 0 %}
+                            <span class="text-success">
+                                <i class="bi bi-box-seam me-1"></i>{{ instrument.quantity_in_stock }} шт.
+                            </span>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -204,95 +410,124 @@
             {% endfor %}
         </div>
 
-    {% if pagination and pagination.pages > 1 %}
-    
-<nav aria-label="Навигация по страницам" class="mt-5">
-    <ul class="pagination justify-content-center">
-        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-            <a class="page-link" 
-               href="{{ url_for('catalog', page=1, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
-               aria-label="Первая">
-                <i class="bi bi-chevron-double-left"></i>
-            </a>
-        </li>
-        
-        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-            <a class="page-link" 
-               href="{{ url_for('catalog', page=pagination.prev_num, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
-               aria-label="Предыдущая">
-                <i class="bi bi-chevron-left"></i>
-            </a>
-        </li>
-        
+        {% if pagination and pagination.pages > 1 %}
+        <nav aria-label="Навигация по страницам" class="mt-5">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" 
+                       href="{{ url_for('catalog', page=1, search=search_term, category_id=selected_category, brand_id=selected_brand, sort=request.args.get('sort'), price_min=request.args.get('price_min'), price_max=request.args.get('price_max'), in_stock=request.args.get('in_stock'), for_rent=request.args.get('for_rent')) }}"
+                       aria-label="Первая">
+                        <i class="bi bi-chevron-double-left"></i>
+                    </a>
+                </li>
+                
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" 
+                       href="{{ url_for('catalog', page=pagination.prev_num, search=search_term, category_id=selected_category, brand_id=selected_brand, sort=request.args.get('sort'), price_min=request.args.get('price_min'), price_max=request.args.get('price_max'), in_stock=request.args.get('in_stock'), for_rent=request.args.get('for_rent')) }}"
+                       aria-label="Предыдущая">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
 
-        {% if pagination.page > 3 %}
-            <li class="page-item">
-                <a class="page-link" 
-                   href="{{ url_for('catalog', page=1, search=search_term, category_id=selected_category, brand_id=selected_brand) }}">
-                    1
-                </a>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">...</span>
-            </li>
+                {% if pagination.page > 3 %}
+                    <li class="page-item">
+                        <a class="page-link" 
+                           href="{{ url_for('catalog', page=1, search=search_term, category_id=selected_category, brand_id=selected_brand, sort=request.args.get('sort'), price_min=request.args.get('price_min'), price_max=request.args.get('price_max'), in_stock=request.args.get('in_stock'), for_rent=request.args.get('for_rent')) }}">
+                            1
+                        </a>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                {% endif %}
+                
+                {% for page_num in range([1, pagination.page - 2]|max, [pagination.page + 3, pagination.pages + 1]|min) %}
+                    <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                        <a class="page-link" 
+                           href="{{ url_for('catalog', page=page_num, search=search_term, category_id=selected_category, brand_id=selected_brand, sort=request.args.get('sort'), price_min=request.args.get('price_min'), price_max=request.args.get('price_max'), in_stock=request.args.get('in_stock'), for_rent=request.args.get('for_rent')) }}">
+                            {{ page_num }}
+                        </a>
+                    </li>
+                {% endfor %}
+                
+                {% if pagination.page < pagination.pages - 2 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" 
+                           href="{{ url_for('catalog', page=pagination.pages, search=search_term, category_id=selected_category, brand_id=selected_brand, sort=request.args.get('sort'), price_min=request.args.get('price_min'), price_max=request.args.get('price_max'), in_stock=request.args.get('in_stock'), for_rent=request.args.get('for_rent')) }}">
+                            {{ pagination.pages }}
+                        </a>
+                    </li>
+                {% endif %}
+                
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" 
+                       href="{{ url_for('catalog', page=pagination.next_num, search=search_term, category_id=selected_category, brand_id=selected_brand, sort=request.args.get('sort'), price_min=request.args.get('price_min'), price_max=request.args.get('price_max'), in_stock=request.args.get('in_stock'), for_rent=request.args.get('for_rent')) }}"
+                       aria-label="Следующая">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" 
+                       href="{{ url_for('catalog', page=pagination.pages, search=search_term, category_id=selected_category, brand_id=selected_brand, sort=request.args.get('sort'), price_min=request.args.get('price_min'), price_max=request.args.get('price_max'), in_stock=request.args.get('in_stock'), for_rent=request.args.get('for_rent')) }}"
+                       aria-label="Последняя">
+                        <i class="bi bi-chevron-double-right"></i>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="text-center mt-2 text-muted small">
+                Страница <span class="fw-bold text-primary">{{ pagination.page }}</span> из {{ pagination.pages }}
+            </div>
+        </nav>
         {% endif %}
-        
-        {% for page_num in range([1, pagination.page - 2]|max, [pagination.page + 3, pagination.pages + 1]|min) %}
-            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                <a class="page-link" 
-                   href="{{ url_for('catalog', page=page_num, search=search_term, category_id=selected_category, brand_id=selected_brand) }}">
-                    {{ page_num }}
-                </a>
-            </li>
-        {% endfor %}
-        
-        {% if pagination.page < pagination.pages - 2 %}
-            <li class="page-item disabled">
-                <span class="page-link">...</span>
-            </li>
-            <li class="page-item">
-                <a class="page-link" 
-                   href="{{ url_for('catalog', page=pagination.pages, search=search_term, category_id=selected_category, brand_id=selected_brand) }}">
-                    {{ pagination.pages }}
-                </a>
-            </li>
-        {% endif %}
-        
-        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-            <a class="page-link" 
-               href="{{ url_for('catalog', page=pagination.next_num, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
-               aria-label="Следующая">
-                <i class="bi bi-chevron-right"></i>
-            </a>
-        </li>
-        
-        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-            <a class="page-link" 
-               href="{{ url_for('catalog', page=pagination.pages, search=search_term, category_id=selected_category, brand_id=selected_brand) }}"
-               aria-label="Последняя">
-                <i class="bi bi-chevron-double-right"></i>
-            </a>
-        </li>
-    </ul>
-    
-    <div class="text-center mt-2 text-muted small">
-        Страница <span class="fw-bold text-primary">{{ pagination.page }}</span> из {{ pagination.pages }}
-    </div>
-</nav>
-{% endif %}
         
         {% else %}
-        <div class="text-center py-5">
-            <i class="bi bi-search display-1 text-muted mb-3"></i>
+        <div class="empty-state">
+            <i class="bi bi-search"></i>
             <h3 class="mb-3">Инструменты не найдены</h3>
             <p class="text-muted mb-4">Попробуйте изменить параметры поиска или выберите другую категорию</p>
-            <div class="d-flex flex-wrap justify-content-center gap-2">
-                <a href="{{ url_for('catalog') }}" class="btn btn-primary">
-                    <i class="bi bi-grid me-2"></i>Весь каталог
-                </a>
-            </div>
+            <a href="{{ url_for('catalog') }}" class="btn btn-primary btn-lg px-5">
+                <i class="bi bi-grid me-2"></i>Весь каталог
+            </a>
         </div>
         {% endif %}
     </div>
 </div>
+
+<script>
+document.querySelectorAll('.instrument-col').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+        if (!e.target.closest('.btn-group') && !e.target.closest('a')) {
+            window.location.href = this.dataset.href;
+        }
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const sortSelect = document.getElementById('sortSelect');
+    const sortInput = document.getElementById('sortInput');
+    const filterForm = document.getElementById('filterForm');
+    
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function() {
+            sortInput.value = this.value;
+            filterForm.submit();
+        });
+    }
+});
+
+function removeFilter(filterName) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete(filterName);
+    if (filterName === 'price_min' || filterName === 'price_max') {
+        url.searchParams.delete('price_min');
+        url.searchParams.delete('price_max');
+    }
+    window.location.href = url.toString();
+}
+</script>
 {% endblock %}

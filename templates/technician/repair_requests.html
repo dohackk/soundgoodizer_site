@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}Заявки на ремонт - Мастерская{% endblock %}
+
+{% block extra_css %}
+<style>
+    .repair-thumb {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    .repair-thumb:hover {
+        transform: scale(1.1);
+    }
+    .table th {
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        border-top: none;
+    }
+    .table td {
+        vertical-align: middle;
+    }
+    .badge {
+        padding: 0.5em 1em;
+        border-radius: 20px;
+        font-weight: 500;
+    }
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    .status-select {
+        min-width: 140px;
+    }
+    .assigned-badge {
+        background-color: #28a745;
+        color: white;
+    }
+    .unassigned-badge {
+        background-color: #ffc107;
+        color: #000;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="fas fa-wrench text-secondary me-2"></i>Заявки на ремонт
+        </h1>
+        <p class="text-muted mb-0">
+            {% if is_technician %}
+            Ваши заявки и доступные для назначения
+            {% else %}
+            Управление заявками на ремонт
+            {% endif %}
+        </p>
+    </div>
+</div>
+
+<div class="filter-section">
+    <div class="row g-3">
+        <div class="col-md-4">
+            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по номеру или инструменту...">
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" id="statusFilter">
+                <option value="">Все статусы</option>
+                {% for status in statuses %}
+                <option value="{{ status[1] }}">{{ status[1] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <input type="date" class="form-control" id="dateFrom" placeholder="С даты">
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="repairTable">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="py-3 px-4">№ Заявки</th>
+                        <th class="py-3">Дата</th>
+                        <th class="py-3">Клиент</th>
+                        <th class="py-3">Инструмент</th>
+                        <th class="py-3">Проблема</th>
+                        <th class="py-3">Фото</th>
+                        <th class="py-3">Статус</th>
+                        {% if not is_technician %}
+                        <th class="py-3">Назначена</th>
+                        {% endif %}
+                        <th class="py-3 text-end px-4">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td class="px-4 fw-bold">{{ req[1] }}</td>
+                        <td>{{ req[6].strftime('%d.%m.%Y') if req[6] else 'Н/Д' }}</td>
+                        <td>{{ req[9] }}</td>
+                        <td>
+                            <div class="fw-bold">{{ req[2] }}</div>
+                            {% if req[3] %}
+                            <small class="text-muted">{{ req[3] }} {{ req[4] }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ req[5][:50] }}{% if req[5]|length > 50 %}...{% endif %}</small>
+                        </td>
+                        <td>
+                            {% if req[14] and req[14] != '' %}
+                            <img src="{{ url_for('static', filename=req[14].split(',')[0]) }}" 
+                                 class="repair-thumb" 
+                                 alt="Фото"
+                                 onclick="showPhotos('{{ req[14] }}')"
+                                 data-bs-toggle="modal" data-bs-target="#photoModal">
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm status-select" 
+                                    data-request-id="{{ req[0] }}">
+                                {% for status in statuses %}
+                                <option value="{{ status[0] }}" 
+                                        {% if status[1] == req[8] %}selected{% endif %}>
+                                    {{ status[1] }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        {% if not is_technician %}
+                        <td>
+                            {% if req[15] %}
+                            <span class="badge assigned-badge">Назначена</span>
+                            {% else %}
+                            <span class="badge unassigned-badge">Не назначена</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        <td class="text-end px-4">
+                            <a href="{{ url_for('technician_repair_detail', request_id=req[0]) }}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="photoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Фотографии</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="photo-grid" id="photoGrid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.status-select').forEach(select => {
+        select.addEventListener('change', function() {
+            const requestId = this.dataset.requestId;
+            const statusId = this.value;
+            
+            if (!confirm('Изменить статус заявки?')) {
+                const previousValue = this.querySelector('option[selected]')?.value;
+                if (previousValue) this.value = previousValue;
+                return;
+            }
+            
+            fetch('/admin/update_repair_status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    request_id: requestId,
+                    status_id: statusId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Статус обновлен');
+                    location.reload();
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка соединения');
+            });
+        });
+    });
+    
+    window.showPhotos = function(photosStr) {
+        const photoGrid = document.getElementById('photoGrid');
+        photoGrid.innerHTML = '';
+        
+        if (photosStr) {
+            const photos = photosStr.split(',');
+            photos.forEach(photo => {
+                if (photo.trim()) {
+                    const div = document.createElement('div');
+                    div.className = 'photo-item';
+                    div.style.aspectRatio = '1';
+                    div.style.borderRadius = '8px';
+                    div.style.overflow = 'hidden';
+                    div.style.cursor = 'pointer';
+                    div.innerHTML = `<img src="{{ url_for('static', filename='') }}${photo.trim()}" style="width:100%; height:100%; object-fit:cover;">`;
+                    div.onclick = function() {
+                        window.open(this.querySelector('img').src, '_blank');
+                    };
+                    photoGrid.appendChild(div);
+                }
+            });
+        }
+    };
+    
+    function filterTable() {
+        const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
+        const status = document.getElementById('statusFilter')?.value || '';
+        const dateFrom = document.getElementById('dateFrom')?.value || '';
+        const rows = document.querySelectorAll('#repairTable tbody tr');
+        
+        rows.forEach(row => {
+            const requestNumber = row.cells[0].textContent.toLowerCase();
+            const instrument = row.cells[3].textContent.toLowerCase();
+            const requestStatus = row.cells[6].querySelector('select').value;
+            const dateStr = row.cells[1].textContent;
+            
+            let show = true;
+            if (search && !requestNumber.includes(search) && !instrument.includes(search)) show = false;
+            if (status && requestStatus !== status) show = false;
+            
+            if (dateFrom) {
+                try {
+                    const [day, month, year] = dateStr.split('.');
+                    const requestDate = new Date(year, month-1, day);
+                    if (requestDate < new Date(dateFrom)) show = false;
+                } catch (e) {}
+            }
+            
+            row.style.display = show ? '' : 'none';
+        });
+    }
+    
+    document.getElementById('searchInput')?.addEventListener('input', filterTable);
+    document.getElementById('statusFilter')?.addEventListener('change', filterTable);
+    document.getElementById('dateFrom')?.addEventListener('change', filterTable);
+});
+</script>
+{% endblock %}

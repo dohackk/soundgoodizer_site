@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Детали заявки #{{ repair.request_number }} - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .detail-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        margin-bottom: 0.25rem;
+    }
+    .detail-value {
+        font-size: 1rem;
+        font-weight: 500;
+    }
+    .photo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .photo-item {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: pointer;
+        border: 1px solid #dee2e6;
+    }
+    .photo-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .photo-item:hover {
+        opacity: 0.8;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="fas fa-wrench text-secondary me-2"></i>Детали заявки #{{ repair.request_number }}
+        </h1>
+        <p class="text-muted mb-0">Просмотр и управление заявкой на ремонт</p>
+    </div>
+    <div>
+        <a href="{{ url_for('technician_repair_requests') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>К списку заявок
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card detail-card">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="fas fa-info-circle me-2 text-primary"></i>Информация о заявке</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Номер заявки</div>
+                        <div class="detail-value">{{ repair.request_number }}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Дата создания</div>
+                        <div class="detail-value">{{ repair.created_at.strftime('%d.%m.%Y %H:%M') if repair.created_at else 'Н/Д' }}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Статус</div>
+                        <div>
+                            <select class="form-select status-select" style="width: auto; display: inline-block;" data-request-id="{{ repair.request_id }}">
+                                {% for status in statuses %}
+                                <option value="{{ status[0] }}" {% if status[1] == repair.status_name %}selected{% endif %}>
+                                    {{ status[1] }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    {% if repair.assigned_to %}
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Назначено мастеру</div>
+                        <div class="detail-value">{{ repair.tech_first_name }} {{ repair.tech_last_name }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <h6 class="fw-bold">Информация об инструменте</h6>
+                        <div class="mt-3">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="detail-label">Инструмент</div>
+                                    <div class="detail-value">{{ repair.customer_instrument_name }}</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="detail-label">Бренд</div>
+                                    <div class="detail-value">{{ repair.brand or 'Не указан' }}</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="detail-label">Модель</div>
+                                    <div class="detail-value">{{ repair.model or 'Не указана' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <h6 class="fw-bold">Описание проблемы</h6>
+                        <div class="bg-light p-3 rounded-3 mt-2">
+                            {{ repair.problem_description }}
+                        </div>
+                    </div>
+                </div>
+                
+                {% if repair.problem_photos_urls %}
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <h6 class="fw-bold">Фотографии</h6>
+                        <div class="photo-grid">
+                            {% for photo_url in repair.problem_photos_urls.split(',') %}
+                            {% if photo_url %}
+                            <div class="photo-item" data-photo-url="{{ url_for('static', filename=photo_url) }}">
+                                <img src="{{ url_for('static', filename=photo_url) }}" alt="Фото">
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="fw-bold">Финансовая информация</h6>
+                        <div class="mt-3">
+                            <div class="detail-label">Стоимость ремонта</div>
+                            <div class="input-group mt-1" style="max-width: 200px;">
+                                <input type="number" class="form-control cost-input" 
+                                       value="{{ repair.actual_cost or '' }}" 
+                                       data-request-id="{{ repair.request_id }}"
+                                       placeholder="Сумма">
+                                <span class="input-group-text">₽</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% if repair.completed_at %}
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Дата завершения</div>
+                        <div class="detail-value">{{ repair.completed_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card detail-card mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="fas fa-user me-2 text-primary"></i>Клиент</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="detail-label">Имя</div>
+                    <div class="detail-value">{{ repair.first_name }} {{ repair.last_name }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Телефон</div>
+                    <div class="detail-value">{{ repair.phone or 'Не указан' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value">{{ repair.email }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="detail-label">Логин</div>
+                    <div class="detail-value">{{ repair.login }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusSelect = document.querySelector('.status-select');
+    if (statusSelect) {
+        statusSelect.addEventListener('change', function() {
+            const requestId = this.dataset.requestId;
+            const statusId = this.value;
+            
+            if (!confirm('Изменить статус заявки?')) {
+                const previousValue = this.querySelector('option[selected]')?.value;
+                if (previousValue) this.value = previousValue;
+                return;
+            }
+            
+            fetch('/admin/update_repair_status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    request_id: requestId,
+                    status_id: statusId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Статус обновлен');
+                    location.reload();
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка соединения');
+            });
+        });
+    }
+    
+    const costInput = document.querySelector('.cost-input');
+    if (costInput) {
+        let timeout;
+        costInput.addEventListener('input', function() {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                const requestId = this.dataset.requestId;
+                const cost = parseFloat(this.value) || 0;
+                
+                fetch('/admin/set_repair_cost', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        request_id: requestId,
+                        cost: cost
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        this.classList.add('is-valid');
+                        setTimeout(() => this.classList.remove('is-valid'), 2000);
+                    } else {
+                        this.classList.add('is-invalid');
+                        alert('Ошибка: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка соединения');
+                });
+            }, 500);
+        });
+    }
+    
+    document.querySelectorAll('.photo-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const url = this.dataset.photoUrl;
+            if (url) window.open(url, '_blank');
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Управление брендами - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .brand-logo-placeholder {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 18px;
+    }
+    .table th {
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        border-top: none;
+    }
+    .table td {
+        vertical-align: middle;
+    }
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="bi bi-tag text-dark me-2"></i>Управление брендами
+        </h1>
+        <p class="text-muted mb-0">Всего брендов: {{ brands|length }}</p>
+    </div>
+    <div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBrandModal">
+            <i class="bi bi-plus-circle me-2"></i>Добавить бренд
+        </button>
+    </div>
+</div>
+
+<div class="filter-section">
+    <div class="row g-3">
+        <div class="col-md-6">
+            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по названию или стране...">
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="countryFilter">
+                <option value="">Все страны</option>
+                {% set countries = [] %}
+                {% for brand in brands %}
+                    {% if brand[2] and brand[2] not in countries %}
+                        {% set countries = countries.append(brand[2]) %}
+                        <option value="{{ brand[2] }}">{{ brand[2] }}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                <i class="bi bi-x-circle me-2"></i>Сброс
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="brandsTable">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="py-3 px-4">Бренд</th>
+                        <th class="py-3">Страна</th>
+                        <th class="py-3">Описание</th>
+                        <th class="py-3">Веб-сайт</th>
+                        <th class="py-3 text-end px-4">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for brand in brands %}
+                    <tr>
+                        <td class="px-4">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0 me-3">
+                                    <div class="brand-logo-placeholder">
+                                        {{ brand[1][0] }}
+                                    </div>
+                                </div>
+                                <div class="fw-bold">{{ brand[1] }}</div>
+                            </div>
+                        </td>
+                        <td>{{ brand[2] or '—' }}</td>
+                        <td>
+                            <span title="{{ brand[3] }}">
+                                {{ brand[3][:50] }}{% if brand[3] and brand[3]|length > 50 %}...{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            {% if brand[4] %}
+                            <a href="{{ brand[4] }}" target="_blank" class="text-decoration-none">
+                                {{ brand[4]|replace('https://', '')|replace('http://', '')|truncate(20) }}
+                            </a>
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td class="text-end px-4">
+                            <button class="btn btn-sm btn-outline-primary edit-brand-btn" 
+                                    data-brand-id="{{ brand[0] }}"
+                                    data-brand-name="{{ brand[1] }}"
+                                    data-brand-country="{{ brand[2] }}"
+                                    data-brand-description="{{ brand[3] }}"
+                                    data-brand-website="{{ brand[4] }}">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addBrandModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить бренд</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin_add_brand') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Название бренда *</label>
+                        <input type="text" class="form-control" name="brand_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Страна</label>
+                        <input type="text" class="form-control" name="country">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Веб-сайт</label>
+                        <input type="url" class="form-control" name="website" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Добавить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editBrandModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редактировать бренд</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin_edit_brand') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="brand_id" id="edit_brand_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Название бренда *</label>
+                        <input type="text" class="form-control" name="brand_name" id="edit_brand_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Страна</label>
+                        <input type="text" class="form-control" name="country" id="edit_brand_country">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" name="description" id="edit_brand_description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Веб-сайт</label>
+                        <input type="url" class="form-control" name="website" id="edit_brand_website" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.edit-brand-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const brandId = this.dataset.brandId;
+            const brandName = this.dataset.brandName;
+            const brandCountry = this.dataset.brandCountry || '';
+            const brandDescription = this.dataset.brandDescription || '';
+            const brandWebsite = this.dataset.brandWebsite || '';
+            
+            document.getElementById('edit_brand_id').value = brandId;
+            document.getElementById('edit_brand_name').value = brandName;
+            document.getElementById('edit_brand_country').value = brandCountry;
+            document.getElementById('edit_brand_description').value = brandDescription;
+            document.getElementById('edit_brand_website').value = brandWebsite;
+            
+            new bootstrap.Modal(document.getElementById('editBrandModal')).show();
+        });
+    });
+    
+    function filterTable() {
+        const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
+        const country = document.getElementById('countryFilter')?.value || '';
+        const rows = document.querySelectorAll('#brandsTable tbody tr');
+        
+        rows.forEach(row => {
+            const brandName = row.cells[0].querySelector('.fw-bold').textContent.toLowerCase();
+            const brandCountry = row.cells[1].textContent.trim();
+            
+            let show = true;
+            if (search && !brandName.includes(search)) show = false;
+            if (country && brandCountry !== country) show = false;
+            
+            row.style.display = show ? '' : 'none';
+        });
+    }
+    
+    function resetFilters() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('countryFilter').value = '';
+        filterTable();
+    }
+    
+    document.getElementById('searchInput')?.addEventListener('input', filterTable);
+    document.getElementById('countryFilter')?.addEventListener('change', filterTable);
+    
+    document.querySelectorAll('.delete-brand-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const brandId = this.dataset.brandId;
+            
+            if (confirm('Вы уверены, что хотите удалить этот бренд? Это может повлиять на инструменты.')) {
+                fetch('/admin/delete_brand', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({brand_id: brandId})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Бренд удален');
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка соединения');
+                });
+            }
+        });
+    });
+    
+    window.resetFilters = resetFilters;
+});
+</script>
+{% endblock %}

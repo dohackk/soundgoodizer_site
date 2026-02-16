@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% block title %}Управление инструментами - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .instrument-thumb {
+        width: 60px;
+        height: 60px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+    }
+    .table th {
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        border-top: none;
+    }
+    .table td {
+        vertical-align: middle;
+    }
+    .badge {
+        padding: 0.5em 1em;
+        border-radius: 20px;
+        font-weight: 500;
+    }
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    .price-cell {
+        font-weight: 600;
+        color: #28a745;
+    }
+    .stock-badge {
+        font-size: 0.85rem;
+        padding: 0.35em 0.65em;
+    }
+    .action-buttons .btn {
+        padding: 0.25rem 0.5rem;
+        margin: 0 2px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0">
+            <i class="fas fa-music text-success me-2"></i>Управление инструментами
+        </h1>
+        <p class="text-muted mb-0">Всего инструментов: {{ instruments|length }}</p>
+    </div>
+    <div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addInstrumentModal">
+            <i class="fas fa-plus-circle me-2"></i>Добавить инструмент
+        </button>
+    </div>
+</div>
+
+<div class="filter-section">
+    <div class="row g-3">
+        <div class="col-md-3">
+            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по названию или модели...">
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" id="brandFilter">
+                <option value="">Все бренды</option>
+                {% for brand in brands %}
+                <option value="{{ brand[1] }}">{{ brand[1] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" id="categoryFilter">
+                <option value="">Все категории</option>
+                {% for category in categories %}
+                <option value="{{ category[1] }}">{{ category[1] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" id="conditionFilter">
+                <option value="">Все состояния</option>
+                {% for condition in conditions %}
+                <option value="{{ condition[1] }}">{{ condition[1] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="availabilityFilter">
+                <option value="">Все</option>
+                <option value="sale">Доступны к продаже</option>
+                <option value="rent">Доступны к аренде</option>
+                <option value="stock">В наличии</option>
+                <option value="out">Нет в наличии</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="instrumentsTable">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="py-3 px-4">Фото</th>
+                        <th class="py-3">Инструмент</th>
+                        <th class="py-3">Бренд</th>
+                        <th class="py-3">Категория</th>
+                        <th class="py-3">Цена</th>
+                        <th class="py-3">Аренда/день</th>
+                        <th class="py-3">Наличие</th>
+                        <th class="py-3">Состояние</th>
+                        <th class="py-3">Просмотры</th>
+                        <th class="py-3 text-end px-4">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in instruments %}
+                    <tr>
+                        <td class="px-4">
+                            {% if item[8] and item[8] != '' and item[8] != 'NULL' %}
+                            <img src="{{ url_for('static', filename=item[8]) }}" 
+                                 class="instrument-thumb" alt="{{ item[1] }}">
+                            {% else %}
+                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                 class="instrument-thumb" alt="No image">
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-bold">{{ item[1] }}</div>
+                            <small class="text-muted">{{ item[2] or '—' }}</small>
+                        </td>
+                        <td>{{ item[9] or '—' }}</td>
+                        <td>{{ item[10] or '—' }}</td>
+                        <td class="price-cell">{{ "%.2f"|format(item[4]) }} ₽</td>
+                        <td>
+                            {% if item[5] %}
+                            {{ "%.2f"|format(item[5]) }} ₽
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item[6] > 0 %}
+                            <span class="badge bg-success stock-badge">{{ item[6] }} шт.</span>
+                            {% else %}
+                            <span class="badge bg-danger stock-badge">Нет</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item[11] %}
+                            <span class="badge bg-info">{{ item[11] }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">—</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item[12] or 0 }}</td>
+                        <td class="text-end px-4 action-buttons">
+                            <button class="btn btn-sm btn-outline-primary edit-instrument-btn" 
+                                    data-instrument-id="{{ item[0] }}">
+                                <i class="fas fa-pencil-alt"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-instrument-btn" 
+                                    data-instrument-id="{{ item[0] }}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            <a href="{{ url_for('instrument_detail', instrument_id=item[0]) }}" 
+                               class="btn btn-sm btn-outline-info" target="_blank">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addInstrumentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить инструмент</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin_add_instrument') }}" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Название *</label>
+                            <input type="text" class="form-control" name="name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Модель</label>
+                            <input type="text" class="form-control" name="model">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Бренд</label>
+                            <select class="form-select" name="brand_id">
+                                <option value="">Выберите бренд</option>
+                                {% for brand in brands %}
+                                <option value="{{ brand[0] }}">{{ brand[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Категория</label>
+                            <select class="form-select" name="category_id">
+                                <option value="">Выберите категорию</option>
+                                {% for category in categories %}
+                                <option value="{{ category[0] }}">{{ category[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Год выпуска</label>
+                            <input type="number" class="form-control" name="year_of_manufacture">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Цена покупки *</label>
+                            <input type="number" class="form-control" name="purchase_price" step="0.01" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Аренда/день</label>
+                            <input type="number" class="form-control" name="rental_price_per_day" step="0.01">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Количество</label>
+                            <input type="number" class="form-control" name="quantity_in_stock" value="1">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Состояние</label>
+                            <select class="form-select" name="condition_id">
+                                <option value="">Выберите состояние</option>
+                                {% for condition in conditions %}
+                                <option value="{{ condition[0] }}">{{ condition[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Фото</label>
+                            <input type="file" class="form-control" name="main_image" accept="image/*">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Характеристики</label>
+                        <textarea class="form-control" name="characteristics" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="is_available_for_sale" value="1" checked>
+                                <label class="form-check-label">Доступен для продажи</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="is_available_for_rent" value="1">
+                                <label class="form-check-label">Доступен для аренды</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Добавить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editInstrumentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редактировать инструмент</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editInstrumentForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" name="instrument_id" id="edit_instrument_id">
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Название *</label>
+                            <input type="text" class="form-control" name="name" id="edit_name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Модель</label>
+                            <input type="text" class="form-control" name="model" id="edit_model">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Бренд</label>
+                            <select class="form-select" name="brand_id" id="edit_brand_id">
+                                <option value="">Выберите бренд</option>
+                                {% for brand in brands %}
+                                <option value="{{ brand[0] }}">{{ brand[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Категория</label>
+                            <select class="form-select" name="category_id" id="edit_category_id">
+                                <option value="">Выберите категорию</option>
+                                {% for category in categories %}
+                                <option value="{{ category[0] }}">{{ category[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Год выпуска</label>
+                            <input type="number" class="form-control" name="year_of_manufacture" id="edit_year">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Цена покупки *</label>
+                            <input type="number" class="form-control" name="purchase_price" id="edit_price" step="0.01" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Аренда/день</label>
+                            <input type="number" class="form-control" name="rental_price_per_day" id="edit_rental_price" step="0.01">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Количество</label>
+                            <input type="number" class="form-control" name="quantity_in_stock" id="edit_quantity" value="1">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Состояние</label>
+                            <select class="form-select" name="condition_id" id="edit_condition_id">
+                                <option value="">Выберите состояние</option>
+                                {% for condition in conditions %}
+                                <option value="{{ condition[0] }}">{{ condition[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Новое фото</label>
+                            <input type="file" class="form-control" name="main_image" accept="image/*">
+                            <small class="text-muted">Оставьте пустым, чтобы не менять</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" name="description" id="edit_description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Характеристики</label>
+                        <textarea class="form-control" name="characteristics" id="edit_characteristics" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="is_available_for_sale" id="edit_for_sale" value="1">
+                                <label class="form-check-label">Доступен для продажи</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="is_available_for_rent" id="edit_for_rent" value="1">
+                                <label class="form-check-label">Доступен для аренды</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.edit-instrument-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const instrumentId = this.dataset.instrumentId;
+            
+            fetch(`/admin/get_instrument/${instrumentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const inst = data.instrument;
+                        
+                        document.getElementById('edit_instrument_id').value = inst.instrument_id;
+                        document.getElementById('edit_name').value = inst.name;
+                        document.getElementById('edit_model').value = inst.model || '';
+                        document.getElementById('edit_brand_id').value = inst.brand_id || '';
+                        document.getElementById('edit_category_id').value = inst.category_id || '';
+                        document.getElementById('edit_year').value = inst.year_of_manufacture || '';
+                        document.getElementById('edit_price').value = inst.purchase_price;
+                        document.getElementById('edit_rental_price').value = inst.rental_price_per_day || '';
+                        document.getElementById('edit_quantity').value = inst.quantity_in_stock || 1;
+                        document.getElementById('edit_condition_id').value = inst.condition_id || '';
+                        document.getElementById('edit_description').value = inst.description || '';
+                        document.getElementById('edit_characteristics').value = inst.characteristics || '';
+                        
+                        document.getElementById('edit_for_sale').checked = inst.is_available_for_sale == 1;
+                        document.getElementById('edit_for_rent').checked = inst.is_available_for_rent == 1;
+                        
+                        new bootstrap.Modal(document.getElementById('editInstrumentModal')).show();
+                    } else {
+                        alert('Ошибка загрузки данных инструмента');
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка соединения');
+                });
+        });
+    });
+    
+    document.getElementById('editInstrumentForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch('/admin/update_instrument', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Инструмент обновлен');
+                location.reload();
+            } else {
+                alert('Ошибка: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Ошибка соединения');
+        });
+    });
+    
+    document.querySelectorAll('.delete-instrument-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const instrumentId = this.dataset.instrumentId;
+            
+            if (confirm('Вы уверены, что хотите удалить этот инструмент?')) {
+                fetch('/admin/delete_instrument', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({instrument_id: instrumentId})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Инструмент удален');
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка соединения');
+                });
+            }
+        });
+    });
+    
+    function filterTable() {
+        const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
+        const brand = document.getElementById('brandFilter')?.value || '';
+        const category = document.getElementById('categoryFilter')?.value || '';
+        const condition = document.getElementById('conditionFilter')?.value || '';
+        const availability = document.getElementById('availabilityFilter')?.value || '';
+        
+        const rows = document.querySelectorAll('#instrumentsTable tbody tr');
+        
+        rows.forEach(row => {
+            const name = row.cells[1].querySelector('.fw-bold').textContent.toLowerCase();
+            const model = row.cells[1].querySelector('small')?.textContent.toLowerCase() || '';
+            const rowBrand = row.cells[2].textContent.trim();
+            const rowCategory = row.cells[3].textContent.trim();
+            const rowCondition = row.cells[7].textContent.trim();
+            const stock = parseInt(row.cells[6].textContent);
+            
+            let show = true;
+            
+            if (search && !name.includes(search) && !model.includes(search)) show = false;
+            if (brand && rowBrand !== brand) show = false;
+            if (category && rowCategory !== category) show = false;
+            if (condition && rowCondition !== condition) show = false;
+            
+            if (availability === 'stock' && stock <= 0) show = false;
+            if (availability === 'out' && stock > 0) show = false;
+            
+            row.style.display = show ? '' : 'none';
+        });
+    }
+    
+    document.getElementById('searchInput')?.addEventListener('input', filterTable);
+    document.getElementById('brandFilter')?.addEventListener('change', filterTable);
+    document.getElementById('categoryFilter')?.addEventListener('change', filterTable);
+    document.getElementById('conditionFilter')?.addEventListener('change', filterTable);
+    document.getElementById('availabilityFilter')?.addEventListener('change', filterTable);
+});
+</script>
+{% endblock %}

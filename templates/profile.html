@@ -261,8 +261,8 @@
                 <span class="stat-label">Аренд</span>
             </div>
             <div class="stat-item">
-                <span class="stat-number">{{ user.views_count or 0 }}</span>
-                <span class="stat-label">Просмотров</span>
+                <span class="stat-number">{{ repair_count }}</span>
+                <span class="stat-label">Заявок на ремонт</span>
             </div>
         </div>
     </div>
@@ -300,46 +300,79 @@
             </div>
         </div>
         
-        <div class="col-md-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Последние действия</h5>
-                </div>
-                <div class="card-body">
-                    {% if recent_orders %}
-                    <div class="activity-timeline">
-                        {% for order in recent_orders %}
-                        <div class="activity-item">
-                            <div class="d-flex">
-                                <div class="activity-icon">
-                                    <i class="bi bi-cart-check text-primary"></i>
-                                </div>
-                                <div>
-                                    <h6 class="mb-1">Заказ #{{ order[0] }}</h6>
-                                    <p class="mb-1 text-muted small">
-                                        {{ order[4].strftime('%d.%m.%Y %H:%M') if order[4] else 'Дата не указана' }}
-                                    </p>
-                                    <span class="badge bg-{{ 'success' if order[7] == 'completed' else 'warning' if order[7] == 'processing' else 'secondary' }}">
-                                        {{ order[12] }}
-                                    </span>
-                                </div>
-                            </div>
+      <div class="col-md-6 mb-4">
+    <div class="card h-100">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Последние действия</h5>
+        </div>
+        <div class="card-body">
+            {% if recent_activities and recent_activities|length > 0 %}
+            <div class="activity-timeline">
+                {% for activity in recent_activities[:3] %}
+                <div class="activity-item">
+                    <div class="d-flex">
+                        <div class="activity-icon">
+                            {% if activity[0] == 'purchase' %}
+                            <i class="bi bi-cart-check text-primary"></i>
+                            {% elif activity[0] == 'rental' %}
+                            <i class="bi bi-calendar-check text-info"></i>
+                            {% elif activity[0] == 'repair' %}
+                            <i class="bi bi-tools text-warning"></i>
+                            {% endif %}
                         </div>
-                        {% endfor %}
+                        <div>
+                            <h6 class="mb-1">
+                                {% if activity[0] == 'purchase' %}
+                                Заказ #{{ activity[1] }}
+                                {% elif activity[0] == 'rental' %}
+                                Аренда #{{ activity[1] }}
+                                {% elif activity[0] == 'repair' %}
+                                Заявка на ремонт #{{ activity[1] }}
+                                {% endif %}
+                            </h6>
+                            <p class="mb-1 text-muted small">
+                                {{ activity[2].strftime('%d.%m.%Y %H:%M') if activity[2] else 'Дата не указана' }}
+                            </p>
+                            <span class="badge 
+                                {% if activity[0] == 'purchase' %}bg-primary
+                                {% elif activity[0] == 'rental' %}bg-info
+                                {% elif activity[0] == 'repair' %}bg-warning
+                                {% endif %}">
+                                {% if activity[3] == 'pending' %}Ожидает
+                                {% elif activity[3] == 'confirmed' %}Подтвержден
+                                {% elif activity[3] == 'processing' %}В обработке
+                                {% elif activity[3] == 'shipped' %}Отправлен
+                                {% elif activity[3] == 'delivered' %}Доставлен
+                                {% elif activity[3] == 'cancelled' %}Отменен
+                                {% elif activity[3] == 'reserved' %}Забронирован
+                                {% elif activity[3] == 'active' %}Активная
+                                {% elif activity[3] == 'completed' %}Завершена
+                                {% elif activity[3] == 'overdue' %}Просрочена
+                                {% elif activity[3] == 'new' %}Новая
+                                {% elif activity[3] == 'diagnosed' %}Диагностика
+                                {% elif activity[3] == 'waiting_approval' %}Ожидает
+                                {% elif activity[3] == 'approved' %}Согласовано
+                                {% elif activity[3] == 'in_progress' %}В работе
+                                {% elif activity[3] == 'ready_for_pickup' %}Готов к выдаче
+                                {% else %}{{ activity[3] }}{% endif %}
+                            </span>
+                        </div>
                     </div>
-                    {% else %}
-                    <div class="text-center py-4">
-                        <i class="bi bi-cart-x display-4 text-muted mb-3"></i>
-                        <p class="text-muted">У вас еще нет заказов</p>
-                        <a href="{{ url_for('catalog') }}" class="btn btn-primary">
-                            <i class="bi bi-cart me-2"></i>Сделать первый заказ
-                        </a>
-                    </div>
-                    {% endif %}
                 </div>
+                {% endfor %}
             </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="bi bi-clock-history display-4 text-muted mb-3"></i>
+                <p class="text-muted">У вас еще нет действий</p>
+                <a href="{{ url_for('catalog') }}" class="btn btn-primary">
+                    <i class="bi bi-cart me-2"></i>Начать покупки
+                </a>
+            </div>
+            {% endif %}
         </div>
     </div>
+</div>
     
     <div class="card mb-4">
         <div class="card-header bg-primary text-white">

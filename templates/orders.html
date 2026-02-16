@@ -10,19 +10,19 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link active" id="purchase-tab" data-bs-toggle="tab" 
                     data-bs-target="#purchase" type="button" role="tab">
-                Покупки <span class="badge bg-secondary">{{ purchase_orders|length }}</span>
+                Покупки <span class="badge bg-secondary ms-1">{{ purchase_orders|length }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="rental-tab" data-bs-toggle="tab" 
                     data-bs-target="#rental" type="button" role="tab">
-                Аренда <span class="badge bg-secondary">{{ rental_orders|length }}</span>
+                Аренда <span class="badge bg-secondary ms-1">{{ rental_orders|length }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="repair-tab" data-bs-toggle="tab" 
                     data-bs-target="#repair" type="button" role="tab">
-                Ремонт <span class="badge bg-secondary">{{ repair_requests|length }}</span>
+                Ремонт <span class="badge bg-secondary ms-1">{{ repair_requests|length }}</span>
             </button>
         </li>
     </ul>
@@ -31,38 +31,66 @@
         <div class="tab-pane fade show active" id="purchase" role="tabpanel">
             {% if purchase_orders %}
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
                         <tr>
                             <th>№ Заказа</th>
                             <th>Дата</th>
                             <th>Инструмент</th>
-                            <th>Количество</th>
+                            <th>Фото</th>
+                            <th>Кол-во</th>
                             <th>Сумма</th>
                             <th>Статус</th>
-                            <th>Действия</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for order in purchase_orders %}
                         <tr>
-                            <td>{{ order.order_number }}</td>
-                            <td>{{ order.order_date.strftime('%d.%m.%Y') }}</td>
+                            <td class="fw-bold">{{ order[1] }}</td>
+                            <td>{{ order[2].strftime('%d.%m.%Y') }}</td>
                             <td>
-                                <strong>{{ order.instrument_name }}</strong><br>
-                                <small class="text-muted">{{ order.brand_name }}</small>
+                                <div class="fw-bold">{{ order[7] }}</div>
+                                <small class="text-muted">{{ order[9] or '' }}</small>
                             </td>
-                            <td>{{ order.quantity }} шт.</td>
-                            <td>{{ "%.2f"|format(order.total_price) }} ₽</td>
                             <td>
-                                <span class="badge status-badge status-{{ order.status_id|default(1) }}">
-                                    {{ order.status_name }}
+                                {% if order[10] %}
+                                <img src="{{ url_for('static', filename=order[10]) }}" 
+                                     style="width: 50px; height: 50px; object-fit: cover;" 
+                                     class="rounded" alt="{{ order[7] }}">
+                                {% else %}
+                                <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                     style="width: 50px; height: 50px; object-fit: cover;" 
+                                     class="rounded" alt="No image">
+                                {% endif %}
+                            </td>
+                            <td>{{ order[3] }} шт.</td>
+                            <td class="fw-bold text-primary">{{ "%.2f"|format(order[4]) }} ₽</td>
+                            <td>
+                                {% set status_translate = {
+                                    'pending': 'Ожидает',
+                                    'confirmed': 'Подтвержден',
+                                    'processing': 'В обработке',
+                                    'shipped': 'Отправлен',
+                                    'delivered': 'Доставлен',
+                                    'cancelled': 'Отменен'
+                                } %}
+                                <span class="badge 
+                                    {% if order[5] == 'pending' %}bg-warning text-dark
+                                    {% elif order[5] == 'confirmed' %}bg-info
+                                    {% elif order[5] == 'processing' %}bg-primary
+                                    {% elif order[5] == 'shipped' %}bg-success
+                                    {% elif order[5] == 'delivered' %}bg-success
+                                    {% elif order[5] == 'cancelled' %}bg-danger
+                                    {% else %}bg-secondary{% endif %} 
+                                    px-3 py-2">
+                                    {{ status_translate.get(order[5], order[5]) }}
                                 </span>
                             </td>
                             <td>
-                                <a href="{{ url_for('instrument_detail', instrument_id=order.instrument_id) }}" 
+                                <a href="{{ url_for('instrument_detail', instrument_id=order[8]) }}" 
                                    class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-eye"></i>
+                                    <i class="bi bi-eye"></i>
                                 </a>
                             </td>
                         </tr>
@@ -72,7 +100,7 @@
             </div>
             {% else %}
             <div class="text-center py-5">
-                <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+                <i class="bi bi-cart display-1 text-muted mb-3"></i>
                 <h4>Нет покупок</h4>
                 <p class="text-muted">Вы еще не совершали покупок в нашем магазине</p>
                 <a href="{{ url_for('catalog') }}" class="btn btn-primary">Перейти в каталог</a>
@@ -83,13 +111,14 @@
         <div class="tab-pane fade" id="rental" role="tabpanel">
             {% if rental_orders %}
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
                         <tr>
                             <th>№ Аренды</th>
-                            <th>Дата оформления</th>
+                            <th>Дата</th>
                             <th>Инструмент</th>
-                            <th>Период аренды</th>
+                            <th>Фото</th>
+                            <th>Период</th>
                             <th>Сумма</th>
                             <th>Статус</th>
                         </tr>
@@ -97,21 +126,45 @@
                     <tbody>
                         {% for rental in rental_orders %}
                         <tr>
-                            <td>{{ rental.rental_number }}</td>
-                            <td>{{ rental.created_at.strftime('%d.%m.%Y') }}</td>
+                            <td class="fw-bold">{{ rental[1] }}</td>
+                            <td>{{ rental[2].strftime('%d.%m.%Y') }}</td>
                             <td>
-                                <strong>{{ rental.instrument_name }}</strong><br>
-                                <small class="text-muted">{{ rental.brand_name }}</small>
+                                <div class="fw-bold">{{ rental[9] }}</div>
+                                <small class="text-muted">{{ rental[11] or '' }}</small>
                             </td>
                             <td>
-                                {{ rental.rental_start_date.strftime('%d.%m.%Y') }} - 
-                                {{ rental.rental_end_date.strftime('%d.%m.%Y') }}<br>
-                                <small>{{ rental.total_days }} дней</small>
+                                {% if rental[12] %}
+                                <img src="{{ url_for('static', filename=rental[12]) }}" 
+                                     style="width: 50px; height: 50px; object-fit: cover;" 
+                                     class="rounded" alt="{{ rental[9] }}">
+                                {% else %}
+                                <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                     style="width: 50px; height: 50px; object-fit: cover;" 
+                                     class="rounded" alt="No image">
+                                {% endif %}
                             </td>
-                            <td>{{ "%.2f"|format(rental.total_amount) }} ₽</td>
                             <td>
-                                <span class="badge status-badge status-{{ rental.status_id|default(1) }}">
-                                    {{ rental.status_name }}
+                                {{ rental[3].strftime('%d.%m') }} - {{ rental[4].strftime('%d.%m.%Y') }}<br>
+                                <small class="text-muted">{{ rental[6] }} дн.</small>
+                            </td>
+                            <td class="fw-bold text-primary">{{ "%.2f"|format(rental[5]) }} ₽</td>
+                            <td>
+                                {% set rental_status_translate = {
+                                    'reserved': 'Забронирован',
+                                    'active': 'Активная',
+                                    'completed': 'Завершена',
+                                    'cancelled': 'Отменена',
+                                    'overdue': 'Просрочена'
+                                } %}
+                                <span class="badge 
+                                    {% if rental[7] == 'reserved' %}bg-info
+                                    {% elif rental[7] == 'active' %}bg-success
+                                    {% elif rental[7] == 'completed' %}bg-secondary
+                                    {% elif rental[7] == 'cancelled' %}bg-danger
+                                    {% elif rental[7] == 'overdue' %}bg-warning text-dark
+                                    {% else %}bg-secondary{% endif %}
+                                    px-3 py-2">
+                                    {{ rental_status_translate.get(rental[7], rental[7]) }}
                                 </span>
                             </td>
                         </tr>
@@ -121,7 +174,7 @@
             </div>
             {% else %}
             <div class="text-center py-5">
-                <i class="fas fa-calendar-alt fa-3x text-muted mb-3"></i>
+                <i class="bi bi-calendar-check display-1 text-muted mb-3"></i>
                 <h4>Нет аренд</h4>
                 <p class="text-muted">Вы еще не арендовали инструменты</p>
                 <a href="{{ url_for('catalog') }}" class="btn btn-primary">Перейти в каталог</a>
@@ -132,8 +185,8 @@
         <div class="tab-pane fade" id="repair" role="tabpanel">
             {% if repair_requests %}
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
                         <tr>
                             <th>№ Заявки</th>
                             <th>Дата</th>
@@ -141,33 +194,60 @@
                             <th>Проблема</th>
                             <th>Стоимость</th>
                             <th>Статус</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for repair in repair_requests %}
                         <tr>
-                            <td>{{ repair.request_number }}</td>
-                            <td>{{ repair.created_at.strftime('%d.%m.%Y') }}</td>
+                            <td class="fw-bold">{{ repair[1] }}</td>
+                            <td>{{ repair[2].strftime('%d.%m.%Y') if repair[2] else 'Н/Д' }}</td>
                             <td>
-                                <strong>{{ repair.customer_instrument_name }}</strong><br>
-                                {% if repair.brand %}
-                                <small class="text-muted">{{ repair.brand }} {{ repair.model }}</small>
+                                <div class="fw-bold">{{ repair[3] }}</div>
+                                {% if repair[4] %}
+                                <small class="text-muted">{{ repair[4] }} {{ repair[5] }}</small>
                                 {% endif %}
                             </td>
                             <td>
-                                <small>{{ repair.problem_description[:100] }}{% if repair.problem_description|length > 100 %}...{% endif %}</small>
+                                <span class="small">{{ repair[6][:50] }}{% if repair[6]|length > 50 %}...{% endif %}</span>
                             </td>
                             <td>
-                                {% if repair.actual_cost %}
-                                {{ "%.2f"|format(repair.actual_cost) }} ₽
+                                {% if repair[7] %}
+                                <span class="fw-bold text-primary">{{ "%.2f"|format(repair[7]) }} ₽</span>
                                 {% else %}
-                                <span class="text-muted">оценка</span>
+                                <span class="text-muted">—</span>
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="badge bg-info">
-                                    {{ repair.status_name }}
+                                {% set repair_status_translate = {
+                                    'new': 'Новая',
+                                    'diagnosed': 'Диагностика',
+                                    'waiting_approval': 'Ожидает',
+                                    'approved': 'Согласовано',
+                                    'in_progress': 'В работе',
+                                    'completed': 'Завершен',
+                                    'ready_for_pickup': 'Готов к выдаче',
+                                    'cancelled': 'Отменен'
+                                } %}
+                                <span class="badge 
+                                    {% if repair[8] == 'new' %}bg-info
+                                    {% elif repair[8] == 'diagnosed' %}bg-primary
+                                    {% elif repair[8] == 'waiting_approval' %}bg-warning text-dark
+                                    {% elif repair[8] == 'approved' %}bg-success
+                                    {% elif repair[8] == 'in_progress' %}bg-primary
+                                    {% elif repair[8] == 'completed' %}bg-success
+                                    {% elif repair[8] == 'ready_for_pickup' %}bg-info
+                                    {% elif repair[8] == 'cancelled' %}bg-danger
+                                    {% else %}bg-secondary{% endif %}
+                                    px-3 py-2">
+                                    {{ repair_status_translate.get(repair[8], repair[8]) }}
                                 </span>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        data-bs-toggle="modal" data-bs-target="#repairModal{{ repair[0] }}">
+                                    <i class="bi bi-eye"></i>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -176,39 +256,164 @@
             </div>
             {% else %}
             <div class="text-center py-5">
-                <i class="fas fa-tools fa-3x text-muted mb-3"></i>
+                <i class="bi bi-tools display-1 text-muted mb-3"></i>
                 <h4>Нет заявок на ремонт</h4>
                 <p class="text-muted">Вы еще не создавали заявок на ремонт инструментов</p>
-                <a href="#" class="btn btn-primary">Создать заявку</a>
+                <a href="{{ url_for('create_repair_request') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>Создать заявку
+                </a>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
 
+{% for repair in repair_requests %}
+<div class="modal fade" id="repairModal{{ repair[0] }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Заявка #{{ repair[1] }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="fw-bold text-muted small">Инструмент</label>
+                        <p class="mb-0">{{ repair[3] }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        {% if repair[4] %}
+                        <label class="fw-bold text-muted small">Бренд/Модель</label>
+                        <p class="mb-0">{{ repair[4] }} {{ repair[5] }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="fw-bold text-muted small">Описание проблемы</label>
+                    <div class="bg-light p-3 rounded">
+                        {{ repair[6] }}
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="fw-bold text-muted small">Дата создания</label>
+                        <p class="mb-0">{{ repair[2].strftime('%d.%m.%Y %H:%M') if repair[2] else 'Н/Д' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-muted small">Статус</label>
+                        <p class="mb-0">
+                            {% set repair_status_translate = {
+                                'new': 'Новая',
+                                'diagnosed': 'Диагностика',
+                                'waiting_approval': 'Ожидает',
+                                'approved': 'Согласовано',
+                                'in_progress': 'В работе',
+                                'completed': 'Завершен',
+                                'ready_for_pickup': 'Готов к выдаче',
+                                'cancelled': 'Отменен'
+                            } %}
+                            <span class="badge 
+                                {% if repair[8] == 'new' %}bg-info
+                                {% elif repair[8] == 'diagnosed' %}bg-primary
+                                {% elif repair[8] == 'waiting_approval' %}bg-warning text-dark
+                                {% elif repair[8] == 'approved' %}bg-success
+                                {% elif repair[8] == 'in_progress' %}bg-primary
+                                {% elif repair[8] == 'completed' %}bg-success
+                                {% elif repair[8] == 'ready_for_pickup' %}bg-info
+                                {% elif repair[8] == 'cancelled' %}bg-danger
+                                {% else %}bg-secondary{% endif %}
+                                px-3 py-2">
+                                {{ repair_status_translate.get(repair[8], repair[8]) }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                
+                {% if repair[7] %}
+                <div class="mb-3">
+                    <label class="fw-bold text-muted small">Стоимость ремонта</label>
+                    <p class="mb-0 fw-bold text-primary">{{ "%.2f"|format(repair[7]) }} ₽</p>
+                </div>
+                {% endif %}
+                
+                {% if repair[9] and repair[9] != '' %}
+                <div class="mb-3">
+                    <label class="fw-bold text-muted small mb-2">Фотографии</label>
+                    <div class="row g-2">
+                        {% for photo_url in repair[9].split(',') %}
+                        <div class="col-4 col-md-3">
+                            <a href="{{ url_for('static', filename=photo_url) }}" target="_blank">
+                                <img src="{{ url_for('static', filename=photo_url) }}" 
+                                     class="img-fluid rounded border" style="height: 100px; width: 100%; object-fit: cover;">
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
 <style>
 .nav-tabs .nav-link {
     color: #495057;
     font-weight: 500;
+    border: none;
+    border-bottom: 2px solid transparent;
+}
+.nav-tabs .nav-link:hover {
+    border-color: transparent;
+    color: var(--secondary-color);
 }
 .nav-tabs .nav-link.active {
     font-weight: 600;
+    color: var(--secondary-color);
+    border-bottom: 2px solid var(--secondary-color);
+    background: transparent;
 }
 .table th {
     border-top: none;
     font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
 }
-
-.status-badge {
+.table td {
+    vertical-align: middle;
+}
+.badge {
     font-weight: 500;
-    padding: 0.35em 0.65em;
+    padding: 0.5em 1em;
     border-radius: 20px;
+    font-size: 0.8rem;
 }
-
-.status-1 { background-color: #28a745; color: white; } /* Завершен */
-.status-2 { background-color: #ffc107; color: #000; } /* В обработке */
-.status-3 { background-color: #dc3545; color: white; } /* Отменен */
-.status-4 { background-color: #17a2b8; color: white; } /* Доставляется */
-.status-5 { background-color: #6c757d; color: white; } /* Ожидание */
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+}
+.modal-content {
+    border: none;
+    border-radius: 12px;
+}
+.modal-header {
+    border-bottom: 1px solid #dee2e6;
+    background: #f8f9fa;
+    border-radius: 12px 12px 0 0;
+}
+.modal-body label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
 </style>
 {% endblock %}

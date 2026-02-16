@@ -10,13 +10,19 @@ import os
 from werkzeug.utils import secure_filename
 import dns.resolver
 import random
+import uuid
+
 
 UPLOAD_FOLDER = 'static/uploads/avatars'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+REPAIR_PHOTOS_FOLDER = 'static/uploads/repair_photos'
+ALLOWED_REPAIR_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 app = Flask(__name__)
 app.secret_key = 'soundgoodizer-secret-key-2025-super-secure'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
 
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -226,6 +232,9 @@ def send_verification_email(email, verification_code):
     except Exception as e:
         print(f"✗ Ошибка отправки email: {e}")
         return False
+
+def allowed_repair_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_REPAIR_EXTENSIONS
 
 @app.route('/')
 def index():
@@ -1304,6 +1313,7 @@ def orders():
     try:
         cursor = conn.cursor()
         
+        # Покупки с main_image_url
         purchase_sql = """
         SELECT 
             po.order_id,
@@ -1315,7 +1325,8 @@ def orders():
             os.color_code as status_color,
             i.name as instrument_name,
             i.instrument_id,
-            b.brand_name
+            b.brand_name,
+            i.main_image_url
         FROM purchase_orders po
         JOIN order_statuses os ON po.status_id = os.status_id
         JOIN instruments i ON po.instrument_id = i.instrument_id
@@ -1326,6 +1337,7 @@ def orders():
         cursor.execute(purchase_sql, (session['user_id'],))
         purchase_orders = cursor.fetchall()
         
+        # Аренда с main_image_url
         rental_sql = """
         SELECT 
             ro.rental_id,
@@ -1339,7 +1351,8 @@ def orders():
             rs.color_code as status_color,
             i.name as instrument_name,
             i.instrument_id,
-            b.brand_name
+            b.brand_name,
+            i.main_image_url
         FROM rental_orders ro
         JOIN rental_statuses rs ON ro.status_id = rs.status_id
         JOIN instruments i ON ro.instrument_id = i.instrument_id
@@ -1350,6 +1363,7 @@ def orders():
         cursor.execute(rental_sql, (session['user_id'],))
         rental_orders = cursor.fetchall()
         
+        # Ремонт с фото
         repair_sql = """
         SELECT 
             rr.request_id,
@@ -1360,7 +1374,8 @@ def orders():
             rr.model,
             rr.problem_description,
             rr.actual_cost,
-            rs.status_name
+            rs.status_name,
+            rr.problem_photos_urls
         FROM repair_requests rr
         JOIN repair_statuses rs ON rr.status_id = rs.status_id
         WHERE rr.user_id = ?
@@ -2064,6 +2079,140 @@ def create_rental_order():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/repair')
+def repair():
+    """Страница с информацией о ремонте"""
+    return render_template('repair.html')
+
+@app.route('/create_repair_request', methods=['GET', 'POST'])
+@login_required
+def create_repair_request():
+    """Создание заявки на ремонт"""
+    if request.method == 'POST':
+        try:
+            # Получаем данные из формы
+            instrument_name = request.form.get('instrument_name', '').strip()
+            brand = request.form.get('brand', '').strip()
+            model = request.form.get('model', '').strip()
+            problem_description = request.form.get('problem_description', '').strip()
+            
+            # Валидация
+            if not instrument_name or not problem_description:
+                return jsonify({'success': False, 'message': 'Заполните все обязательные поля'})
+            
+            # Обработка загруженных фото
+            photos = request.files.getlist('photos')
+            photo_urls = []
+            
+            if photos and photos[0].filename:
+                # Создаем папку для фото, если её нет
+                os.makedirs(app.config['REPAIR_PHOTOS_FOLDER'], exist_ok=True)
+                
+                for photo in photos:
+                    if photo and allowed_repair_file(photo.filename):
+                        # Генерируем уникальное имя файла
+                        filename = secure_filename(photo.filename)
+                        ext = filename.rsplit('.', 1)[1].lower()
+                        new_filename = f"repair_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+                        
+                        # Сохраняем файл
+                        filepath = os.path.join(app.config['REPAIR_PHOTOS_FOLDER'], new_filename)
+                        photo.save(filepath)
+                        
+                        # Добавляем URL фото
+                        photo_urls.append(f"uploads/repair_photos/{new_filename}")
+            
+            # Преобразуем список фото в строку
+            photos_json = ','.join(photo_urls) if photo_urls else None
+            
+            # Генерируем временный номер
+            temp_number = f"TEMP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Вставляем заявку
+            cursor.execute("""
+                INSERT INTO repair_requests 
+                (request_number, user_id, customer_instrument_name, brand, model, 
+                 problem_description, problem_photos_urls, status_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, GETDATE())
+            """, (
+                temp_number,
+                session['user_id'],
+                instrument_name,
+                brand,
+                model,
+                problem_description,
+                photos_json
+            ))
+            
+            # Получаем ID созданной заявки
+            cursor.execute("SELECT @@IDENTITY")
+            request_id = cursor.fetchone()[0]
+            
+            # Получаем сгенерированный триггером номер
+            cursor.execute("SELECT request_number FROM repair_requests WHERE request_id = ?", (request_id,))
+            request_number = cursor.fetchone()[0]
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'success': True, 'request_number': request_number})
+            
+        except Exception as e:
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            print(f"Error creating repair request: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'message': str(e)})
+    
+    # GET запрос - показываем форму
+    return render_template('create_repair_request.html')
+
+@app.route('/repair_requests')
+@login_required
+def repair_requests():
+    """Список заявок пользователя на ремонт"""
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                rr.request_id,
+                rr.request_number,
+                rr.customer_instrument_name,
+                rr.brand,
+                rr.model,
+                rr.problem_description,
+                rr.problem_photos_urls,
+                rr.created_at,
+                rr.actual_cost,
+                rs.status_name,
+                rs.color_code
+            FROM repair_requests rr
+            JOIN repair_statuses rs ON rr.status_id = rs.status_id
+            WHERE rr.user_id = ?
+            ORDER BY rr.created_at DESC
+        """, (session['user_id'],))
+        
+        requests = cursor.fetchall()
+        conn.close()
+        
+        return render_template('repair_requests.html', requests=requests)
+        
+    except Exception as e:
+        conn.close()
+        flash(f'Ошибка при загрузке заявок: {str(e)}', 'danger')
+        return redirect(url_for('profile'))
 
 @app.route('/admin')
 @login_required

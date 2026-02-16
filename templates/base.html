@@ -206,7 +206,7 @@
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('catalog') }}"><i class="bi bi-cart me-2"></i>Покупка</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('catalog') }}"><i class="bi bi-calendar me-2"></i>Аренда</a></li>
-                            <li><a class="dropdown-item" href="#"><i class="bi bi-wrench me-2"></i>Ремонт</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('repair') }}"><i class="bi bi-wrench me-2"></i>Ремонт</a></li>
                         </ul>
                     </li>
                     {% if session.get('user_role') == 'admin' %}
@@ -319,26 +319,22 @@
                     <h5 class="mb-3">
                         <i class="bi bi-music-note-beamed me-2"></i>SoundGoodizer
                     </h5>
-                    <p class="text-light">Покупка, аренда и ремонт музыкальных инструментов. Качество и надежность с 2025 года.</p>
+                    <p class="text-light">Покупка, аренда и ремонт музыкальных инструментов. Качество и надежность с 2026 года.</p>
                 </div>
                 
+                <div class="col-md-2 mb-3"></div>
+
                 <div class="col-md-2 mb-3">
                     <h6>Магазин</h6>
                     <ul class="list-unstyled">
                         <li><a href="{{ url_for('catalog') }}" class="footer-link">Каталог</a></li>
                         <li><a href="{{ url_for('catalog') }}" class="footer-link">Аренда</a></li>
-                        <li><a href="#" class="footer-link">Ремонт</a></li>
-                        <li><a href="#" class="footer-link">Доставка</a></li>
+                        <li><a href="{{ url_for('repair') }}" class="footer-link">Ремонт</a></li>
                     </ul>
                 </div>
                 
-                <div class="col-md-3 mb-3">
-                    <h6>Помощь</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="#" class="footer-link">Контакты</a></li>
-                    </ul>
-                </div>
-                
+                <div class="col-md-1 mb-3"></div>
+
                 <div class="col-md-3 mb-3">
                     <h6>Контакты</h6>
                     <ul class="list-unstyled">
@@ -362,7 +358,7 @@
             
             <div class="row align-items-center">
                 <div class="col-md-6">
-                    <p class="mb-0 text-light">&copy; 2025 SoundGoodizer. Все права защищены.</p>
+                    <p class="mb-0 text-light">&copy; 2026 SoundGoodizer. Все права защищены.</p>
                 </div>
                 <div class="col-md-6 text-md-end">
                     <a href="https://t.me/usrunknow" class="text-light me-3"><i class="bi bi-telegram fs-4"></i></a>

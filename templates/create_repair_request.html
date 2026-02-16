@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Заявка на ремонт - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .photo-upload-section {
+        background-color: #f8f9fa;
+        border-radius: 16px;
+        padding: 24px;
+    }
+    
+    .photo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    
+    .photo-item {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transition: transform 0.2s ease;
+    }
+    
+    .photo-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    
+    .photo-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .photo-item .remove-photo {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.9);
+        color: #dc3545;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 20px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        z-index: 10;
+    }
+    
+    .photo-item .remove-photo:hover {
+        background-color: #dc3545;
+        color: white;
+        transform: scale(1.1);
+    }
+    
+    .add-photo-card {
+        aspect-ratio: 1;
+        border: 2px dashed #dee2e6;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background-color: white;
+    }
+    
+    .add-photo-card:hover {
+        border-color: var(--secondary-color);
+        background-color: #e7f1ff;
+    }
+    
+    .add-photo-card i {
+        font-size: 36px;
+        color: #adb5bd;
+        margin-bottom: 8px;
+    }
+    
+    .add-photo-card span {
+        font-size: 14px;
+        color: #6c757d;
+        font-weight: 500;
+    }
+    
+    .add-photo-card:hover i,
+    .add-photo-card:hover span {
+        color: var(--secondary-color);
+    }
+    
+    .file-input-hidden {
+        display: none;
+    }
+    
+    .photo-stats {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: white;
+        padding: 12px 16px;
+        border-radius: 12px;
+        border: 1px solid #e9ecef;
+    }
+    
+    .photo-count-badge {
+        background-color: var(--secondary-color);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    
+    .photo-limit-text {
+        color: #6c757d;
+        font-size: 14px;
+    }
+    
+    .photo-limit-text i {
+        color: var(--secondary-color);
+        margin-right: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="text-primary fw-bold mb-3">
+                <i class="bi bi-tools me-2"></i>Заявка на ремонт
+            </h1>
+            <div class="progress mb-4" style="height: 8px;">
+                <div class="progress-bar bg-primary" role="progressbar" style="width: 100%;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h5 class="mb-0 fw-bold text-dark">
+                        <i class="bi bi-wrench me-2 text-primary"></i>Информация об инструменте
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST" enctype="multipart/form-data" id="repairForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Название инструмента *</label>
+                            <input type="text" class="form-control" name="instrument_name" required
+                                   placeholder="Например: Fender Stratocaster">
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Бренд</label>
+                                <input type="text" class="form-control" name="brand" 
+                                       placeholder="Например: Fender, Gibson, Yamaha">
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label fw-bold">Модель</label>
+                                <input type="text" class="form-control" name="model"
+                                       placeholder="Например: Stratocaster, Les Paul">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Описание проблемы *</label>
+                            <textarea class="form-control" name="problem_description" rows="5" required
+                                      placeholder="Опишите подробно, что случилось с инструментом..."></textarea>
+                            <div class="form-text text-muted small">
+                                Чем подробнее опишете проблему, тем быстрее мы сможем помочь
+                            </div>
+                        </div>
+                        
+                      <div class="mb-4">
+    <label class="form-label fw-bold mb-3">Фотографии проблемы</label>
+    
+    <div class="photo-upload-section">
+        <div class="photo-grid" id="photoGrid">
+            <div class="add-photo-card" id="addPhotoBtn">
+                <i class="bi bi-plus-circle"></i>
+                <span>Добавить фото</span>
+            </div>
+        </div>
+        
+        <input type="file" id="photoInput" class="file-input-hidden" 
+               accept="image/*" multiple>
+        
+        <div class="photo-stats">
+            <div>
+                <i class="bi bi-images me-1 text-primary"></i>
+                <span id="photoCount">0</span> из 5 фотографий
+            </div>
+            <div class="photo-limit-text">
+                <i class="bi bi-info-circle"></i>
+                JPG, PNG, GIF до 10 МБ
+            </div>
+        </div>
+    </div>
+</div>
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            После создания заявки с вами свяжется мастер для уточнения деталей и согласования стоимости ремонта.
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('repair') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>Назад
+                            </a>
+                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                <i class="bi bi-check-circle me-2"></i>Отправить заявку
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const photoInput = document.getElementById('photoInput');
+    const addPhotoBtn = document.getElementById('addPhotoBtn');
+    const photoGrid = document.getElementById('photoGrid');
+    const photoCount = document.getElementById('photoCount');
+    const form = document.getElementById('repairForm');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    let selectedFiles = [];
+    const MAX_PHOTOS = 5;
+    
+    addPhotoBtn.addEventListener('click', function() {
+        if (selectedFiles.length < MAX_PHOTOS) {
+            photoInput.click();
+        } else {
+            alert('Максимальное количество фотографий: ' + MAX_PHOTOS);
+        }
+    });
+    
+    photoInput.addEventListener('change', function(e) {
+        const files = Array.from(e.target.files);
+        
+        if (selectedFiles.length + files.length > MAX_PHOTOS) {
+            alert('Можно загрузить не более ' + MAX_PHOTOS + ' фотографий');
+            return;
+        }
+        
+        files.forEach(file => {
+            if (file.type.startsWith('image/')) {
+                selectedFiles.push(file);
+                displayPhotoPreview(file);
+            }
+        });
+        
+        updatePhotoCount();
+        
+        photoInput.value = '';
+    });
+    
+    function displayPhotoPreview(file) {
+        const reader = new FileReader();
+        const photoItem = document.createElement('div');
+        photoItem.className = 'photo-item';
+        
+        reader.onload = function(e) {
+            photoItem.innerHTML = `
+                <img src="${e.target.result}" alt="Preview">
+                <button type="button" class="remove-photo" data-filename="${file.name}">
+                    <i class="bi bi-x"></i>
+                </button>
+            `;
+            
+            const removeBtn = photoItem.querySelector('.remove-photo');
+            removeBtn.addEventListener('click', function() {
+                const filename = this.dataset.filename;
+                selectedFiles = selectedFiles.filter(f => f.name !== filename);
+                photoItem.remove();
+                updatePhotoCount();
+            });
+        };
+        
+        reader.readAsDataURL(file);
+        photoGrid.appendChild(photoItem);
+    }
+    
+    function updatePhotoCount() {
+        photoCount.textContent = `Выбрано фотографий: ${selectedFiles.length}`;
+    }
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        
+        for (let pair of formData.entries()) {
+            if (pair[0] === 'photos') {
+                formData.delete('photos');
+            }
+        }
+        
+        selectedFiles.forEach(file => {
+            formData.append('photos', file);
+        });
+        
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Отправка...';
+        
+        fetch('/create_repair_request', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = "{{ url_for('orders') }}";
+            } else {
+                alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Отправить заявку';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Ошибка соединения с сервером');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Отправить заявку';
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Ремонт инструментов - SoundGoodizer{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="text-primary fw-bold mb-3">
+                <i class="bi bi-tools me-2"></i>Ремонт музыкальных инструментов
+            </h1>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center p-4">
+                    <div class="display-1 text-primary mb-3">
+                        <i class="bi bi-wrench"></i>
+                    </div>
+                    <h5 class="fw-bold mb-3">Диагностика</h5>
+                    <p class="text-muted small">
+                        Бесплатная диагностика при последующем ремонте. 
+                        Определим точную причину неисправности.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center p-4">
+                    <div class="display-1 text-primary mb-3">
+                        <i class="bi bi-clock-history"></i>
+                    </div>
+                    <h5 class="fw-bold mb-3">Сроки</h5>
+                    <p class="text-muted small">
+                        Стандартный ремонт: 3-7 дней. 
+                        Возможен срочный ремонт за 1-2 дня.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center p-4">
+                    <div class="display-1 text-primary mb-3">
+                        <i class="bi bi-shield-check"></i>
+                    </div>
+                    <h5 class="fw-bold mb-3">Гарантия</h5>
+                    <p class="text-muted small">
+                        Даем гарантию до 6 месяцев на все виды ремонтных работ.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h5 class="mb-0 fw-bold text-dark">
+                        <i class="bi bi-question-circle me-2 text-primary"></i>Часто ремонтируем
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li class="mb-3">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <strong>Электрогитары:</strong> замена звукоснимателей, настройка мензуры
+                                </li>
+                                <li class="mb-3">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <strong>Акустические гитары:</strong> замена ладов, ремонт грифа
+                                </li>
+                                <li class="mb-3">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <strong>Ударные:</strong> замена пластиков, настройка
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li class="mb-3">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <strong>Клавишные:</strong> чистка контактов, замена клавиш
+                                </li>
+                                <li class="mb-3">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <strong>Усилители:</strong> замена ламп, ремонт схем
+                                </li>
+                                <li class="mb-3">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <strong>Духовые:</strong> чистка, регулировка клапанов
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 text-center">
+                    <h5 class="fw-bold mb-3">Готовы отремонтировать ваш инструмент?</h5>
+                    <p class="text-muted mb-4">Оставьте заявку, и мастер свяжется с вами в ближайшее время</p>
+                    {% if session.user_id %}
+                    <a href="{{ url_for('create_repair_request') }}" class="btn btn-primary btn-lg px-5">
+                        <i class="bi bi-tools me-2"></i>Создать заявку
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg px-5">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Войти для создания заявки
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

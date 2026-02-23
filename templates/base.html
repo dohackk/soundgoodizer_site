@@ -578,59 +578,71 @@
     </main>
 
     <footer class="py-4 mt-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-md-4 mb-3">
-                    <h5 class="mb-3">
-                        <i class="bi bi-music-note-beamed me-2"></i>SoundGoodizer
-                    </h5>
-                    <p class="text-light">Покупка, аренда и ремонт музыкальных инструментов. Качество и надежность с 2026 года.</p>
-                </div>
-                
-                <div class="col-md-2 mb-3"></div>
-
-                <div class="col-md-2 mb-3">
-                    <h6>Магазин</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="{{ url_for('catalog') }}" class="footer-link">Каталог</a></li>
-                        <li><a href="{{ url_for('catalog') }}" class="footer-link">Аренда</a></li>
-                        <li><a href="{{ url_for('repair') }}" class="footer-link">Ремонт</a></li>
-                    </ul>
-                </div>
-                
-                <div class="col-md-1 mb-3"></div>
-
-                <div class="col-md-3 mb-3">
-                    <h6>Контакты</h6>
-                    <ul class="list-unstyled">
-                        <li class="mb-2">
-                            <i class="bi bi-telephone me-2"></i>
-                            <span class="text-light">+7 (951) 587-89-41</span>
-                        </li>
-                        <li class="mb-2">
-                            <i class="bi bi-envelope me-2"></i>
-                            <span class="text-light">e.saltymakov06@gmail.com</span>
-                        </li>
-                        <li class="mb-2">
-                            <i class="bi bi-geo-alt me-2"></i>
-                            <span class="text-light">г. Новокузнецк</span>
-                        </li>
-                    </ul>
-                </div>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <h5 class="mb-3">
+                    <i class="bi bi-music-note-beamed me-2"></i>SoundGoodizer
+                </h5>
+                <p class="text-light">Покупка, аренда и ремонт музыкальных инструментов. Качество и надежность с 2026 года.</p>
             </div>
             
-            <hr class="bg-light">
+            <div class="col-md-2 mb-3">
+                <h6>Магазин</h6>
+                <ul class="list-unstyled">
+                    <li><a href="{{ url_for('catalog') }}" class="footer-link">Каталог</a></li>
+                    <li><a href="{{ url_for('catalog') }}" class="footer-link">Аренда</a></li>
+                    <li><a href="{{ url_for('repair') }}" class="footer-link">Ремонт</a></li>
+                </ul>
+            </div>
             
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <p class="mb-0 text-light">&copy; 2026 SoundGoodizer. Все права защищены.</p>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <a href="https://t.me/usrunknow" class="text-light me-3"><i class="bi bi-telegram fs-4"></i></a>
-                </div>
+            <div class="col-md-3 mb-3">
+                <h6>Информация</h6>
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <a href="{{ url_for('static', filename='docs/rules.pdf') }}" target="_blank" class="footer-link">
+                            <i></i>Правила сайта
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="{{ url_for('static', filename='docs/privacy.pdf') }}" target="_blank" class="footer-link">
+                            <i></i>Политика конфиденциальности
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <h6>Контакты</h6>
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <i class="bi bi-telephone me-2"></i>
+                        <span class="text-light">+7 (951) 587-89-41</span>
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-envelope me-2"></i>
+                        <span class="text-light">e.saltymakov06@gmail.com</span>
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-geo-alt me-2"></i>
+                        <span class="text-light">г. Новокузнецк</span>
+                    </li>
+                </ul>
             </div>
         </div>
-    </footer>
+        
+        <hr class="bg-light">
+        
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <p class="mb-0 text-light">&copy; 2026 SoundGoodizer. Все права защищены.</p>
+            </div>
+            <div class="col-md-6 text-md-end">
+                <a href="https://t.me/usrunknow" class="text-light me-3" target="_blank"><i class="bi bi-telegram fs-4"></i></a>
+            </div>
+        </div>
+    </div>
+</footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     

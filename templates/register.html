@@ -2,6 +2,55 @@
 
 {% block title %}Регистрация - SoundGoodizer{% endblock %}
 
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/email-domains.js') }}"></script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .password-toggle {
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+    .password-toggle:hover {
+        color: var(--secondary-color) !important;
+    }
+    .email-domain-warning {
+        font-size: 0.85rem;
+        margin-top: 4px;
+        color: #dc3545;
+        display: none;
+    }
+    .email-domain-warning i {
+        margin-right: 4px;
+    }
+    .email-domain-warning.visible {
+        display: block;
+    }
+    .domain-suggestion {
+        background-color: #f8f9fa;
+        border-radius: 20px;
+        padding: 4px 12px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 1px solid #dee2e6;
+        display: inline-block;
+        margin-right: 8px;
+        margin-top: 8px;
+    }
+    .domain-suggestion:hover {
+        background-color: var(--secondary-color);
+        color: white;
+        border-color: var(--secondary-color);
+    }
+    .domain-suggestion i {
+        margin-right: 4px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
@@ -19,7 +68,7 @@
                                    placeholder="Придумайте логин" required minlength="3" 
                                    value="{{ request.form.login if request.form }}">
                         </div>
-                        <div class="form-text">Минимум 3 символа</div>
+                        <div class="form-text">Минимум 3 символа. Только латинские буквы, цифры и знак подчеркивания</div>
                         <div id="login-error" class="invalid-feedback" style="display: none;"></div>
                         <div id="login-success" class="valid-feedback" style="display: none;">✓ Логин доступен</div>
                     </div>
@@ -32,6 +81,12 @@
                                    placeholder="example@mail.com" required 
                                    value="{{ request.form.email if request.form }}">
                         </div>
+                        <div class="form-text">Только латинские буквы, цифры и символы . - _ @</div>
+                        <div id="email-domain-warning" class="email-domain-warning">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <span id="domain-warning-text"></span>
+                        </div>
+                        <div id="domain-suggestions-container" style="display: none;"></div>
                         <div id="email-error" class="invalid-feedback" style="display: none;"></div>
                         <div id="email-success" class="valid-feedback" style="display: none;">✓ Email доступен</div>
                     </div>
@@ -42,12 +97,14 @@
                             <input type="text" class="form-control" name="first_name" id="first-name-input"
                                    placeholder="Иван" required 
                                    value="{{ request.form.first_name if request.form }}">
+                            <div id="firstname-error" class="invalid-feedback" style="display: none;"></div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Фамилия *</label>
                             <input type="text" class="form-control" name="last_name" id="last-name-input"
                                    placeholder="Иванов" required 
                                    value="{{ request.form.last_name if request.form }}">
+                            <div id="lastname-error" class="invalid-feedback" style="display: none;"></div>
                         </div>
                     </div>
                     
@@ -72,8 +129,11 @@
                                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
                                 <input type="password" class="form-control" name="password" id="password-input"
                                        placeholder="Пароль" required minlength="6">
+                                <span class="input-group-text password-toggle" id="toggle-password">
+                                    <i class="bi bi-eye"></i>
+                                </span>
                             </div>
-                            <div class="form-text">Минимум 6 символов</div>
+                            <div class="form-text">Минимум 6 символов. Только латинские буквы и цифры</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Подтверждение пароля *</label>
@@ -81,19 +141,23 @@
                                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
                                 <input type="password" class="form-control" name="confirm_password" id="confirm-password-input"
                                        placeholder="Повторите пароль" required>
+                                <span class="input-group-text password-toggle" id="toggle-confirm-password">
+                                    <i class="bi bi-eye"></i>
+                                </span>
                             </div>
                             <div id="password-error" class="invalid-feedback" style="display: none;"></div>
                             <div id="password-success" class="valid-feedback" style="display: none;">✓ Пароли совпадают</div>
                         </div>
                     </div>
                     
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="terms" required>
-                        <label class="form-check-label" for="terms">
-                            Я согласен с <a href="#">правилами сайта</a> и 
-                            <a href="#">политикой конфиденциальности</a>
-                        </label>
-                    </div>
+<div class="mb-3 form-check">
+    <input type="checkbox" class="form-check-input" id="terms" required>
+    <label class="form-check-label" for="terms">
+        Я согласен с 
+        <a href="#" data-bs-toggle="modal" data-bs-target="#rulesModal">правилами сайта</a> и 
+        <a href="#" data-bs-toggle="modal" data-bs-target="#privacyModal">политикой конфиденциальности</a>
+    </label>
+</div>
                     
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
@@ -115,7 +179,64 @@
     </div>
 </div>
 
+<div class="modal fade" id="rulesModal" tabindex="-1" aria-labelledby="rulesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rulesModalLabel">Правила сайта SoundGoodizer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe src="{{ url_for('static', filename='docs/rules.pdf') }}#toolbar=1&navpanes=1" 
+                        style="width: 100%; height: 70vh; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ url_for('static', filename='docs/rules.pdf') }}" class="btn btn-primary" download>
+                    <i class="bi bi-download"></i> Скачать PDF
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="privacyModal" tabindex="-1" aria-labelledby="privacyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="privacyModalLabel">Политика конфиденциальности SoundGoodizer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe src="{{ url_for('static', filename='docs/privacy.pdf') }}#toolbar=1&navpanes=1" 
+                        style="width: 100%; height: 70vh; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ url_for('static', filename='docs/privacy.pdf') }}" class="btn btn-primary" download>
+                    <i class="bi bi-download"></i> Скачать PDF
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('rulesModal').addEventListener('show.bs.modal', function () {
+        const iframe = this.querySelector('iframe');
+        const src = iframe.src.split('#')[0];
+        iframe.src = src + '#toolbar=1&navpanes=1&t=' + new Date().getTime();
+    });
+    
+    document.getElementById('privacyModal').addEventListener('show.bs.modal', function () {
+        const iframe = this.querySelector('iframe');
+        const src = iframe.src.split('#')[0];
+        iframe.src = src + '#toolbar=1&navpanes=1&t=' + new Date().getTime();
+    });
+});
+
 function formatPhoneNumber(phone) {
     let digits = phone.replace(/\D/g, '');
 
@@ -188,8 +309,158 @@ function resetField(fieldId) {
 }
 
 function validateEmail(email) {
+    const invalidCharsRegex = /[^a-zA-Z0-9@._\-]/;
+    if (invalidCharsRegex.test(email)) {
+        showError('email', 'Email содержит недопустимые символы');
+        return false;
+    }
+    
+    if (email.includes('..')) {
+        showError('email', 'Email не может содержать две точки подряд');
+        return false;
+    }
+    
+    if (email.startsWith('.') || email.endsWith('.')) {
+        showError('email', 'Email не может начинаться или заканчиваться точкой');
+        return false;
+    }
+    
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    if (!emailRegex.test(email)) {
+        showError('email', 'Введите корректный email');
+        return false;
+    }
+    
+    return true;
+}
+
+function isDomainValid(domain) {
+    return VALID_EMAIL_DOMAINS.includes(domain.toLowerCase());
+}
+
+function findSimilarDomain(domain) {
+    const domainLower = domain.toLowerCase();
+    
+    const commonTypos = {
+        'gmail.ru': 'gmail.com',
+        'gmial.com': 'gmail.com',
+        'gmal.com': 'gmail.com',
+        'gmil.com': 'gmail.com',
+        'gmai.com': 'gmail.com',
+        'gmaill.com': 'gmail.com',
+        'gmaiil.com': 'gmail.com',
+        'yandx.ru': 'yandex.ru',
+        'yadex.ru': 'yandex.ru',
+        'yandex.ru': 'yandex.ru',
+        'yandex.com': 'yandex.com',
+        'mail.ru': 'mail.ru',
+        'mailr.ru': 'mail.ru',
+        'maill.ru': 'mail.ru',
+        'mil.ru': 'mail.ru',
+        'yahooo.com': 'yahoo.com',
+        'yahhoo.com': 'yahoo.com',
+        'yaho.com': 'yahoo.com',
+        'hotmial.com': 'hotmail.com',
+        'hotmal.com': 'hotmail.com',
+        'hotmil.com': 'hotmail.com',
+        'outlok.com': 'outlook.com',
+        'outllok.com': 'outlook.com',
+        'outlook.com': 'outlook.com',
+        'icoud.com': 'icloud.com',
+        'iclod.com': 'icloud.com',
+        'iclooud.com': 'icloud.com',
+        'protonmal.com': 'protonmail.com',
+        'protonmil.com': 'protonmail.com',
+        'protomail.com': 'protonmail.com'
+    };
+    
+    if (commonTypos[domainLower]) {
+        return commonTypos[domainLower];
+    }
+    
+    for (let validDomain of VALID_EMAIL_DOMAINS) {
+        const domainBase = domainLower.split('.')[0];
+        const validBase = validDomain.split('.')[0];
+        
+        if (domainBase === validBase && domainLower !== validDomain) {
+            return validDomain;
+        }
+    }
+    
+    return null;
+}
+
+function checkEmailDomain(email) {
+    const domainWarning = document.getElementById('email-domain-warning');
+    const warningText = document.getElementById('domain-warning-text');
+    const suggestionsContainer = document.getElementById('domain-suggestions-container');
+    
+    if (!email || !email.includes('@')) {
+        domainWarning.classList.remove('visible');
+        suggestionsContainer.style.display = 'none';
+        return true;
+    }
+    
+    const parts = email.split('@');
+    if (parts.length !== 2) {
+        domainWarning.classList.remove('visible');
+        suggestionsContainer.style.display = 'none';
+        return true;
+    }
+    
+    const localPart = parts[0];
+    const domain = parts[1];
+    
+    if (!domain) {
+        domainWarning.classList.remove('visible');
+        suggestionsContainer.style.display = 'none';
+        return true;
+    }
+    
+    if (!domain.includes('.')) {
+        warningText.textContent = 'Домен должен содержать точку (например, @gmail.com)';
+        domainWarning.classList.add('visible');
+        suggestionsContainer.style.display = 'none';
+        return false;
+    }
+    
+    if (!isDomainValid(domain)) {
+        const similarDomain = findSimilarDomain(domain);
+        
+        if (similarDomain) {
+            warningText.innerHTML = `Домен ${domain} не существует. Возможно, вы имели в виду <strong>@${similarDomain}</strong>?`;
+            domainWarning.classList.add('visible');
+            
+            suggestionsContainer.style.display = 'block';
+            suggestionsContainer.innerHTML = `
+                <div class="domain-suggestion" onclick="applyDomainSuggestion('${similarDomain}')">
+                    <i class="bi bi-arrow-return-left"></i> Использовать @${similarDomain}
+                </div>
+            `;
+        } else {
+            warningText.textContent = `Домен ${domain} не является популярным почтовым сервисом. Проверьте правильность написания.`;
+            domainWarning.classList.add('visible');
+            suggestionsContainer.style.display = 'none';
+        }
+        return false;
+    }
+    
+    domainWarning.classList.remove('visible');
+    suggestionsContainer.style.display = 'none';
+    return true;
+}
+
+function applyDomainSuggestion(suggestedDomain) {
+    const emailInput = document.getElementById('email-input');
+    const currentEmail = emailInput.value;
+    const localPart = currentEmail.split('@')[0];
+    
+    emailInput.value = localPart + '@' + suggestedDomain;
+    
+    checkEmailDomain(emailInput.value);
+    checkUniqueness('email', emailInput.value.trim());
+    
+    document.getElementById('domain-suggestions-container').style.display = 'none';
 }
 
 function checkUniqueness(field, value) {
@@ -207,14 +478,25 @@ function checkUniqueness(field, value) {
         }
     }
     
-    if (field === 'login' && value.length < 3) {
-        showError('login', 'Логин должен содержать минимум 3 символа');
-        return;
+    if (field === 'login') {
+        const latinRegex = /^[a-zA-Z0-9_]+$/;
+        if (!latinRegex.test(value)) {
+            showError('login', 'Только латинские буквы, цифры и знак подчеркивания');
+            return;
+        }
+        if (value.length < 3) {
+            showError('login', 'Логин должен содержать минимум 3 символа');
+            return;
+        }
     }
     
-    if (field === 'email' && !validateEmail(value)) {
-        showError('email', 'Введите корректный email');
-        return;
+    if (field === 'email') {
+        if (!validateEmail(value)) {
+            return;
+        }
+        if (!checkEmailDomain(value)) {
+            return;
+        }
     }
     
     fetch('/api/check-unique', {
@@ -263,6 +545,12 @@ function validatePasswords() {
     const confirmPassword = document.getElementById('confirm-password-input').value;
     
     if (password && confirmPassword) {
+        const latinRegex = /^[a-zA-Z0-9]+$/;
+        if (!latinRegex.test(password)) {
+            showError('password', 'Только латинские буквы и цифры');
+            return false;
+        }
+        
         if (password.length < 6) {
             showError('password', 'Пароль должен содержать минимум 6 символов');
             return false;
@@ -277,13 +565,97 @@ function validatePasswords() {
     return false;
 }
 
+function togglePasswordVisibility(inputId, toggleId) {
+    const input = document.getElementById(inputId);
+    const toggle = document.getElementById(toggleId);
+    const icon = toggle.querySelector('i');
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'bi bi-eye-slash';
+    } else {
+        input.type = 'password';
+        icon.className = 'bi bi-eye';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const phoneInput = document.getElementById('phone-input');
     const loginInput = document.getElementById('login-input');
     const emailInput = document.getElementById('email-input');
+    const firstNameInput = document.getElementById('first-name-input');
+    const lastNameInput = document.getElementById('last-name-input');
     const passwordInput = document.getElementById('password-input');
     const confirmPasswordInput = document.getElementById('confirm-password-input');
     const form = document.getElementById('register-form');
+    
+    document.getElementById('toggle-password').addEventListener('click', function() {
+        togglePasswordVisibility('password-input', 'toggle-password');
+    });
+    
+    document.getElementById('toggle-confirm-password').addEventListener('click', function() {
+        togglePasswordVisibility('confirm-password-input', 'toggle-confirm-password');
+    });
+    
+    if (firstNameInput) {
+        firstNameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Tab' || 
+                e.key === 'Escape' || e.key === 'Enter' || e.key === 'ArrowLeft' || 
+                e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+                return;
+            }
+            
+            if (e.key >= '0' && e.key <= '9') {
+                e.preventDefault();
+                showError('firstname', 'Имя не может содержать цифры');
+                return;
+            }
+            
+            const char = e.key;
+            const isLetter = /^[a-zA-Zа-яА-ЯёЁ]$/.test(char);
+            if (!isLetter) {
+                e.preventDefault();
+                showError('firstname', 'Только буквы');
+            }
+        });
+        
+        firstNameInput.addEventListener('input', function() {
+            if (this.value.length > 0) {
+                document.getElementById('firstname-error').style.display = 'none';
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
+    
+    if (lastNameInput) {
+        lastNameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Tab' || 
+                e.key === 'Escape' || e.key === 'Enter' || e.key === 'ArrowLeft' || 
+                e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+                return;
+            }
+            
+            if (e.key >= '0' && e.key <= '9') {
+                e.preventDefault();
+                showError('lastname', 'Фамилия не может содержать цифры');
+                return;
+            }
+            
+            const char = e.key;
+            const isLetter = /^[a-zA-Zа-яА-ЯёЁ]$/.test(char);
+            if (!isLetter) {
+                e.preventDefault();
+                showError('lastname', 'Только буквы');
+            }
+        });
+        
+        lastNameInput.addEventListener('input', function() {
+            if (this.value.length > 0) {
+                document.getElementById('lastname-error').style.display = 'none';
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
     
     if (phoneInput) {
         phoneInput.addEventListener('input', function(e) {
@@ -352,10 +724,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clearTimeout(loginTimeout);
             const value = this.value.trim();
             
-            if (value.length < 3 && value.length > 0) {
-                showError('login', 'Логин должен содержать минимум 3 символа');
-                return;
-            } else if (value.length === 0) {
+            if (value.length === 0) {
                 resetField('login');
                 return;
             }
@@ -378,11 +747,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (!value) {
                 resetField('email');
-                return;
-            }
-            
-            if (!validateEmail(value)) {
-                showError('email', 'Введите корректный email');
+                document.getElementById('email-domain-warning').classList.remove('visible');
+                document.getElementById('domain-suggestions-container').style.display = 'none';
                 return;
             }
             
@@ -393,19 +759,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 500);
         });
         
-        if (emailInput.value && validateEmail(emailInput.value.trim())) {
+        if (emailInput.value) {
             checkUniqueness('email', emailInput.value.trim());
         }
     }
     
     if (passwordInput && confirmPasswordInput) {
         passwordInput.addEventListener('input', function() {
-            if (this.value.length > 0 && this.value.length < 6) {
-                showError('password', 'Пароль должен содержать минимум 6 символов');
-            } else if (confirmPasswordInput.value) {
+            if (confirmPasswordInput.value) {
                 validatePasswords();
-            } else {
-                resetField('password');
             }
         });
         
@@ -416,13 +778,36 @@ document.addEventListener('DOMContentLoaded', function() {
         form.addEventListener('submit', function(e) {
             let hasErrors = false;
             
-            if (!loginInput.value || loginInput.value.length < 3) {
-                showError('login', 'Логин должен содержать минимум 3 символа');
+            if (!loginInput.value) {
+                showError('login', 'Заполните логин');
+                hasErrors = true;
+            } else {
+                const latinRegex = /^[a-zA-Z0-9_]+$/;
+                if (!latinRegex.test(loginInput.value)) {
+                    showError('login', 'Только латинские буквы, цифры и знак подчеркивания');
+                    hasErrors = true;
+                } else if (loginInput.value.length < 3) {
+                    showError('login', 'Логин должен содержать минимум 3 символа');
+                    hasErrors = true;
+                }
+            }
+            
+            if (!emailInput.value) {
+                showError('email', 'Заполните email');
+                hasErrors = true;
+            } else if (!validateEmail(emailInput.value)) {
+                hasErrors = true;
+            } else if (!checkEmailDomain(emailInput.value)) {
                 hasErrors = true;
             }
             
-            if (!emailInput.value || !validateEmail(emailInput.value)) {
-                showError('email', 'Введите корректный email');
+            if (!firstNameInput.value) {
+                showError('firstname', 'Заполните имя');
+                hasErrors = true;
+            }
+            
+            if (!lastNameInput.value) {
+                showError('lastname', 'Заполните фамилию');
                 hasErrors = true;
             }
             
@@ -438,9 +823,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            if (!passwordInput.value || passwordInput.value.length < 6) {
-                showError('password', 'Пароль должен содержать минимум 6 символов');
+            if (!passwordInput.value) {
+                showError('password', 'Введите пароль');
                 hasErrors = true;
+            } else {
+                const latinRegex = /^[a-zA-Z0-9]+$/;
+                if (!latinRegex.test(passwordInput.value)) {
+                    showError('password', 'Только латинские буквы и цифры');
+                    hasErrors = true;
+                } else if (passwordInput.value.length < 6) {
+                    showError('password', 'Пароль должен содержать минимум 6 символов');
+                    hasErrors = true;
+                }
             }
             
             if (!validatePasswords()) {

@@ -1351,6 +1351,69 @@ def profile():
         flash(f'Ошибка при загрузке профиля: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
+@app.route('/api/search_suggestions')
+def api_search_suggestions():
+    """API для автодополнения поиска"""
+    query = request.args.get('q', '').strip()
+    
+    if len(query) < 2:
+        return jsonify([])
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify([])
+    
+    try:
+        cursor = conn.cursor()
+        
+        sql = """
+        SELECT TOP 10 
+            i.instrument_id,
+            i.name,
+            i.model,
+            b.brand_name,
+            i.main_image_url,
+            i.purchase_price
+        FROM instruments i
+        LEFT JOIN brands b ON i.brand_id = b.brand_id
+        WHERE i.is_available_for_sale = 1
+          AND (i.name LIKE ? OR i.model LIKE ? OR b.brand_name LIKE ?)
+        ORDER BY 
+            CASE 
+                WHEN i.name LIKE ? THEN 1
+                WHEN i.model LIKE ? THEN 2
+                WHEN b.brand_name LIKE ? THEN 3
+                ELSE 4
+            END,
+            i.views_count DESC
+        """
+        
+        search_term = f"%{query}%"
+        params = [search_term, search_term, search_term, 
+                  f"{query}%", f"{query}%", f"{query}%"]
+        
+        cursor.execute(sql, params)
+        
+        suggestions = []
+        for row in cursor.fetchall():
+            suggestions.append({
+                'id': row[0],
+                'name': row[1],
+                'model': row[2],
+                'brand': row[3],
+                'image': row[4] if row[4] else 'img/default-instrument.jpg',
+                'price': row[5],
+                'url': url_for('instrument_detail', instrument_id=row[0])
+            })
+        
+        conn.close()
+        return jsonify(suggestions)
+        
+    except Exception as e:
+        print(f"Error in search suggestions: {e}")
+        conn.close()
+        return jsonify([])
+
 @app.route('/orders')
 @login_required
 def orders():
@@ -2148,13 +2211,12 @@ def create_repair_request():
             photos = request.files.getlist('photos')
             photo_urls = []
             
-            if photos and photos[0].filename:
+            if photos and photos[0] and photos[0].filename:
                 os.makedirs(app.config['REPAIR_PHOTOS_FOLDER'], exist_ok=True)
                 
                 for photo in photos:
-                    if photo and allowed_repair_file(photo.filename):
-                        filename = secure_filename(photo.filename)
-                        ext = filename.rsplit('.', 1)[1].lower()
+                    if photo and photo.filename and allowed_repair_file(photo.filename):
+                        ext = photo.filename.rsplit('.', 1)[1].lower() if '.' in photo.filename else 'jpg'
                         new_filename = f"repair_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
                         
                         filepath = os.path.join(app.config['REPAIR_PHOTOS_FOLDER'], new_filename)

@@ -365,7 +365,18 @@ document.addEventListener('DOMContentLoaded', function() {
         rows.forEach(row => {
             const name = row.querySelector('td:first-child .fw-bold').textContent.toLowerCase();
             const email = row.querySelector('td:nth-child(2) .bi-envelope').parentElement.textContent.toLowerCase();
-            const userRole = row.querySelector('td:nth-child(3) .badge').textContent.trim();
+            
+            const roleBadge = row.querySelector('td:nth-child(3) .badge');
+            let userRole = '';
+            
+            if (roleBadge.classList.contains('bg-danger')) {
+                userRole = 'admin';
+            } else if (roleBadge.classList.contains('bg-info')) {
+                userRole = 'technician';
+            } else {
+                userRole = 'customer';
+            }
+            
             const userStatus = row.querySelector('td:nth-child(4) .badge').textContent === 'Активен' ? '1' : '0';
             
             let show = true;

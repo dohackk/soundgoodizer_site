@@ -319,11 +319,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (photo.trim()) {
                     const div = document.createElement('div');
                     div.className = 'photo-item';
-                    div.style.aspectRatio = '1';
-                    div.style.borderRadius = '8px';
-                    div.style.overflow = 'hidden';
-                    div.style.cursor = 'pointer';
-                    div.style.border = '1px solid #dee2e6';
                     div.innerHTML = `<img src="{{ url_for('static', filename='') }}${photo.trim()}" style="width:100%; height:100%; object-fit:cover;">`;
                     div.onclick = function() {
                         window.open(this.querySelector('img').src, '_blank');
@@ -336,40 +331,86 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function filterTable() {
         const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
-        const status = document.getElementById('statusFilter')?.value || '';
-        const technician = document.getElementById('technicianFilter')?.value || '';
+        const statusFilter = document.getElementById('statusFilter')?.value || '';
+        const technicianFilter = document.getElementById('technicianFilter')?.value || '';
         const dateFrom = document.getElementById('dateFrom')?.value || '';
         const rows = document.querySelectorAll('#repairTable tbody tr');
+        let visibleCount = 0;
         
         rows.forEach(row => {
             const requestNumber = row.cells[0].textContent.toLowerCase();
             const instrument = row.cells[3].textContent.toLowerCase();
-            const requestStatus = row.cells[7].querySelector('select').value;
-            const requestTechnician = row.cells[8].querySelector('select').value;
+            
+            const statusSelect = row.cells[7].querySelector('select');
+            const selectedOption = statusSelect.options[statusSelect.selectedIndex];
+            const requestStatusText = selectedOption ? selectedOption.textContent.trim() : '';
+            
+            const technicianSelect = row.cells[8].querySelector('select');
+            const technicianValue = technicianSelect.value;
+            
             const dateStr = row.cells[1].textContent;
             
             let show = true;
-            if (search && !requestNumber.includes(search) && !instrument.includes(search)) show = false;
-            if (status && requestStatus !== status) show = false;
-            if (technician === 'unassigned' && requestTechnician) show = false;
-            else if (technician && technician !== 'unassigned' && requestTechnician !== technician) show = false;
             
-            if (dateFrom) {
+            if (search && !requestNumber.includes(search) && !instrument.includes(search)) {
+                show = false;
+            }
+            
+            if (statusFilter && requestStatusText !== statusFilter) {
+                show = false;
+            }
+            
+            if (technicianFilter) {
+                if (technicianFilter === 'unassigned') {
+                    if (technicianValue) show = false;
+                } else if (technicianValue !== technicianFilter) {
+                    show = false;
+                }
+            }
+            
+            if (show && dateFrom) {
                 try {
                     const [day, month, year] = dateStr.split('.');
                     const requestDate = new Date(year, month-1, day);
-                    if (requestDate < new Date(dateFrom)) show = false;
-                } catch (e) {}
+                    requestDate.setHours(0, 0, 0, 0);
+                    
+                    const fromDate = new Date(dateFrom);
+                    fromDate.setHours(0, 0, 0, 0);
+                    
+                    if (requestDate < fromDate) show = false;
+                } catch (e) {
+                    console.log('Date parsing error', e);
+                }
             }
             
             row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
         });
+        
+        const tableBody = document.querySelector('#repairTable tbody');
+        let noResultsRow = document.getElementById('noResultsRow');
+        
+        if (visibleCount === 0) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = '<td colspan="10" class="text-center py-4">Заявки не найдены</td>';
+                tableBody.appendChild(noResultsRow);
+            }
+        } else if (noResultsRow) {
+            noResultsRow.remove();
+        }
     }
     
     document.getElementById('searchInput')?.addEventListener('input', filterTable);
     document.getElementById('statusFilter')?.addEventListener('change', filterTable);
     document.getElementById('technicianFilter')?.addEventListener('change', filterTable);
     document.getElementById('dateFrom')?.addEventListener('change', filterTable);
+    
+    console.log('Repair filter initialized');
+    document.getElementById('statusFilter')?.addEventListener('change', function() {
+        console.log('Status filter changed to:', this.value);
+    });
 });
 </script>
 {% endblock %}

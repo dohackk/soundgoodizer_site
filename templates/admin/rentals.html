@@ -122,10 +122,10 @@
                             </select>
                         </td>
                         <td class="text-end px-4">
-                            <button class="btn btn-sm btn-outline-primary view-rental-btn" 
-                                    data-rental-id="{{ rental[0] }}">
+                            <a href="{{ url_for('admin_rental_detail', rental_id=rental[0]) }}" 
+                               class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-eye"></i>
-                            </button>
+                            </a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -160,8 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     alert('Статус обновлен');
-                    this.querySelectorAll('option').forEach(opt => opt.removeAttribute('selected'));
-                    this.querySelector(`option[value="${statusId}"]`).setAttribute('selected', 'selected');
+                    location.reload();
                 } else {
                     alert('Ошибка: ' + data.message);
                 }
@@ -172,44 +171,73 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    document.querySelectorAll('.view-rental-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const rentalId = this.dataset.rentalId;
-            window.location.href = '/admin/rental/' + rentalId;
-        });
-    });
-    
     function filterTable() {
         const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
-        const status = document.getElementById('statusFilter')?.value || '';
+        const statusFilter = document.getElementById('statusFilter')?.value || '';
         const dateFrom = document.getElementById('dateFrom')?.value || '';
         const dateTo = document.getElementById('dateTo')?.value || '';
         const rows = document.querySelectorAll('#rentalsTable tbody tr');
+        let visibleCount = 0;
         
         rows.forEach(row => {
             const rentalNumber = row.cells[0].textContent.toLowerCase();
             const user = row.cells[2].textContent.toLowerCase();
-            const rentalStatus = row.cells[7].querySelector('select').value;
+            
+            const statusSelect = row.cells[7].querySelector('select');
+            const selectedOption = statusSelect.options[statusSelect.selectedIndex];
+            const rentalStatusText = selectedOption ? selectedOption.textContent.trim() : '';
+            
             const dateStr = row.cells[1].textContent;
             
             let show = true;
-            if (search && !rentalNumber.includes(search) && !user.includes(search)) show = false;
-            if (status && rentalStatus !== status) show = false;
             
-            if (dateFrom || dateTo) {
+            if (search && !rentalNumber.includes(search) && !user.includes(search)) {
+                show = false;
+            }
+            
+            if (statusFilter && rentalStatusText !== statusFilter) {
+                show = false;
+            }
+            
+            if (show && (dateFrom || dateTo)) {
                 try {
                     const [day, month, year] = dateStr.split('.');
                     const rentalDate = new Date(year, month-1, day);
+                    rentalDate.setHours(0, 0, 0, 0);
                     
-                    if (dateFrom && rentalDate < new Date(dateFrom)) show = false;
-                    if (dateTo && rentalDate > new Date(dateTo)) show = false;
+                    if (dateFrom) {
+                        const fromDate = new Date(dateFrom);
+                        fromDate.setHours(0, 0, 0, 0);
+                        if (rentalDate < fromDate) show = false;
+                    }
+                    
+                    if (dateTo) {
+                        const toDate = new Date(dateTo);
+                        toDate.setHours(23, 59, 59, 999);
+                        if (rentalDate > toDate) show = false;
+                    }
                 } catch (e) {
-                    console.log('Date parsing error');
+                    console.log('Date parsing error', e);
                 }
             }
             
             row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
         });
+        
+        const tableBody = document.querySelector('#rentalsTable tbody');
+        let noResultsRow = document.getElementById('noResultsRow');
+        
+        if (visibleCount === 0) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = '<td colspan="9" class="text-center py-4">Аренды не найдены</td>';
+                tableBody.appendChild(noResultsRow);
+            }
+        } else if (noResultsRow) {
+            noResultsRow.remove();
+        }
     }
     
     const searchInput = document.getElementById('searchInput');
@@ -221,6 +249,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (statusFilter) statusFilter.addEventListener('change', filterTable);
     if (dateFrom) dateFrom.addEventListener('change', filterTable);
     if (dateTo) dateTo.addEventListener('change', filterTable);
+    
+    console.log('Rentals filter initialized');
+    document.getElementById('statusFilter')?.addEventListener('change', function() {
+        console.log('Status filter changed to:', this.value);
+    });
 });
 </script>
 {% endblock %}

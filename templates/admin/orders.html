@@ -139,7 +139,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const statusId = this.value;
             
             if (!confirm('Изменить статус заказа?')) {
-                // Возвращаем предыдущее значение
                 const previousValue = this.querySelector('option[selected]')?.value;
                 if (previousValue) this.value = previousValue;
                 return;
@@ -157,8 +156,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     alert('Статус обновлен');
-                    this.querySelectorAll('option').forEach(opt => opt.removeAttribute('selected'));
-                    this.querySelector(`option[value="${statusId}"]`).setAttribute('selected', 'selected');
+                    location.reload();
                 } else {
                     alert('Ошибка: ' + data.message);
                 }
@@ -171,35 +169,77 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function filterTable() {
         const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
-        const status = document.getElementById('statusFilter')?.value || '';
+        const statusFilter = document.getElementById('statusFilter')?.value || '';
         const dateFrom = document.getElementById('dateFrom')?.value || '';
         const dateTo = document.getElementById('dateTo')?.value || '';
         const rows = document.querySelectorAll('#ordersTable tbody tr');
+        let visibleCount = 0;
         
         rows.forEach(row => {
             const orderNumber = row.cells[0].textContent.toLowerCase();
             const user = row.cells[2].textContent.toLowerCase();
-            const orderStatus = row.cells[7].querySelector('select').value;
+            
+            const statusSelect = row.cells[7].querySelector('select');
+            const selectedOption = statusSelect.options[statusSelect.selectedIndex];
+            const orderStatusText = selectedOption ? selectedOption.textContent.trim() : '';
+            
             const dateStr = row.cells[1].textContent;
             
             let show = true;
-            if (search && !orderNumber.includes(search) && !user.includes(search)) show = false;
-            if (status && orderStatus !== status) show = false;
             
-            if (dateFrom || dateTo) {
+            if (search && !orderNumber.includes(search) && !user.includes(search)) {
+                show = false;
+            }
+            
+            if (statusFilter && orderStatusText !== statusFilter) {
+                show = false;
+            }
+            
+            if (show && (dateFrom || dateTo)) {
                 try {
                     const [day, month, year] = dateStr.split('.');
                     const orderDate = new Date(year, month-1, day);
+                    orderDate.setHours(0, 0, 0, 0);
                     
-                    if (dateFrom && orderDate < new Date(dateFrom)) show = false;
-                    if (dateTo && orderDate > new Date(dateTo)) show = false;
+                    if (dateFrom) {
+                        const fromDate = new Date(dateFrom);
+                        fromDate.setHours(0, 0, 0, 0);
+                        if (orderDate < fromDate) show = false;
+                    }
+                    
+                    if (dateTo) {
+                        const toDate = new Date(dateTo);
+                        toDate.setHours(23, 59, 59, 999);
+                        if (orderDate > toDate) show = false;
+                    }
                 } catch (e) {
-                    console.log('Date parsing error');
+                    console.log('Date parsing error', e);
                 }
             }
             
             row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
         });
+        
+        const counterEl = document.querySelector('.text-muted.mb-0');
+        if (counterEl) {
+            const totalCount = rows.length;
+            counterEl.innerHTML = `Всего заказов: ${totalCount} | Отображено: ${visibleCount}`;
+        }
+        
+        const tableBody = document.querySelector('#ordersTable tbody');
+        let noResultsRow = document.getElementById('noResultsRow');
+        
+        if (visibleCount === 0) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = '<td colspan="9" class="text-center py-4">Заказы не найдены</td>';
+                tableBody.appendChild(noResultsRow);
+            }
+        } else if (noResultsRow) {
+            noResultsRow.remove();
+        }
     }
     
     const searchInput = document.getElementById('searchInput');
@@ -211,6 +251,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (statusFilter) statusFilter.addEventListener('change', filterTable);
     if (dateFrom) dateFrom.addEventListener('change', filterTable);
     if (dateTo) dateTo.addEventListener('change', filterTable);
+    
+    console.log('Filter initialized');
+    document.getElementById('statusFilter')?.addEventListener('change', function() {
+        console.log('Status filter changed to:', this.value);
+    });
 });
 </script>
 {% endblock %}

@@ -174,6 +174,250 @@
                 font-size: 2rem;
             }
         }
+#searchInput:focus {
+    outline: none;
+    box-shadow: none;
+    border-color: #dee2e6;
+}
+
+#searchInput:focus + .input-group-text {
+    border-color: #dee2e6;
+}
+
+.input-group:focus-within {
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    border-radius: 8px;
+}
+
+.input-group .input-group-text {
+    transition: all 0.2s;
+}
+
+.search-suggestion-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.search-suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.search-suggestion-item:hover {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.search-suggestion-item:hover .suggestion-name {
+    color: var(--secondary-color);
+}
+
+.suggestion-image-container {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #f0f0f0, #fafafa);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-right: 15px;
+    flex-shrink: 0;
+}
+
+.suggestion-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.search-suggestion-item:hover .suggestion-image {
+    transform: scale(1.1);
+}
+
+.suggestion-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.suggestion-name {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 4px;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.2s;
+}
+
+.suggestion-name .highlight {
+    background: linear-gradient(120deg, #fff3bf 0%, #ffe69c 100%);
+    color: #2c3e50;
+    padding: 0 2px;
+    border-radius: 3px;
+    font-weight: 700;
+}
+
+.suggestion-details {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.suggestion-details i {
+    font-size: 0.7rem;
+    color: #bdc3c7;
+    margin-right: 2px;
+}
+
+.suggestion-detail-item {
+    display: inline-flex;
+    align-items: center;
+    background: #f8f9fa;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+
+.suggestion-price-container {
+    text-align: right;
+    margin-left: 12px;
+    flex-shrink: 0;
+}
+
+.suggestion-price {
+    font-weight: 700;
+    color: var(--accent-color);
+    font-size: 1.1rem;
+    line-height: 1.2;
+}
+
+.suggestion-price small {
+    font-size: 0.7rem;
+    color: #95a5a6;
+    font-weight: 400;
+}
+
+.suggestion-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+    color: #2e7d32;
+    font-size: 0.7rem;
+    border-radius: 12px;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.search-loading {
+    padding: 25px;
+    text-align: center;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+}
+
+.search-loading .spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 10px;
+    border: 3px solid #f0f0f0;
+    border-top: 3px solid var(--secondary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.no-results {
+    padding: 30px 20px;
+    text-align: center;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+}
+
+.no-results-icon {
+    font-size: 3rem;
+    background: linear-gradient(135deg, #e0e0e0, #f5f5f5);
+    width: 80px;
+    height: 80px;
+    line-height: 80px;
+    border-radius: 50%;
+    margin: 0 auto 15px;
+    color: #95a5a6;
+}
+
+.no-results h6 {
+    color: #2c3e50;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.no-results p {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    margin-bottom: 0;
+}
+
+.view-all-results {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+    border-top: 1px solid #e9ecef;
+    color: var(--secondary-color);
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.view-all-results:hover {
+    background: linear-gradient(135deg, #e9ecef, #f8f9fa);
+    color: var(--primary-color);
+}
+
+.view-all-results i {
+    transition: transform 0.2s;
+}
+
+.view-all-results:hover i {
+    transform: translateX(5px);
+}
+
+.search-suggestion-item.selected {
+    background: linear-gradient(135deg, #e8f4fd, #d4eafc);
+    border-left: 3px solid var(--secondary-color);
+}
+
+#searchSuggestions::-webkit-scrollbar {
+    width: 6px;
+}
+
+#searchSuggestions::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+#searchSuggestions::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #bdc3c7, #95a5a6);
+    border-radius: 10px;
+}
+
+#searchSuggestions::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+}
     </style>
 </head>
 <body>
@@ -224,16 +468,26 @@
                     {% endif %}
                 </ul>
                 
-                <div class="d-flex align-items-center">
-                    <form class="d-flex me-3" action="{{ url_for('catalog') }}" method="get">
-                        <div class="input-group">
-                            <input type="text" class="form-control" name="search" placeholder="Поиск..." 
-                                   value="{{ request.args.get('search', '') }}">
-                            <button class="btn btn-outline-primary" type="submit">
-                                <i class="bi bi-search"></i>
-                            </button>
-                        </div>
-                    </form>
+<div class="position-relative me-3" style="min-width: 300px;">
+    <form class="d-flex" action="{{ url_for('catalog') }}" method="get" id="searchForm">
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0">
+                <i class="bi bi-search text-primary"></i>
+            </span>
+            <input type="text" class="form-control border-start-0 ps-0" name="search" id="searchInput" 
+                   placeholder="Поиск..." autocomplete="off"
+                   value="{{ request.args.get('search', '') }}"
+                   style="box-shadow: none; border-left: none;">
+            <button class="btn btn-primary" type="submit">
+                <i class="bi bi-arrow-right"></i>
+            </button>
+        </div>
+    </form>
+    
+    <div id="searchSuggestions" class="position-absolute bg-white shadow-lg rounded-4 mt-2 w-100" 
+         style="z-index: 1000; display: none; max-height: 450px; overflow-y: auto; border: 1px solid rgba(0,0,0,0.05);">
+    </div>
+</div>
                     
                     <a href="{{ url_for('cart') }}" class="btn btn-outline-primary me-3 position-relative">
                         <i class="bi bi-cart3"></i>
@@ -385,6 +639,191 @@
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     
     <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const suggestionsContainer = document.getElementById('searchSuggestions');
+    const searchForm = document.getElementById('searchForm');
+    
+    let debounceTimer;
+    let currentRequest = null;
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            
+            clearTimeout(debounceTimer);
+            
+            if (query.length < 2) {
+                suggestionsContainer.style.display = 'none';
+                return;
+            }
+            
+            if (currentRequest) {
+                currentRequest.abort();
+            }
+            
+            suggestionsContainer.innerHTML = `
+                <div class="search-loading">
+                    <div class="spinner"></div>
+                    <div class="text-muted">Ищем инструменты...</div>
+                </div>
+            `;
+            suggestionsContainer.style.display = 'block';
+            
+            debounceTimer = setTimeout(function() {
+                currentRequest = new XMLHttpRequest();
+                currentRequest.open('GET', '/api/search_suggestions?q=' + encodeURIComponent(query), true);
+                
+                currentRequest.onload = function() {
+                    if (currentRequest.status === 200) {
+                        const suggestions = JSON.parse(currentRequest.responseText);
+                        displaySuggestions(suggestions, query);
+                    }
+                    currentRequest = null;
+                };
+                
+                currentRequest.onerror = function() {
+                    currentRequest = null;
+                };
+                
+                currentRequest.send();
+            }, 300);
+        });
+        
+        function displaySuggestions(suggestions, query) {
+            if (suggestions.length === 0) {
+                suggestionsContainer.innerHTML = `
+                    <div class="no-results">
+                        <div class="no-results-icon">
+                            <i class="bi bi-emoji-frown"></i>
+                        </div>
+                        <h6>Ничего не найдено</h6>
+                        <p class="small">Попробуйте изменить запрос</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            suggestions.forEach(item => {
+                const brand = item.brand ? item.brand : '';
+                const model = item.model ? item.model : '';
+                const name = item.name;
+                
+                const highlightedName = highlightMatch(name, query);
+                
+                const detailParts = [];
+                if (brand) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-tag"></i> ${brand}</span>`);
+                if (model) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-upc-scan"></i> ${model}</span>`);
+                
+                html += `
+                    <div class="search-suggestion-item" onclick="window.location.href='${item.url}'">
+                        <div class="suggestion-image-container">
+                            <img src="${item.image.startsWith('http') ? item.image : '/static/' + item.image}" 
+                                 class="suggestion-image" 
+                                 alt="${item.name}"
+                                 loading="lazy"
+                                 onerror="this.src='/static/img/default-instrument.jpg'">
+                        </div>
+                        <div class="suggestion-info">
+                            <div class="suggestion-name">${highlightedName}</div>
+                            <div class="suggestion-details">
+                                ${detailParts.join(' ')}
+                            </div>
+                        </div>
+                        <div class="suggestion-price-container">
+                            <div class="suggestion-price">${item.price.toLocaleString()} <small>₽</small></div>
+                            <span class="suggestion-badge">
+                                <i class="bi bi-eye"></i> в наличии
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                <a href="/catalog?search=${encodeURIComponent(query)}" class="view-all-results">
+                    <span><i class="bi bi-grid me-2"></i>Все результаты</span>
+                    <i class="bi bi-arrow-right"></i>
+                </a>
+            `;
+            
+            suggestionsContainer.innerHTML = html;
+        }
+        
+        function highlightMatch(text, query) {
+            if (!text) return '';
+            const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+            return text.replace(regex, '<span class="highlight">$1</span>');
+        }
+        
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !suggestionsContainer.contains(e.target)) {
+                suggestionsContainer.style.display = 'none';
+            }
+        });
+        
+        searchInput.addEventListener('focus', function() {
+            if (this.value.trim().length >= 2 && suggestionsContainer.children.length > 0) {
+                suggestionsContainer.style.display = 'block';
+            }
+        });
+        
+        suggestionsContainer.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+        
+        let selectedIndex = -1;
+        
+        searchInput.addEventListener('keydown', function(e) {
+            const items = suggestionsContainer.querySelectorAll('.search-suggestion-item');
+            
+            if (items.length === 0) return;
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (selectedIndex < items.length - 1) {
+                    selectedIndex++;
+                } else {
+                    selectedIndex = 0;
+                }
+                updateSelection(items, selectedIndex);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (selectedIndex > 0) {
+                    selectedIndex--;
+                } else {
+                    selectedIndex = items.length - 1;
+                }
+                updateSelection(items, selectedIndex);
+            } else if (e.key === 'Enter') {
+                if (selectedIndex >= 0 && selectedIndex < items.length) {
+                    e.preventDefault();
+                    items[selectedIndex].click();
+                }
+            } else {
+                selectedIndex = -1;
+                items.forEach(item => item.classList.remove('selected'));
+            }
+        });
+        
+        function updateSelection(items, index) {
+            items.forEach((item, i) => {
+                if (i === index) {
+                    item.classList.add('selected');
+                    item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        }
+    }
+});
+
         function updateCartCount() {
             $.get('/api/cart_count', function(data) {
                 $('#cartBadge').text(data.count || 0);

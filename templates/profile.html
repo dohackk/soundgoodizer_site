@@ -16,6 +16,8 @@
         width: 150px;
         height: 150px;
         margin: 0 auto;
+        position: relative;
+        cursor: pointer;
     }
     
     .profile-avatar {
@@ -25,6 +27,28 @@
         border: 5px solid white;
         object-fit: cover;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    .avatar-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s;
+        color: white;
+        font-size: 2rem;
+        cursor: pointer;
+    }
+    
+    .profile-avatar-container:hover .avatar-overlay {
+        opacity: 1;
     }
     
     .profile-stats {
@@ -49,28 +73,51 @@
         opacity: 0.9;
     }
     
-    .profile-actions {
+    .avatar-actions {
         display: flex;
         gap: 10px;
-        margin-top: 1rem;
-        flex-wrap: wrap;
         justify-content: center;
+        margin-top: 15px;
     }
     
-    .upload-btn {
-        position: relative;
-        overflow: hidden;
-        display: inline-block;
+    .btn-avatar {
+        background-color: white;
+        color: var(--primary-color);
+        border: none;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     
-    .upload-btn input[type=file] {
-        position: absolute;
-        left: 0;
-        top: 0;
-        opacity: 0;
-        width: 100%;
-        height: 100%;
-        cursor: pointer;
+    .btn-avatar:hover {
+        background-color: var(--secondary-color);
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    
+    .btn-avatar i {
+        margin-right: 5px;
+    }
+    
+    .btn-avatar-outline {
+        background-color: transparent;
+        color: white;
+        border: 1px solid rgba(255,255,255,0.5);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    
+    .btn-avatar-outline:hover {
+        background-color: rgba(255,255,255,0.1);
+        border-color: white;
+        transform: translateY(-2px);
     }
     
     .user-info-card {
@@ -152,88 +199,208 @@
         color: var(--secondary-color);
     }
     
-    .is-valid {
-        border-color: #28a745 !important;
-        padding-right: calc(1.5em + .75rem);
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
-        background-repeat: no-repeat;
-        background-position: right calc(.375em + .1875rem) center;
-        background-size: calc(.75em + .375rem) calc(.75em + .375rem);
+    .password-input-group {
+        position: relative;
     }
     
-    .is-invalid {
-        border-color: #dc3545 !important;
-        padding-right: calc(1.5em + .75rem);
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23dc3545' viewBox='0 0 12 12'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
-        background-repeat: no-repeat;
-        background-position: right calc(.375em + .1875rem) center;
-        background-size: calc(.75em + .375rem) calc(.75em + .375rem);
-    }
-    
-    .verification-code-container {
-        max-width: 350px;
-    }
-    
-    .code-input {
-        letter-spacing: 10px;
-        font-size: 1.5rem;
-        text-align: center;
-        font-weight: bold;
-        font-family: monospace;
-    }
-    
-    .password-form-container {
-        background-color: #f8f9fa;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #dee2e6;
-    }
-    
-    .resend-code-btn {
-        text-decoration: none;
+    .password-toggle {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
         cursor: pointer;
-        color: #0d6efd;
+        color: #6c757d;
+        z-index: 10;
     }
     
-    .resend-code-btn:hover {
-        text-decoration: underline;
+    .password-toggle:hover {
+        color: var(--secondary-color);
     }
+    
+    .password-requirements {
+        font-size: 0.8rem;
+        margin-top: 5px;
+        color: #6c757d;
+    }
+    
+    /* Стили для кадрирования */
+    .crop-container {
+        max-height: 400px;
+        overflow: hidden;
+        margin-bottom: 20px;
+        background: #f8f9fa;
+        border-radius: 10px;
+        text-align: center;
+    }
+    
+    .crop-container img {
+        max-width: 100%;
+        max-height: 400px;
+        display: inline-block;
+    }
+    
+    .crop-preview-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 20px 0;
+    }
+    
+    .crop-preview {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 3px solid var(--secondary-color);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        margin-bottom: 10px;
+        background-color: #f8f9fa;
+    }
+    
+    .crop-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .crop-preview-label {
+        font-weight: 500;
+        color: var(--primary-color);
+    }
+    
+    .crop-controls {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin: 20px 0;
+        flex-wrap: wrap;
+    }
+    
+    .crop-control-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        color: var(--primary-color);
+        transition: all 0.2s;
+    }
+    
+    .crop-control-btn:hover {
+        background-color: var(--secondary-color);
+        color: white;
+        border-color: var(--secondary-color);
+    }
+    
+    .file-input-hidden {
+        display: none;
+    }
+    
+    .alert-custom {
+        border-radius: 10px;
+        padding: 15px 20px;
+        margin-bottom: 20px;
+        border: none;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    .alert-custom i {
+        margin-right: 10px;
+        font-size: 1.2rem;
+    }
+    
+    .alert-success-custom {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .alert-danger-custom {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .alert-warning-custom {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .validation-message {
+        font-size: 0.8rem;
+        margin-top: 5px;
+        display: none;
+    }
+    
+    .validation-message.show {
+        display: block;
+    }
+    
+    .validation-message i {
+        margin-right: 5px;
+    }
+
+    .preview-circle {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid var(--secondary-color);
+    margin: 0 auto;
+}
+
+    .preview-circle img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-4">
+
     <div class="profile-header">
-        <div class="row align-items-center">
+        <div class="row">
             <div class="col-md-3 text-center">
-                <div class="profile-avatar-container">
+                <div class="profile-avatar-container" id="avatarClickArea">
                     {% if user.avatar_url %}
-                    <img src="{{ url_for('static', filename=user.avatar_url) }}" 
+                    <img src="{{ url_for('static', filename=user.avatar_url) }}?t={{ range(1, 999999) | random }}" 
                          class="profile-avatar" 
                          alt="Аватар {{ user.first_name }}">
+                    <div class="avatar-overlay">
+                        <i class="bi bi-camera-fill"></i>
+                    </div>
                     {% else %}
                     <div class="no-avatar">
                         <i class="bi bi-person-circle"></i>
                     </div>
+                    <div class="avatar-overlay">
+                        <i class="bi bi-camera-fill"></i>
+                    </div>
                     {% endif %}
                 </div>
                 
-                <div class="mt-3">
-                    <div class="profile-actions">
-                        <form method="POST" enctype="multipart/form-data" style="display: inline;">
-                            <label class="btn btn-light upload-btn">
-                                <i class="bi bi-camera me-1"></i>Сменить фото
-                                <input type="file" name="avatar" accept="image/*" onchange="this.form.submit()">
-                            </label>
-                        </form>
-                        
-                        {% if user.avatar_url %}
-                        <button type="button" class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#avatarModal">
-                            <i class="bi bi-trash me-1"></i>Удалить
-                        </button>
-                        {% endif %}
-                    </div>
+                <div class="avatar-actions">
+                    <button type="button" class="btn-avatar" id="changePhotoBtn">
+                        <i class="bi bi-camera"></i>
+                        {% if user.avatar_url %}Изменить{% else %}Установить фото{% endif %}
+                    </button>
+                    
+                    {% if user.avatar_url %}
+                    <button type="button" class="btn-avatar-outline" data-bs-toggle="modal" data-bs-target="#avatarModal">
+                        <i class="bi bi-trash"></i>
+                        Удалить
+                    </button>
+                    {% endif %}
                 </div>
+                
+                <input type="file" id="avatarInput" class="file-input-hidden" accept="image/jpeg,image/png,image/gif,image/webp">
+                
+                <small class="d-block mt-2" style="color: rgba(255,255,255,0.7);">
+                    <i class="bi bi-info-circle"></i> JPG, PNG, GIF, WEBP до 5 MB
+                </small>
             </div>
             
             <div class="col-md-9">
@@ -269,7 +436,7 @@
     
     <div class="row">
         <div class="col-md-6 mb-4">
-            <div class="card h-70">
+            <div class="card h-100">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Личная информация</h5>
                 </div>
@@ -300,147 +467,226 @@
             </div>
         </div>
         
-      <div class="col-md-6 mb-4">
-    <div class="card h-100">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Последние действия</h5>
-        </div>
-        <div class="card-body">
-            {% if recent_activities and recent_activities|length > 0 %}
-            <div class="activity-timeline">
-                {% for activity in recent_activities[:3] %}
-                <div class="activity-item">
-                    <div class="d-flex">
-                        <div class="activity-icon">
-                            {% if activity[0] == 'purchase' %}
-                            <i class="bi bi-cart-check text-primary"></i>
-                            {% elif activity[0] == 'rental' %}
-                            <i class="bi bi-calendar-check text-info"></i>
-                            {% elif activity[0] == 'repair' %}
-                            <i class="bi bi-tools text-warning"></i>
-                            {% endif %}
-                        </div>
-                        <div>
-                            <h6 class="mb-1">
-                                {% if activity[0] == 'purchase' %}
-                                Заказ #{{ activity[1] }}
-                                {% elif activity[0] == 'rental' %}
-                                Аренда #{{ activity[1] }}
-                                {% elif activity[0] == 'repair' %}
-                                Заявка на ремонт #{{ activity[1] }}
-                                {% endif %}
-                            </h6>
-                            <p class="mb-1 text-muted small">
-                                {{ activity[2].strftime('%d.%m.%Y %H:%M') if activity[2] else 'Дата не указана' }}
-                            </p>
-                            <span class="badge 
-                                {% if activity[0] == 'purchase' %}bg-primary
-                                {% elif activity[0] == 'rental' %}bg-info
-                                {% elif activity[0] == 'repair' %}bg-warning
-                                {% endif %}">
-                                {% if activity[3] == 'pending' %}Ожидает
-                                {% elif activity[3] == 'confirmed' %}Подтвержден
-                                {% elif activity[3] == 'processing' %}В обработке
-                                {% elif activity[3] == 'shipped' %}Отправлен
-                                {% elif activity[3] == 'delivered' %}Доставлен
-                                {% elif activity[3] == 'cancelled' %}Отменен
-                                {% elif activity[3] == 'reserved' %}Забронирован
-                                {% elif activity[3] == 'active' %}Активная
-                                {% elif activity[3] == 'completed' %}Завершена
-                                {% elif activity[3] == 'overdue' %}Просрочена
-                                {% elif activity[3] == 'new' %}Новая
-                                {% elif activity[3] == 'diagnosed' %}Диагностика
-                                {% elif activity[3] == 'waiting_approval' %}Ожидает
-                                {% elif activity[3] == 'approved' %}Согласовано
-                                {% elif activity[3] == 'in_progress' %}В работе
-                                {% elif activity[3] == 'ready_for_pickup' %}Готов к выдаче
-                                {% else %}{{ activity[3] }}{% endif %}
-                            </span>
-                        </div>
-                    </div>
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Последние действия</h5>
                 </div>
-                {% endfor %}
+                <div class="card-body">
+                    {% if recent_activities and recent_activities|length > 0 %}
+                    <div class="activity-timeline">
+                        {% for activity in recent_activities[:5] %}
+                        <div class="activity-item">
+                            <div class="d-flex">
+                                <div class="activity-icon">
+                                    {% if activity[0] == 'purchase' %}
+                                    <i class="bi bi-cart-check text-primary"></i>
+                                    {% elif activity[0] == 'rental' %}
+                                    <i class="bi bi-calendar-check text-info"></i>
+                                    {% elif activity[0] == 'repair' %}
+                                    <i class="bi bi-tools text-warning"></i>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <h6 class="mb-1">
+                                        {% if activity[0] == 'purchase' %}
+                                        Заказ #{{ activity[1] }}
+                                        {% elif activity[0] == 'rental' %}
+                                        Аренда #{{ activity[1] }}
+                                        {% elif activity[0] == 'repair' %}
+                                        Заявка на ремонт #{{ activity[1] }}
+                                        {% endif %}
+                                    </h6>
+                                    <p class="mb-1 text-muted small">
+                                        {{ activity[2].strftime('%d.%m.%Y %H:%M') if activity[2] else 'Дата не указана' }}
+                                    </p>
+                                    <span class="badge 
+                                        {% if activity[0] == 'purchase' %}bg-primary
+                                        {% elif activity[0] == 'rental' %}bg-info
+                                        {% elif activity[0] == 'repair' %}bg-warning
+                                        {% endif %}">
+                                        {{ activity[3] }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-clock-history display-4 text-muted mb-3"></i>
+                        <p class="text-muted">У вас еще нет действий</p>
+                        <a href="{{ url_for('catalog') }}" class="btn btn-primary">
+                            <i class="bi bi-cart me-2"></i>Начать покупки
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            {% else %}
-            <div class="text-center py-4">
-                <i class="bi bi-clock-history display-4 text-muted mb-3"></i>
-                <p class="text-muted">У вас еще нет действий</p>
-                <a href="{{ url_for('catalog') }}" class="btn btn-primary">
-                    <i class="bi bi-cart me-2"></i>Начать покупки
-                </a>
-            </div>
-            {% endif %}
         </div>
     </div>
-</div>
     
     <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Безопасность</h5>
-        </div>
-        <div class="card-body">
-            <h6 class="mb-3">Смена пароля</h6>
-            <form method="POST" id="passwordForm" class="password-form-container">
-                <input type="hidden" name="change_password" value="1">
-                
-                <div class="row g-3 mb-4">
-                    <div class="col-lg-4 col-md-6">
-                        <label class="form-label small fw-bold">Текущий пароль</label>
-                        <input type="password" class="form-control" 
-                               name="current_password" id="currentPassword" required>
-                        <div id="currentPasswordError" class="invalid-feedback" style="display: none;"></div>
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Безопасность</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="passwordForm">
+            <input type="hidden" name="change_password" value="1">
+            
+            <div id="passwordFields">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Текущий пароль</label>
+                        <div class="password-input-group">
+                            <input type="password" class="form-control" name="current_password" id="currentPassword" placeholder="Введите текущий пароль">
+                            <span class="password-toggle" onclick="togglePassword('currentPassword', this)">
+                                <i class="bi bi-eye"></i>
+                            </span>
+                        </div>
+                        <div id="currentPasswordError" class="validation-message text-danger">
+                            <i class="bi bi-exclamation-circle"></i>
+                            <span></span>
+                        </div>
                     </div>
                     
-                    <div class="col-lg-4 col-md-6">
-                        <label class="form-label small fw-bold">Новый пароль</label>
-                        <input type="password" class="form-control" 
-                               name="new_password" id="newPassword" required minlength="6">
-                        <div id="newPasswordError" class="invalid-feedback" style="display: none;"></div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Новый пароль</label>
+                        <div class="password-input-group">
+                            <input type="password" class="form-control" name="new_password" id="newPassword" placeholder="Придумайте новый пароль">
+                            <span class="password-toggle" onclick="togglePassword('newPassword', this)">
+                                <i class="bi bi-eye"></i>
+                            </span>
+                        </div>
+                        <div id="newPasswordError" class="validation-message text-danger">
+                            <i class="bi bi-exclamation-circle"></i>
+                            <span></span>
+                        </div>
+                        <div class="password-requirements mt-2">
+                            <div id="req-length" class="text-muted">
+                                <i class="bi bi-circle"></i> Минимум 6 символов
+                            </div>
+                            <div id="req-latin" class="text-muted">
+                                <i class="bi bi-circle"></i> Только латинские буквы и цифры
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="col-lg-4 col-md-6">
-                        <label class="form-label small fw-bold">Подтверждение</label>
-                        <input type="password" class="form-control" 
-                               name="confirm_password" id="confirmPassword" required>
-                        <div id="confirmPasswordError" class="invalid-feedback" style="display: none;"></div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Подтверждение</label>
+                        <div class="password-input-group">
+                            <input type="password" class="form-control" name="confirm_password" id="confirmPassword" placeholder="Повторите новый пароль">
+                            <span class="password-toggle" onclick="togglePassword('confirmPassword', this)">
+                                <i class="bi bi-eye"></i>
+                            </span>
+                        </div>
+                        <div id="confirmPasswordError" class="validation-message text-danger">
+                            <i class="bi bi-exclamation-circle"></i>
+                            <span></span>
+                        </div>
+                        <div id="match-indicator" class="password-requirements mt-2">
+                            <div id="req-match" class="text-muted">
+                                <i class="bi bi-circle"></i> Пароли совпадают
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                {% if has_password_code %}
-                <div class="row mb-4">
-                    <div class="col-md-8">
-                        <label class="form-label fw-bold">Код подтверждения из письма</label>
-                        <div class="input-group verification-code-container">
-                            <input type="text" class="form-control code-input" 
-                                   name="verification_code" id="verificationCode" 
-                                   maxlength="6" required>
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <button type="button" class="btn btn-primary" id="requestCodeBtn">
+                            <i class="bi bi-key me-2"></i>Запросить код подтверждения
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="codeField" style="display: none;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Код подтверждения</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="verification_code" id="verificationCode" maxlength="6" placeholder="6-значный код">
                             <button type="submit" class="btn btn-success">
                                 <i class="bi bi-check-circle me-1"></i>Подтвердить
                             </button>
                         </div>
-                        <small class="text-muted">Введите 6-значный код отправленный на {{ user.email }}</small>
+                        <small class="text-muted">Код отправлен на {{ user.email }}</small>
                         <div class="mt-2">
-                            <small class="text-muted">Код действителен 15 минут. 
-                                <a href="#" class="resend-code-btn" onclick="resendPasswordCode()">Отправить повторно</a>
-                            </small>
+                            <a href="#" class="text-decoration-none" onclick="resendPasswordCode(); return false;">
+                                <i class="bi bi-arrow-repeat me-1"></i>Отправить повторно
+                            </a>
+                        </div>
+                        <div class="mt-2">
+                            <a href="#" class="text-decoration-none" onclick="showPasswordFields(); return false;">
+                                <i class="bi bi-arrow-left me-1"></i>Назад к вводу пароля
+                            </a>
                         </div>
                     </div>
                 </div>
-                {% endif %}
-                
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <small class="text-muted">Минимум 6 символов</small>
-                    </div>
-                    <div class="col-md-6 text-end">
-                        {% if not has_password_code %}
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-key me-1"></i>Запросить код подтверждения
-                        </button>
-                        {% endif %}
-                    </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="cropModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Кадрирование фото</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="crop-container">
+                    <img id="cropImage" src="" alt="Crop" style="max-width: 100%;">
                 </div>
-            </form>
+                
+                <div class="crop-preview-container">
+                    <div class="crop-preview">
+                        <div class="preview-circle"></div>
+                    </div>
+                    <div class="crop-preview-label">Предпросмотр</div>
+                </div>
+                
+                <div class="crop-controls">
+                    <button type="button" class="crop-control-btn" onclick="if(cropper) cropper.zoom(0.1)">
+                        <i class="bi bi-zoom-in"></i>
+                    </button>
+                    <button type="button" class="crop-control-btn" onclick="if(cropper) cropper.zoom(-0.1)">
+                        <i class="bi bi-zoom-out"></i>
+                    </button>
+                    <button type="button" class="crop-control-btn" onclick="if(cropper) cropper.rotate(-90)">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <button type="button" class="crop-control-btn" onclick="if(cropper) cropper.rotate(90)">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="cropButton">Обрезать и загрузить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="gifModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Загрузка GIF</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="bi bi-file-image" style="font-size: 4rem; color: var(--secondary-color);"></i>
+                <p class="mt-3">Вы выбрали GIF-файл.</p>
+                <p class="text-muted small">GIF загружается без кадрирования, чтобы сохранить анимацию.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="gifUploadButton">Загрузить GIF</button>
+            </div>
         </div>
     </div>
 </div>
@@ -454,7 +700,6 @@
             </div>
             <div class="modal-body">
                 <p>Вы уверены, что хотите удалить фото профиля?</p>
-                <p class="text-muted small">После удаления будет установлено стандартное изображение.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -467,59 +712,334 @@
     </div>
 </div>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
 <script>
-const PASSWORD_FORM_KEY = 'passwordFormData';
+let cropper = null;
+let currentFile = null;
 
-function saveFormData() {
-    const formData = {
-        currentPassword: document.getElementById('currentPassword').value,
-        newPassword: document.getElementById('newPassword').value,
-        confirmPassword: document.getElementById('confirmPassword').value,
-        verificationCode: document.getElementById('verificationCode') ? document.getElementById('verificationCode').value : ''
-    };
-    localStorage.setItem(PASSWORD_FORM_KEY, JSON.stringify(formData));
-}
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM загружен, инициализация...');
+    
+    const requestCodeBtn = document.getElementById('requestCodeBtn');
+    if (requestCodeBtn) {
+        console.log('Кнопка найдена, добавляем обработчик');
+        requestCodeBtn.addEventListener('click', handleRequestCode);
+    } else {
+        console.log('Кнопка не найдена!');
+    }
+    
+    const changePhotoBtn = document.getElementById('changePhotoBtn');
+    if (changePhotoBtn) {
+        changePhotoBtn.addEventListener('click', function() {
+            document.getElementById('avatarInput').click();
+        });
+    }
+    
+    const avatarClickArea = document.getElementById('avatarClickArea');
+    if (avatarClickArea) {
+        avatarClickArea.addEventListener('click', function() {
+            document.getElementById('avatarInput').click();
+        });
+    }
+    
+    const avatarInput = document.getElementById('avatarInput');
+    if (avatarInput) {
+        avatarInput.addEventListener('change', handleAvatarChange);
+    }
+    
+    const gifUploadButton = document.getElementById('gifUploadButton');
+    if (gifUploadButton) {
+        gifUploadButton.addEventListener('click', handleGifUpload);
+    }
+    
+    const cropButton = document.getElementById('cropButton');
+    if (cropButton) {
+        cropButton.addEventListener('click', handleCrop);
+    }
+    
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    if (zoomInBtn) zoomInBtn.addEventListener('click', () => cropper?.zoom(0.1));
+    
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => cropper?.zoom(-0.1));
+    
+    const rotateLeftBtn = document.getElementById('rotateLeftBtn');
+    if (rotateLeftBtn) rotateLeftBtn.addEventListener('click', () => cropper?.rotate(-90));
+    
+    const rotateRightBtn = document.getElementById('rotateRightBtn');
+    if (rotateRightBtn) rotateRightBtn.addEventListener('click', () => cropper?.rotate(90));
+    
+    const resetBtn = document.getElementById('resetBtn');
+    if (resetBtn) resetBtn.addEventListener('click', () => cropper?.reset());
+    
+    // Валидация паролей
+    const newPass = document.getElementById('newPassword');
+    const confirmPass = document.getElementById('confirmPassword');
+    
+    if (newPass) newPass.addEventListener('input', validatePassword);
+    if (confirmPass) confirmPass.addEventListener('input', validatePassword);
+    
+    const verificationCode = document.getElementById('verificationCode');
+    if (verificationCode) {
+        verificationCode.addEventListener('input', function() {
+            this.value = this.value.replace(/\D/g, '').substring(0, 6);
+        });
+    }
+    
+    console.log('Инициализация завершена');
+});
 
-function loadFormData() {
-    try {
-        const savedData = localStorage.getItem(PASSWORD_FORM_KEY);
-        if (savedData) {
-            const formData = JSON.parse(savedData);
-            
-            document.getElementById('currentPassword').value = formData.currentPassword || '';
-            document.getElementById('newPassword').value = formData.newPassword || '';
-            document.getElementById('confirmPassword').value = formData.confirmPassword || '';
-            
-            const verificationCodeInput = document.getElementById('verificationCode');
-            if (verificationCodeInput && formData.verificationCode) {
-                verificationCodeInput.value = formData.verificationCode;
-            }
-            
-            if (formData.currentPassword) validateCurrentPassword();
-            if (formData.newPassword) validateNewPassword();
-            if (formData.confirmPassword) validateConfirmPassword();
+function handleRequestCode() {
+    console.log('handleRequestCode вызван');
+    
+    const currentPass = document.getElementById('currentPassword').value;
+    const newPass = document.getElementById('newPassword').value;
+    const confirmPass = document.getElementById('confirmPassword').value;
+    
+    clearError('currentPassword');
+    
+    if (!currentPass || !newPass || !confirmPass) {
+        alert('Заполните все поля паролей');
+        return;
+    }
+    
+    if (newPass !== confirmPass) {
+        alert('Пароли не совпадают');
+        return;
+    }
+    
+    if (newPass.length < 6) {
+        alert('Пароль должен быть минимум 6 символов');
+        return;
+    }
+    
+    if (!/^[a-zA-Z0-9]+$/.test(newPass)) {
+        alert('Только латинские буквы и цифры');
+        return;
+    }
+    
+    const btn = document.getElementById('requestCodeBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Проверка...';
+    
+    fetch('/check-current-password', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            current_password: currentPass
+        })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('Network error');
+        return response.json();
+    })
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-key me-2"></i>Запросить код подтверждения';
+        
+        if (data.valid) {
+            requestPasswordCode();
+        } else {
+            if (data.message) alert('Ошибка: ' + data.message);
+            showError('currentPassword', 'Неверный текущий пароль');
+            document.getElementById('currentPassword').classList.add('is-invalid');
+            document.getElementById('currentPasswordError').querySelector('span').textContent = 'Неверный текущий пароль';
+            document.getElementById('currentPasswordError').classList.add('show');
         }
-    } catch (e) {
-        console.error('Ошибка при загрузке данных формы:', e);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-key me-2"></i>Запросить код подтверждения';
+        alert('Ошибка соединения с сервером');
+    });
+}
+
+function requestPasswordCode() {
+    fetch('/resend-password-code', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('passwordFields').style.display = 'none';
+            document.getElementById('codeField').style.display = 'block';
+            alert('Код отправлен на вашу почту');
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Ошибка отправки запроса');
+    });
+}
+
+function handleAvatarChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+        alert('Поддерживаются только JPG, PNG, GIF и WEBP');
+        return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Файл слишком большой. Максимум 5MB');
+        return;
+    }
+    
+    currentFile = file;
+    
+    if (file.type === 'image/gif') {
+        const gifModal = new bootstrap.Modal(document.getElementById('gifModal'));
+        gifModal.show();
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const image = document.getElementById('cropImage');
+        image.src = e.target.result;
+        
+        const cropModal = new bootstrap.Modal(document.getElementById('cropModal'));
+        cropModal.show();
+        
+        setTimeout(() => {
+            if (cropper) cropper.destroy();
+            
+            cropper = new Cropper(image, {
+                aspectRatio: 1,
+                viewMode: 1,
+                preview: '.preview-circle',
+                guides: true,
+                autoCropArea: 1,
+                dragMode: 'move',
+                background: false,
+                responsive: true
+            });
+        }, 500);
+    };
+    reader.readAsDataURL(file);
+}
+
+function handleGifUpload() {
+    const formData = new FormData();
+    formData.append('avatar', currentFile);
+    
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = 'Загрузка...';
+    
+    fetch('/profile', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (response.redirected) window.location.href = response.url;
+    })
+    .catch(() => {
+        alert('Ошибка загрузки');
+        btn.disabled = false;
+        btn.innerHTML = 'Загрузить GIF';
+    });
+}
+
+function handleCrop() {
+    if (!cropper) return;
+    
+    const canvas = cropper.getCroppedCanvas({
+        width: 300,
+        height: 300
+    });
+    
+    let format = 'image/jpeg';
+    let extension = 'jpg';
+    
+    if (currentFile.type === 'image/png') {
+        format = 'image/png';
+        extension = 'png';
+    } else if (currentFile.type === 'image/webp') {
+        format = 'image/webp';
+        extension = 'webp';
+    }
+    
+    canvas.toBlob(function(blob) {
+        const formData = new FormData();
+        formData.append('avatar', blob, `avatar.${extension}`);
+        
+        const btn = document.getElementById('cropButton');
+        btn.disabled = true;
+        btn.innerHTML = 'Загрузка...';
+        
+        fetch('/profile', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.redirected) window.location.href = response.url;
+        })
+        .catch(() => {
+            alert('Ошибка загрузки');
+            btn.disabled = false;
+            btn.innerHTML = 'Обрезать и загрузить';
+        });
+    }, format, 0.95);
+}
+
+function togglePassword(inputId, element) {
+    const input = document.getElementById(inputId);
+    const icon = element.querySelector('i');
+    input.type = input.type === 'password' ? 'text' : 'password';
+    icon.className = input.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash';
+}
+
+function validatePassword() {
+    const newPass = document.getElementById('newPassword').value;
+    const confirmPass = document.getElementById('confirmPassword').value;
+    
+    const lengthReq = document.getElementById('req-length');
+    const latinReq = document.getElementById('req-latin');
+    const matchReq = document.getElementById('req-match');
+    
+    if (newPass.length >= 6) {
+        lengthReq.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i> Минимум 6 символов';
+    } else if (newPass.length > 0) {
+        lengthReq.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i> Минимум 6 символов';
+    } else {
+        lengthReq.innerHTML = '<i class="bi bi-circle"></i> Минимум 6 символов';
+    }
+    
+    if (/^[a-zA-Z0-9]*$/.test(newPass)) {
+        latinReq.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i> Только латинские буквы и цифры';
+    } else if (newPass.length > 0) {
+        latinReq.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i> Только латинские буквы и цифры';
+    } else {
+        latinReq.innerHTML = '<i class="bi bi-circle"></i> Только латинские буквы и цифры';
+    }
+    
+    if (newPass && confirmPass) {
+        if (newPass === confirmPass) {
+            matchReq.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i> Пароли совпадают';
+        } else {
+            matchReq.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i> Пароли не совпадают';
+        }
+    } else {
+        matchReq.innerHTML = '<i class="bi bi-circle"></i> Пароли совпадают';
     }
 }
 
-function clearFormData() {
-    localStorage.removeItem(PASSWORD_FORM_KEY);
-    
-    document.getElementById('currentPassword').value = '';
-    document.getElementById('newPassword').value = '';
-    document.getElementById('confirmPassword').value = '';
-    
-    const verificationCodeInput = document.getElementById('verificationCode');
-    if (verificationCodeInput) {
-        verificationCodeInput.value = '';
-    }
-    
-    resetField('currentPassword');
-    resetField('newPassword');
-    resetField('confirmPassword');
-    if (verificationCodeInput) resetField('verificationCode');
+function showPasswordFields() {
+    document.getElementById('codeField').style.display = 'none';
+    document.getElementById('passwordFields').style.display = 'block';
 }
 
 function resendPasswordCode() {
@@ -543,169 +1063,28 @@ function resendPasswordCode() {
 }
 
 function showError(fieldId, message) {
-    const errorElement = document.getElementById(fieldId + 'Error');
-    const inputElement = document.getElementById(fieldId);
+    const errorDiv = document.getElementById(fieldId + 'Error');
+    const input = document.getElementById(fieldId);
     
-    if (errorElement) {
-        errorElement.textContent = message;
-        errorElement.style.display = 'block';
+    if (errorDiv) {
+        errorDiv.querySelector('span').textContent = message;
+        errorDiv.classList.add('show');
     }
-    if (inputElement) {
-        inputElement.classList.remove('is-valid');
-        inputElement.classList.add('is-invalid');
+    if (input) {
+        input.classList.add('is-invalid');
     }
 }
 
-function showSuccess(fieldId) {
-    const errorElement = document.getElementById(fieldId + 'Error');
-    const inputElement = document.getElementById(fieldId);
+function clearError(fieldId) {
+    const errorDiv = document.getElementById(fieldId + 'Error');
+    const input = document.getElementById(fieldId);
     
-    if (errorElement) {
-        errorElement.style.display = 'none';
+    if (errorDiv) {
+        errorDiv.classList.remove('show');
     }
-    if (inputElement) {
-        inputElement.classList.remove('is-invalid');
-        inputElement.classList.add('is-valid');
+    if (input) {
+        input.classList.remove('is-invalid');
     }
 }
-
-function resetField(fieldId) {
-    const errorElement = document.getElementById(fieldId + 'Error');
-    const inputElement = document.getElementById(fieldId);
-    
-    if (errorElement) {
-        errorElement.style.display = 'none';
-    }
-    if (inputElement) {
-        inputElement.classList.remove('is-invalid', 'is-valid');
-    }
-}
-
-function validateCurrentPassword() {
-    const password = document.getElementById('currentPassword').value;
-    if (!password) {
-        showError('currentPassword', 'Введите текущий пароль');
-        return false;
-    } else if (password.length < 6) {
-        showError('currentPassword', 'Пароль должен содержать минимум 6 символов');
-        return false;
-    } else {
-        showSuccess('currentPassword');
-        return true;
-    }
-}
-
-function validateNewPassword() {
-    const password = document.getElementById('newPassword').value;
-    if (!password) {
-        showError('newPassword', 'Введите новый пароль');
-        return false;
-    } else if (password.length < 6) {
-        showError('newPassword', 'Пароль должен содержать минимум 6 символов');
-        return false;
-    } else {
-        showSuccess('newPassword');
-        return true;
-    }
-}
-
-function validateConfirmPassword() {
-    const password = document.getElementById('newPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-    
-    if (!confirmPassword) {
-        showError('confirmPassword', 'Подтвердите пароль');
-        return false;
-    } else if (password !== confirmPassword) {
-        showError('confirmPassword', 'Пароли не совпадают');
-        return false;
-    } else {
-        showSuccess('confirmPassword');
-        return true;
-    }
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const currentPassword = document.getElementById('currentPassword');
-    const newPassword = document.getElementById('newPassword');
-    const confirmPassword = document.getElementById('confirmPassword');
-    const verificationCode = document.getElementById('verificationCode');
-    const form = document.getElementById('passwordForm');
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('password_changed') && urlParams.get('password_changed') === 'true') {
-        clearFormData();
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-        loadFormData();
-    }
-    
-    if (currentPassword) {
-        currentPassword.addEventListener('blur', function() {
-            validateCurrentPassword();
-            saveFormData();
-        });
-        currentPassword.addEventListener('input', function() {
-            if (this.value) resetField('currentPassword');
-            saveFormData();
-        });
-    }
-    
-    if (newPassword) {
-        newPassword.addEventListener('blur', function() {
-            validateNewPassword();
-            saveFormData();
-        });
-        newPassword.addEventListener('input', function() {
-            if (this.value) resetField('newPassword');
-            validateConfirmPassword();
-            saveFormData();
-        });
-    }
-    
-    if (confirmPassword) {
-        confirmPassword.addEventListener('blur', function() {
-            validateConfirmPassword();
-            saveFormData();
-        });
-        confirmPassword.addEventListener('input', function() {
-            if (this.value) resetField('confirmPassword');
-            validateConfirmPassword();
-            saveFormData();
-        });
-    }
-    
-    if (verificationCode) {
-        verificationCode.addEventListener('input', function() {
-            this.value = this.value.replace(/\D/g, '').substring(0, 6);
-            saveFormData();
-        });
-    }
-    
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            let isValid = true;
-            
-            if (!validateCurrentPassword()) isValid = false;
-            if (!validateNewPassword()) isValid = false;
-            if (!validateConfirmPassword()) isValid = false;
-            
-            if (!isValid) {
-                e.preventDefault();
-                const firstError = document.querySelector('.is-invalid');
-                if (firstError) {
-                    firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    firstError.focus();
-                }
-            }
-        });
-    }
-    
-    window.addEventListener('beforeunload', function() {
-        if (!urlParams.has('password_changed') || urlParams.get('password_changed') !== 'true') {
-            saveFormData();
-        }
-    });
-});
 </script>
 {% endblock %}

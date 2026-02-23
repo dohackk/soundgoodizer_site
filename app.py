@@ -1351,6 +1351,46 @@ def profile():
         flash(f'Ошибка при загрузке профиля: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
+@app.route('/check-current-password', methods=['POST'])
+@login_required
+def check_current_password():
+    """Проверка текущего пароля"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'valid': False, 'message': 'Нет данных'})
+        
+        current_password = data.get('current_password', '').strip()
+        
+        if not current_password:
+            return jsonify({'valid': False, 'message': 'Пароль не указан'})
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'valid': False, 'message': 'Ошибка подключения к БД'})
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT password_hash FROM users WHERE user_id = ?", (session['user_id'],))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return jsonify({'valid': False, 'message': 'Пользователь не найден'})
+        
+        stored_hash = result[0]
+        input_hash = hash_password(current_password)
+        
+        print(f"Stored hash: {stored_hash}")
+        print(f"Input hash: {input_hash}")
+        
+        return jsonify({'valid': stored_hash == input_hash})
+        
+    except Exception as e:
+        print(f"Error checking password: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'valid': False, 'message': str(e)})
+
 @app.route('/api/search_suggestions')
 def api_search_suggestions():
     """API для автодополнения поиска"""

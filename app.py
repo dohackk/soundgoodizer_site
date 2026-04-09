@@ -11,9 +11,6 @@ from werkzeug.utils import secure_filename
 import dns.resolver
 import random
 import uuid
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 UPLOAD_FOLDER = 'static/uploads/avatars'
@@ -25,46 +22,29 @@ ALLOWED_REPAIR_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 INSTRUMENT_IMAGES_FOLDER = 'static/img/instruments'
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'soundgoodizer-secret-key-2025-super-secure')
+app.secret_key = 'soundgoodizer-secret-key-2025-super-secure'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
 app.config['INSTRUMENT_IMAGES_FOLDER'] = INSTRUMENT_IMAGES_FOLDER
 
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'e.saltymakov06@gmail.com')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'vbfm gowd elnj nxjg')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'e.saltymakov06@gmail.com')
+app.config['MAIL_USERNAME'] = 'e.saltymakov06@gmail.com'
+app.config['MAIL_PASSWORD'] = 'vbfm gowd elnj nxjg'
+app.config['MAIL_DEFAULT_SENDER'] = 'e.saltymakov06@gmail.com'
 
 mail = Mail(app)
 
 def get_db_connection():
     try:
-        server   = os.environ.get('DB_SERVER', 'DESKTOP-L694H77')
-        database = os.environ.get('DB_NAME', 'soundgoodizerBD')
-        username = os.environ.get('DB_USER', '')
-        password = os.environ.get('DB_PASSWORD', '')
-
-        if username and password:
-            conn_str = (
-                'DRIVER={ODBC Driver 17 for SQL Server};'
-                f'SERVER={server};'
-                f'DATABASE={database};'
-                f'UID={username};'
-                f'PWD={password};'
-                'TrustServerCertificate=yes;'
-            )
-        else:
-            conn_str = (
-                'DRIVER={ODBC Driver 17 for SQL Server};'
-                f'SERVER={server};'
-                f'DATABASE={database};'
-                'Trusted_Connection=yes;'
-                'TrustServerCertificate=yes;'
-            )
-
-        conn = pyodbc.connect(conn_str)
+        conn = pyodbc.connect(
+            'DRIVER={ODBC Driver 17 for SQL Server};'
+            'SERVER=DESKTOP-L694H77;'
+            'DATABASE=soundgoodizerBD;'
+            'Trusted_Connection=yes;'
+            'TrustServerCertificate=yes;'
+        )
         return conn
     except Exception as e:
         print(f"ОШИБКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ: {e}")

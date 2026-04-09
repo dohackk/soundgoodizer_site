@@ -1,7 +1,0 @@
-Flask==3.1.2
-Flask-Mail==0.10.0
-pyodbc==5.3.0
-Werkzeug==3.1.4
-dnspython==2.8.0
-gunicorn==23.0.0
-python-dotenv==1.0.1

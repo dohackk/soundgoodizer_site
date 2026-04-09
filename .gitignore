@@ -1,1 +1,4 @@
 /desktop.ini
+.env
+__pycache__/
+*.pyc

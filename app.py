@@ -297,7 +297,7 @@ def send_verification_email(email, verification_code):
         except Exception as e:
             print(f"✗ Ошибка отправки email: {e}")
 
-    ctx = app._get_current_object().app_context()
+    ctx = app.app_context()
     def _send_with_ctx():
         with ctx:
             _send()

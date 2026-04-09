@@ -1,0 +1,6 @@
+Flask==3.0.3
+psycopg2-binary==2.9.9
+Flask-Mail==0.10.0
+Werkzeug==3.0.3
+dnspython==2.6.1
+gunicorn==22.0.0

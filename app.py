@@ -253,56 +253,34 @@ def send_verification_email(email, verification_code):
     import threading
     def _send():
         try:
-            msg = Message(
-                subject='Подтверждение email - SoundGoodizer',
-                recipients=[email]
-            )
-            msg.html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .header {{ background: #667eea; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
-                    .code {{ font-size: 32px; font-weight: bold; color: #667eea; text-align: center; padding: 20px; background: #f8f9fa; border-radius: 5px; margin: 20px 0; }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>SoundGoodizer</h1>
-                        <p>Подтверждение email адреса</p>
-                    </div>
-                    <p>Здравствуйте!</p>
-                    <p>Благодарим вас за регистрацию в SoundGoodizer. Для завершения регистрации необходимо подтвердить ваш email адрес.</p>
-                    <p>Ваш код подтверждения:</p>
-                    <div class="code">{verification_code}</div>
-                    <p>Введите этот 6-значный код на странице подтверждения на сайте SoundGoodizer.</p>
-                    <p><strong>Код действителен 24 часа.</strong></p>
-                    <p>Если вы не регистрировались на SoundGoodizer, просто проигнорируйте это письмо.</p>
-                    <hr>
-                    <p style="color: #666; font-size: 12px;">
-                        © SoundGoodizer. Все права защищены.<br>
-                        Это письмо отправлено автоматически, пожалуйста, не отвечайте на него.
-                    </p>
-                </div>
-            </body>
-            </html>
-            """
-            msg.body = f"Ваш код подтверждения: {verification_code}\n\nКод действителен 24 часа."
-            mail.send(msg)
-            print(f"✓ Email с кодом подтверждения отправлен на {email}")
+            with app.app_context():
+                msg = Message(
+                    subject='Подтверждение email - SoundGoodizer',
+                    recipients=[email]
+                )
+                msg.html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+.container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+.header {{ background: #667eea; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+.code {{ font-size: 32px; font-weight: bold; color: #667eea; text-align: center; padding: 20px; background: #f8f9fa; border-radius: 5px; margin: 20px 0; }}
+</style></head><body><div class="container">
+<div class="header"><h1>SoundGoodizer</h1><p>Подтверждение email адреса</p></div>
+<p>Здравствуйте!</p>
+<p>Ваш код подтверждения:</p>
+<div class="code">{verification_code}</div>
+<p>Код действителен 24 часа.</p>
+<hr><p style="color:#666;font-size:12px;">© SoundGoodizer</p>
+</div></body></html>"""
+                msg.body = f"Ваш код подтверждения: {verification_code}\n\nКод действителен 24 часа."
+                mail.send(msg)
+                print(f"✓ Email отправлен на {email}")
         except Exception as e:
             print(f"✗ Ошибка отправки email: {e}")
+            import traceback
+            traceback.print_exc()
 
-    ctx = app.app_context()
-    def _send_with_ctx():
-        with ctx:
-            _send()
-
-    thread = threading.Thread(target=_send_with_ctx)
+    thread = threading.Thread(target=_send)
     thread.daemon = True
     thread.start()
     return True

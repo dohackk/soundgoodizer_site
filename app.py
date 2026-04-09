@@ -251,15 +251,12 @@ def get_instruments(where_clause="", params=()):
         return []
 
 def send_verification_email(email, verification_code):
-    import threading
-    def _send():
-        try:
-            with app.app_context():
-                msg = Message(
-                    subject='Подтверждение email - SoundGoodizer',
-                    recipients=[email]
-                )
-                msg.html = f"""<!DOCTYPE html>
+    try:
+        msg = Message(
+            subject='Подтверждение email - SoundGoodizer',
+            recipients=[email]
+        )
+        msg.html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
@@ -273,18 +270,16 @@ body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
 <p>Код действителен 24 часа.</p>
 <hr><p style="color:#666;font-size:12px;">© SoundGoodizer</p>
 </div></body></html>"""
-                msg.body = f"Ваш код подтверждения: {verification_code}\n\nКод действителен 24 часа."
-                mail.send(msg)
-                print(f"✓ Email отправлен на {email}")
-        except Exception as e:
-            print(f"✗ Ошибка отправки email: {e}")
-            import traceback
-            traceback.print_exc()
-
-    thread = threading.Thread(target=_send)
-    thread.daemon = True
-    thread.start()
-    return True
+        msg.body = f"Ваш код подтверждения: {verification_code}\n\nКод действителен 24 часа."
+        print(f"[MAIL] Отправка на {email}, сервер: {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']}, user: {app.config['MAIL_USERNAME']}")
+        mail.send(msg)
+        print(f"[MAIL] ✓ Email успешно отправлен на {email}")
+        return True
+    except Exception as e:
+        print(f"[MAIL] ✗ Ошибка отправки email на {email}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def allowed_repair_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_REPAIR_EXTENSIONS

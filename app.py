@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-import pyodbc
+import psycopg2
+import psycopg2.extras
+import psycopg2.pool
 import hashlib
 from functools import wraps
 from collections import namedtuple
@@ -11,6 +13,7 @@ from werkzeug.utils import secure_filename
 import dns.resolver
 import random
 import uuid
+from urllib.parse import urlparse
 
 
 UPLOAD_FOLDER = 'static/uploads/avatars'
@@ -22,33 +25,86 @@ ALLOWED_REPAIR_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 INSTRUMENT_IMAGES_FOLDER = 'static/img/instruments'
 
 app = Flask(__name__)
-app.secret_key = 'soundgoodizer-secret-key-2025-super-secure'
+app.secret_key = os.environ.get('SECRET_KEY', 'soundgoodizer-secret-key-2025-super-secure')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
 app.config['INSTRUMENT_IMAGES_FOLDER'] = INSTRUMENT_IMAGES_FOLDER
 
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'e.saltymakov06@gmail.com'
-app.config['MAIL_PASSWORD'] = 'vbfm gowd elnj nxjg'
-app.config['MAIL_DEFAULT_SENDER'] = 'e.saltymakov06@gmail.com'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'e.saltymakov06@gmail.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'vbfm gowd elnj nxjg')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'e.saltymakov06@gmail.com')
 
 mail = Mail(app)
 
-def get_db_connection():
+_db_pool = None
+
+def get_db_pool():
+    global _db_pool
+    if _db_pool is not None:
+        return _db_pool
+
+    database_url = os.environ.get('DATABASE_URL')
     try:
-        conn = pyodbc.connect(
-            'DRIVER={ODBC Driver 17 for SQL Server};'
-            'SERVER=DESKTOP-L694H77;'
-            'DATABASE=soundgoodizerBD;'
-            'Trusted_Connection=yes;'
-            'TrustServerCertificate=yes;'
-        )
-        return conn
+        if database_url:
+            if database_url.startswith('postgres://'):
+                database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            result = urlparse(database_url)
+            _db_pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=2,
+                maxconn=10,
+                host=result.hostname,
+                port=result.port or 5432,
+                database=result.path[1:],
+                user=result.username,
+                password=result.password,
+                sslmode='require'
+            )
+        else:
+            _db_pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=2,
+                maxconn=10,
+                host=os.environ.get('DB_HOST', 'localhost'),
+                port=int(os.environ.get('DB_PORT', 5432)),
+                database=os.environ.get('DB_NAME', 'soundgoodizerBD'),
+                user=os.environ.get('DB_USER', 'postgres'),
+                password=os.environ.get('DB_PASSWORD', '123456')
+            )
     except Exception as e:
-        print(f"ОШИБКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ: {e}")
+        print(f"ОШИБКА СОЗДАНИЯ ПУЛА СОЕДИНЕНИЙ: {e}")
+        _db_pool = None
+
+    return _db_pool
+
+def get_db_connection():
+    pool = get_db_pool()
+    if not pool:
         return None
+    try:
+        return pool.getconn()
+    except Exception as e:
+        print(f"ОШИБКА ПОЛУЧЕНИЯ СОЕДИНЕНИЯ ИЗ ПУЛА: {e}")
+        return None
+
+def release_conn(conn):
+    if conn is None:
+        return
+    pool = get_db_pool()
+    if pool:
+        try:
+            pool.putconn(conn)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    else:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def generate_order_number():
     """Генерирует уникальный номер заказа"""
@@ -168,12 +224,12 @@ def get_instruments(where_clause="", params=()):
         Instrument = namedtuple('Instrument', columns)
         instruments = [Instrument(*row) for row in cursor.fetchall()]
         
-        conn.close()
+        release_conn(conn)
         return instruments
         
     except Exception as e:
         print(f"Ошибка при получении инструментов: {e}")
-        conn.close()
+        release_conn(conn)
         return []
 
 def send_verification_email(email, verification_code):
@@ -261,7 +317,7 @@ def index():
     
     try:
         sql = """
-        SELECT TOP 8 
+        SELECT 
             i.instrument_id,
             i.name,
             i.model,
@@ -288,8 +344,9 @@ def index():
         FROM instruments i
         LEFT JOIN brands b ON i.brand_id = b.brand_id
         LEFT JOIN categories c ON i.category_id = c.category_id
-        WHERE i.is_available_for_sale = 1
+        WHERE i.is_available_for_sale = true
         ORDER BY i.views_count DESC, i.instrument_id DESC
+        LIMIT 8
         """
         cursor.execute(sql)
         instruments = cursor.fetchall()
@@ -297,13 +354,13 @@ def index():
         cursor.execute("SELECT * FROM categories")
         categories = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('index.html', 
                              instruments=instruments, 
                              categories=categories)
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         return render_template('error.html', error=f"Ошибка при загрузке данных: {str(e)}")
 
 @app.route('/catalog')
@@ -319,35 +376,35 @@ def catalog():
     page = request.args.get('page', 1, type=int)
     per_page = 12
     
-    where_conditions = ["i.is_available_for_sale = 1"]
+    where_conditions = ["i.is_available_for_sale = true"]
     params = []
     
     if search:
-        where_conditions.append("(i.name LIKE ? OR i.description LIKE ? OR i.model LIKE ?)")
+        where_conditions.append("(i.name ILIKE %s OR i.description ILIKE %s OR i.model ILIKE %s)")
         search_term = f"%{search}%"
         params.extend([search_term, search_term, search_term])
     
     if category_id and category_id.isdigit():
-        where_conditions.append("i.category_id = ?")
+        where_conditions.append("i.category_id = %s")
         params.append(int(category_id))
     
     if brand_id and brand_id.isdigit():
-        where_conditions.append("i.brand_id = ?")
+        where_conditions.append("i.brand_id = %s")
         params.append(int(brand_id))
     
     if price_min and price_min.isdigit():
-        where_conditions.append("i.purchase_price >= ?")
+        where_conditions.append("i.purchase_price >= %s")
         params.append(int(price_min))
     
     if price_max and price_max.isdigit():
-        where_conditions.append("i.purchase_price <= ?")
+        where_conditions.append("i.purchase_price <= %s")
         params.append(int(price_max))
     
     if in_stock == '1':
         where_conditions.append("i.quantity_in_stock > 0")
     
     if for_rent == '1':
-        where_conditions.append("i.is_available_for_rent = 1")
+        where_conditions.append("i.is_available_for_rent = true")
     
     where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
     
@@ -406,10 +463,10 @@ def catalog():
     LEFT JOIN instrument_conditions ic ON i.condition_id = ic.condition_id
     {where_clause}
     ORDER BY {order_by}
-    OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+    LIMIT %s OFFSET %s
     """
     
-    pagination_params = params + [offset, per_page]
+    pagination_params = params + [per_page, offset]
     cursor.execute(sql, pagination_params)
     
     columns = [column[0] for column in cursor.description]
@@ -422,7 +479,7 @@ def catalog():
     cursor.execute("SELECT brand_id, brand_name FROM brands ORDER BY brand_name")
     brands = cursor.fetchall()
     
-    conn.close()
+    release_conn(conn)
     
     total_pages = (total_count + per_page - 1) // per_page
     
@@ -456,7 +513,7 @@ def instrument_detail(instrument_id):
         
         cursor = conn.cursor()
         
-        cursor.execute("UPDATE instruments SET views_count = views_count + 1 WHERE instrument_id = ?", 
+        cursor.execute("UPDATE instruments SET views_count = views_count + 1 WHERE instrument_id = %s", 
                       (instrument_id,))
         conn.commit()
         
@@ -489,14 +546,14 @@ def instrument_detail(instrument_id):
         LEFT JOIN brands b ON i.brand_id = b.brand_id
         LEFT JOIN categories c ON i.category_id = c.category_id
         LEFT JOIN instrument_conditions ic ON i.condition_id = ic.condition_id
-        WHERE i.instrument_id = ?
+        WHERE i.instrument_id = %s
         """
         cursor.execute(sql, (instrument_id,))
         instrument_row = cursor.fetchone()
         
         if not instrument_row:
             flash('Инструмент не найден', 'danger')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('catalog'))
         
         columns = [column[0] for column in cursor.description]
@@ -505,7 +562,7 @@ def instrument_detail(instrument_id):
             instrument[col] = instrument_row[i]
         
         similar_sql = """
-        SELECT TOP 4 
+        SELECT 
             i.instrument_id,
             i.name,
             i.model,
@@ -524,10 +581,11 @@ def instrument_detail(instrument_id):
         FROM instruments i
         LEFT JOIN brands b ON i.brand_id = b.brand_id
         LEFT JOIN categories c ON i.category_id = c.category_id
-        WHERE i.category_id = ? 
-        AND i.instrument_id != ? 
-        AND i.is_available_for_sale = 1 
-        ORDER BY NEWID()
+        WHERE i.category_id = %s 
+        AND i.instrument_id != %s 
+        AND i.is_available_for_sale = true 
+        ORDER BY RANDOM()
+        LIMIT 4
         """
         cursor.execute(similar_sql, (instrument['category_id'], instrument_id))
         similar = cursor.fetchall()
@@ -537,7 +595,7 @@ def instrument_detail(instrument_id):
         if 'rental_price_per_day' not in instrument or instrument['rental_price_per_day'] is None:
             instrument['rental_price_per_day'] = 0
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('instrument.html', 
                              instrument=instrument, 
@@ -550,7 +608,7 @@ def instrument_detail(instrument_id):
         traceback.print_exc()
         if conn:
             try:
-                conn.close()
+                release_conn(conn)
             except:
                 pass
         return render_template('error.html', error=f"Ошибка при загрузке инструмента: {str(e)}")
@@ -577,7 +635,7 @@ def login():
             SELECT u.*, r.role_name, u.avatar_url
             FROM users u
             JOIN roles r ON u.role_id = r.role_id
-            WHERE u.login = ? AND u.is_active = 1
+            WHERE u.login = %s AND u.is_active = true
             """
             cursor.execute(sql, (username,))
             user = cursor.fetchone()
@@ -599,15 +657,15 @@ def login():
                         
                         cursor.execute("""
                         UPDATE users 
-                        SET email_verification_code = ?, email_verification_expires = ?
-                        WHERE user_id = ?
+                        SET email_verification_code = %s, email_verification_expires = %s
+                        WHERE user_id = %s
                         """, (code_str, expires_at, user[0]))
                         conn.commit()
                         
                         send_verification_email(user[2], code_str)
                         
                         flash('Сначала подтвердите ваш email. Код отправлен на вашу почту.', 'warning')
-                        conn.close()
+                        release_conn(conn)
                         return redirect(url_for('verify_email'))
                     
                     session['user_id'] = user[0]
@@ -619,16 +677,16 @@ def login():
                     session['is_email_verified'] = True
 
                     flash(f'Добро пожаловать, {session["user_name"]}!', 'success')
-                    conn.close()
+                    release_conn(conn)
                     return redirect(url_for('index'))
                 else:
                     flash('Неверный пароль', 'danger')
             else:
                 flash('Пользователь не найден', 'danger')
             
-            conn.close()
+            release_conn(conn)
         except Exception as e:
-            conn.close()
+            release_conn(conn)
             flash(f'Ошибка при входе: {str(e)}', 'danger')
     
     return render_template('login.html')
@@ -671,24 +729,24 @@ def api_check_unique():
                         exists = True
                         break
             
-            conn.close()
+            release_conn(conn)
             return jsonify({'exists': exists})
         
         else:
             if field == 'login':
-                cursor.execute("SELECT login FROM users WHERE login = ?", (value,))
+                cursor.execute("SELECT login FROM users WHERE login = %s", (value,))
             elif field == 'email':
-                cursor.execute("SELECT email FROM users WHERE email = ?", (value,))
+                cursor.execute("SELECT email FROM users WHERE email = %s", (value,))
             else:
-                conn.close()
+                release_conn(conn)
                 return jsonify({'exists': False})
             
             result = cursor.fetchone()
-            conn.close()
+            release_conn(conn)
             return jsonify({'exists': result is not None})
             
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         print(f"Ошибка при проверке уникальности: {e}")
         return jsonify({'exists': False})
 
@@ -789,7 +847,7 @@ def register():
             cursor.execute("""
                 SELECT login, email, phone 
                 FROM users 
-                WHERE login = ? OR email = ?
+                WHERE login = %s OR email = %s
             """, (login, email))
             
             existing_users = cursor.fetchall()
@@ -821,7 +879,7 @@ def register():
             if duplicate_errors:
                 for error in duplicate_errors:
                     flash(error, 'danger')
-                conn.close()
+                release_conn(conn)
                 return render_template('register.html', **form_data)
             
             verification_code = secrets.randbelow(900000) + 100000
@@ -834,16 +892,16 @@ def register():
             INSERT INTO users (login, email, password_hash, first_name, last_name, 
                              phone, role_id, is_active, is_email_verified,
                              email_verification_code, email_verification_expires)
-            VALUES (?, ?, ?, ?, ?, ?, 4, 1, 0, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, 4, true, false, %s, %s)
             """
             cursor.execute(sql, (login, email, password_hash, first_name, last_name, phone,
                                verification_code_str, expires_at))
             conn.commit()
             
-            cursor.execute("SELECT @@IDENTITY")
+            cursor.execute("SELECT lastval()")
             user_id = cursor.fetchone()[0]
             
-            conn.close()
+            release_conn(conn)
             
             email_sent = send_verification_email(email, verification_code_str)
             
@@ -857,7 +915,7 @@ def register():
                 return redirect(url_for('verify_email'))
             
         except Exception as e:
-            conn.close()
+            release_conn(conn)
             flash(f'Ошибка при регистрации: {str(e)}', 'danger')
             return render_template('register.html', **form_data)
     
@@ -890,7 +948,7 @@ def verify_email():
             sql = """
             SELECT email_verification_code, email_verification_expires 
             FROM users 
-            WHERE user_id = ? AND email = ? AND is_email_verified = 0
+            WHERE user_id = %s AND email = %s AND is_email_verified = false
             """
             cursor.execute(sql, (user_id, email))
             result = cursor.fetchone()
@@ -905,10 +963,10 @@ def verify_email():
                 elif stored_code == code:
                     cursor.execute("""
                     UPDATE users 
-                    SET is_email_verified = 1, 
+                    SET is_email_verified = true, 
                         email_verification_code = NULL,
                         email_verification_expires = NULL
-                    WHERE user_id = ?
+                    WHERE user_id = %s
                     """, (user_id,))
                     conn.commit()
                     
@@ -916,7 +974,7 @@ def verify_email():
                     SELECT u.*, r.role_name, u.avatar_url
                     FROM users u
                     JOIN roles r ON u.role_id = r.role_id
-                    WHERE u.user_id = ?
+                    WHERE u.user_id = %s
                     """, (user_id,))
                     user = cursor.fetchone()
                     
@@ -931,7 +989,7 @@ def verify_email():
                     session['user_avatar'] = user[11]
                     session['is_email_verified'] = True
                     
-                    conn.close()
+                    release_conn(conn)
                     
                     flash('Email успешно подтвержден! Добро пожаловать в SoundGoodizer!', 'success')
                     return redirect(url_for('index'))
@@ -940,9 +998,9 @@ def verify_email():
             else:
                 flash('Пользователь не найден или email уже подтвержден', 'danger')
             
-            conn.close()
+            release_conn(conn)
         except Exception as e:
-            conn.close()
+            release_conn(conn)
             flash(f'Ошибка при подтверждении email: {str(e)}', 'danger')
     
     return render_template('verify_email.html', email=email)
@@ -968,19 +1026,19 @@ def resend_verification():
         
         cursor.execute("""
         UPDATE users 
-        SET email_verification_code = ?, email_verification_expires = ?
-        WHERE user_id = ? AND email = ? AND is_email_verified = 0
+        SET email_verification_code = %s, email_verification_expires = %s
+        WHERE user_id = %s AND email = %s AND is_email_verified = false
         """, (new_code_str, new_expires, user_id, email))
         
         if cursor.rowcount == 0:
-            conn.close()
+            release_conn(conn)
             return jsonify({'success': False, 'message': 'Пользователь не найден или email уже подтвержден'})
         
         conn.commit()
         
         email_sent = send_verification_email(email, new_code_str)
         
-        conn.close()
+        release_conn(conn)
         
         if email_sent:
             return jsonify({'success': True, 'message': 'Новый код отправлен на email'})
@@ -988,7 +1046,7 @@ def resend_verification():
             return jsonify({'success': False, 'message': 'Ошибка отправки email'})
             
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/resend-password-code', methods=['POST'])
@@ -1072,10 +1130,10 @@ def profile():
             if 'avatar' in request.files:
                 file = request.files['avatar']
                 if file and file.filename != '':
-                    cursor.execute("SELECT login FROM users WHERE user_id = ?", (session['user_id'],))
+                    cursor.execute("SELECT avatar_url FROM users WHERE user_id = %s", (session['user_id'],))
                     user_login = cursor.fetchone()[0]
                     
-                    cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (session['user_id'],))
+                    cursor.execute("SELECT avatar_url FROM users WHERE user_id = %s", (session['user_id'],))
                     old_avatar = cursor.fetchone()
                     old_avatar_path = old_avatar[0] if old_avatar else None
                     
@@ -1091,7 +1149,7 @@ def profile():
                     avatar_path = save_avatar(file, user_login)
                     
                     if avatar_path:
-                        cursor.execute("UPDATE users SET avatar_url = ? WHERE user_id = ?", 
+                        cursor.execute("UPDATE users SET avatar_url = %s WHERE user_id = %s", 
                                      (avatar_path, session['user_id']))
                         conn.commit()
                         
@@ -1100,11 +1158,11 @@ def profile():
                     else:
                         flash('Недопустимый формат файла', 'danger')
                     
-                    conn.close()
+                    release_conn(conn)
                     return redirect(url_for('profile'))
             
             if request.form.get('delete_avatar'):
-                cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (session['user_id'],))
+                cursor.execute("SELECT avatar_url FROM users WHERE user_id = %s", (session['user_id'],))
                 old_avatar = cursor.fetchone()
                 
                 if old_avatar and old_avatar[0]:
@@ -1117,14 +1175,14 @@ def profile():
                             except:
                                 pass
                 
-                cursor.execute("UPDATE users SET avatar_url = NULL WHERE user_id = ?", 
+                cursor.execute("UPDATE users SET avatar_url = NULL WHERE user_id = %s", 
                              (session['user_id'],))
                 conn.commit()
                 
                 session['user_avatar'] = None
                 flash('Фото профиля удалено', 'success')
                 
-                conn.close()
+                release_conn(conn)
                 return redirect(url_for('profile'))
             
             if request.form.get('change_password'):
@@ -1133,7 +1191,7 @@ def profile():
                 confirm_password = request.form.get('confirm_password', '').strip()
                 verification_code = request.form.get('verification_code', '').strip()
                 
-                cursor.execute("SELECT password_hash FROM users WHERE user_id = ?", (session['user_id'],))
+                cursor.execute("SELECT password_hash FROM users WHERE user_id = %s", (session['user_id'],))
                 current_password_hash = cursor.fetchone()[0]
                 
                 errors = []
@@ -1159,7 +1217,7 @@ def profile():
                         'verification_code': verification_code if verification_code else ''
                     }
                     
-                    conn.close()
+                    release_conn(conn)
                     return redirect(url_for('profile', form_data=form_data))
                 
                 if 'password_change_code' not in session:
@@ -1236,7 +1294,7 @@ def profile():
                     except Exception as e:
                         flash(f'Ошибка отправки email: {str(e)}', 'danger')
                     
-                    conn.close()
+                    release_conn(conn)
                     return redirect(url_for('profile'))
                 
                 if verification_code:
@@ -1244,13 +1302,13 @@ def profile():
                         session.pop('password_change_code', None)
                         session.pop('password_change_expires', None)
                         flash('Срок действия кода истек. Запросите новый код.', 'danger')
-                        conn.close()
+                        release_conn(conn)
                         return redirect(url_for('profile'))
                     
                     if verification_code == session.get('password_change_code'):
                         new_password_hash = hashlib.sha256(new_password.encode()).hexdigest()
                         cursor.execute(
-                            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+                            "UPDATE users SET password_hash = %s WHERE user_id = %s",
                             (new_password_hash, session['user_id'])
                         )
                         conn.commit()
@@ -1259,14 +1317,14 @@ def profile():
                         session.pop('password_change_expires', None)
                         
                         flash('Пароль успешно изменен!', 'success')
-                        conn.close()
+                        release_conn(conn)
                         return redirect(url_for('profile') + '?password_changed=true')
                     else:
                         flash('Неверный код подтверждения', 'danger')
                 else:
                     flash('Введите код подтверждения из письма', 'warning')
                 
-                conn.close()
+                release_conn(conn)
                 return redirect(url_for('profile'))
         
         cursor.execute("""
@@ -1278,7 +1336,7 @@ def profile():
                    r.role_name 
             FROM users u
             JOIN roles r ON u.role_id = r.role_id
-            WHERE u.user_id = ?
+            WHERE u.user_id = %s
         """, (session['user_id'],))
         
         columns = [column[0] for column in cursor.description]
@@ -1286,50 +1344,50 @@ def profile():
         
         if not user_row:
             flash('Пользователь не найден', 'danger')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('index'))
         
         user = dict(zip(columns, user_row))
         
-        cursor.execute("SELECT COUNT(*) FROM cart_items WHERE user_id = ?", (session['user_id'],))
+        cursor.execute("SELECT COUNT(*) FROM cart_items WHERE user_id = %s", (session['user_id'],))
         cart_items = cursor.fetchone()[0] or 0
         
-        cursor.execute("SELECT COUNT(*) FROM purchase_orders WHERE user_id = ?", (session['user_id'],))
+        cursor.execute("SELECT COUNT(*) FROM purchase_orders WHERE user_id = %s", (session['user_id'],))
         orders_count = cursor.fetchone()[0] or 0
         
-        cursor.execute("SELECT COUNT(*) FROM rental_orders WHERE user_id = ?", (session['user_id'],))
+        cursor.execute("SELECT COUNT(*) FROM rental_orders WHERE user_id = %s", (session['user_id'],))
         rentals_count = cursor.fetchone()[0] or 0
         
-        cursor.execute("SELECT COUNT(*) FROM repair_requests WHERE user_id = ?", (session['user_id'],))
+        cursor.execute("SELECT COUNT(*) FROM repair_requests WHERE user_id = %s", (session['user_id'],))
         repair_count = cursor.fetchone()[0] or 0
 
         cursor.execute("""
             SELECT 'purchase' as type, order_number as number, order_date as date, status_name as status
             FROM purchase_orders po
             JOIN order_statuses os ON po.status_id = os.status_id
-            WHERE po.user_id = ?
+            WHERE po.user_id = %s
             
             UNION ALL
             
             SELECT 'rental' as type, rental_number as number, created_at as date, status_name as status
             FROM rental_orders ro
             JOIN rental_statuses rs ON ro.status_id = rs.status_id
-            WHERE ro.user_id = ?
+            WHERE ro.user_id = %s
             
             UNION ALL
             
             SELECT 'repair' as type, request_number as number, created_at as date, status_name as status
             FROM repair_requests rr
             JOIN repair_statuses rs ON rr.status_id = rs.status_id
-            WHERE rr.user_id = ?
+            WHERE rr.user_id = %s
             
             ORDER BY date DESC
-            OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY
+            LIMIT 10
         """, (session['user_id'], session['user_id'], session['user_id']))
 
         recent_activities = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         has_password_code = 'password_change_code' in session
         
@@ -1344,7 +1402,7 @@ def profile():
         
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         print(f"Error in profile: {e}")
         import traceback
         traceback.print_exc()
@@ -1370,9 +1428,9 @@ def check_current_password():
             return jsonify({'valid': False, 'message': 'Ошибка подключения к БД'})
         
         cursor = conn.cursor()
-        cursor.execute("SELECT password_hash FROM users WHERE user_id = ?", (session['user_id'],))
+        cursor.execute("SELECT password_hash FROM users WHERE user_id = %s", (session['user_id'],))
         result = cursor.fetchone()
-        conn.close()
+        release_conn(conn)
         
         if not result:
             return jsonify({'valid': False, 'message': 'Пользователь не найден'})
@@ -1407,7 +1465,7 @@ def api_search_suggestions():
         cursor = conn.cursor()
         
         sql = """
-        SELECT TOP 10 
+        SELECT 
             i.instrument_id,
             i.name,
             i.model,
@@ -1416,16 +1474,17 @@ def api_search_suggestions():
             i.purchase_price
         FROM instruments i
         LEFT JOIN brands b ON i.brand_id = b.brand_id
-        WHERE i.is_available_for_sale = 1
-          AND (i.name LIKE ? OR i.model LIKE ? OR b.brand_name LIKE ?)
+        WHERE i.is_available_for_sale = true
+          AND (i.name ILIKE %s OR i.model ILIKE %s OR b.brand_name ILIKE %s)
         ORDER BY 
             CASE 
-                WHEN i.name LIKE ? THEN 1
-                WHEN i.model LIKE ? THEN 2
-                WHEN b.brand_name LIKE ? THEN 3
+                WHEN i.name ILIKE %s THEN 1
+                WHEN i.model ILIKE %s THEN 2
+                WHEN b.brand_name ILIKE %s THEN 3
                 ELSE 4
             END,
             i.views_count DESC
+        LIMIT 10
         """
         
         search_term = f"%{query}%"
@@ -1446,12 +1505,12 @@ def api_search_suggestions():
                 'url': url_for('instrument_detail', instrument_id=row[0])
             })
         
-        conn.close()
+        release_conn(conn)
         return jsonify(suggestions)
         
     except Exception as e:
         print(f"Error in search suggestions: {e}")
-        conn.close()
+        release_conn(conn)
         return jsonify([])
 
 @app.route('/orders')
@@ -1482,7 +1541,7 @@ def orders():
         JOIN order_statuses os ON po.status_id = os.status_id
         JOIN instruments i ON po.instrument_id = i.instrument_id
         LEFT JOIN brands b ON i.brand_id = b.brand_id
-        WHERE po.user_id = ?
+        WHERE po.user_id = %s
         ORDER BY po.order_date DESC
         """
         cursor.execute(purchase_sql, (session['user_id'],))
@@ -1507,7 +1566,7 @@ def orders():
         JOIN rental_statuses rs ON ro.status_id = rs.status_id
         JOIN instruments i ON ro.instrument_id = i.instrument_id
         LEFT JOIN brands b ON i.brand_id = b.brand_id
-        WHERE ro.user_id = ?
+        WHERE ro.user_id = %s
         ORDER BY ro.created_at DESC
         """
         cursor.execute(rental_sql, (session['user_id'],))
@@ -1527,20 +1586,20 @@ def orders():
             rr.problem_photos_urls
         FROM repair_requests rr
         JOIN repair_statuses rs ON rr.status_id = rs.status_id
-        WHERE rr.user_id = ?
+        WHERE rr.user_id = %s
         ORDER BY rr.created_at DESC
         """
         cursor.execute(repair_sql, (session['user_id'],))
         repair_requests = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('orders.html',
                              purchase_orders=purchase_orders,
                              rental_orders=rental_orders,
                              repair_requests=repair_requests)
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         flash(f'Ошибка при загрузке заказов: {str(e)}', 'danger')
         return redirect(url_for('profile'))
 
@@ -1565,18 +1624,18 @@ def add_to_rental_cart():
         cursor.execute("""
             SELECT quantity_in_stock, is_available_for_rent 
             FROM instruments 
-            WHERE instrument_id = ?
+            WHERE instrument_id = %s
         """, (instrument_id,))
         
         result = cursor.fetchone()
-        if not result or result[1] == 0 or result[0] < quantity:
-            conn.close()
+        if not result or result[1] == False or result[0] < quantity:
+            release_conn(conn)
             return jsonify({'success': False, 'message': 'Инструмент недоступен для аренды'})
         
         cursor.execute("""
             SELECT cart_item_id, quantity 
             FROM cart_items 
-            WHERE user_id = ? AND instrument_id = ? AND is_for_rental = 1
+            WHERE user_id = %s AND instrument_id = %s AND is_for_rental = true
         """, (session['user_id'], instrument_id))
         
         existing = cursor.fetchone()
@@ -1584,22 +1643,22 @@ def add_to_rental_cart():
         if existing:
             cursor.execute("""
                 UPDATE cart_items 
-                SET quantity = quantity + ?, 
-                    rental_start_date = ?,
-                    rental_end_date = ?
-                WHERE cart_item_id = ?
+                SET quantity = quantity + %s, 
+                    rental_start_date = %s,
+                    rental_end_date = %s
+                WHERE cart_item_id = %s
             """, (quantity, rental_start, rental_end, existing[0]))
             print(f"Updated existing cart item: {existing[0]}")
         else:
             cursor.execute("""
                 INSERT INTO cart_items 
                 (user_id, instrument_id, quantity, is_for_rental, rental_start_date, rental_end_date)
-                VALUES (?, ?, ?, 1, ?, ?)
+                VALUES (%s, %s, %s, true, %s, %s)
             """, (session['user_id'], instrument_id, quantity, rental_start, rental_end))
             print(f"Created new cart item")
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
         
@@ -1609,7 +1668,7 @@ def add_to_rental_cart():
         traceback.print_exc()
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/cart')
@@ -1634,7 +1693,7 @@ def cart():
             i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 0
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = false
         """
         cursor.execute(purchase_sql, (session['user_id'],))
         purchase_items = cursor.fetchall()
@@ -1650,10 +1709,10 @@ def cart():
             i.quantity_in_stock,
             ci.rental_start_date,
             ci.rental_end_date,
-            i.purchase_price  -- Добавляем purchase_price для расчета залога
+            i.purchase_price
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 1
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = true
         """
         cursor.execute(rental_sql, (session['user_id'],))
         rental_items_raw = cursor.fetchall()
@@ -1724,7 +1783,7 @@ def cart():
                 'is_for_rental': True
             })
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('cart.html', 
                              cart_items=purchase_list,
@@ -1738,7 +1797,7 @@ def cart():
         import traceback
         traceback.print_exc()
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке корзины: {str(e)}', 'danger')
         return redirect(url_for('index'))
     
@@ -1756,26 +1815,26 @@ def add_to_cart(instrument_id):
         cursor.execute("""
             SELECT quantity_in_stock, name 
             FROM instruments 
-            WHERE instrument_id = ? AND is_available_for_sale = 1
+            WHERE instrument_id = %s AND is_available_for_sale = true
         """, (instrument_id,))
         result = cursor.fetchone()
         
         if not result:
             flash('Товар не найден или недоступен для покупки', 'warning')
-            conn.close()
+            release_conn(conn)
             return redirect(request.referrer or url_for('catalog'))
         
         stock, instrument_name = result
         
         if stock <= 0:
             flash('Товар отсутствует в наличии', 'warning')
-            conn.close()
+            release_conn(conn)
             return redirect(request.referrer or url_for('catalog'))
         
         cursor.execute("""
             SELECT cart_item_id, quantity 
             FROM cart_items 
-            WHERE user_id = ? AND instrument_id = ? AND cart_item_id IS NOT NULL
+            WHERE user_id = %s AND instrument_id = %s AND cart_item_id IS NOT NULL
         """, (session['user_id'], instrument_id))
         existing = cursor.fetchone()
         
@@ -1784,8 +1843,8 @@ def add_to_cart(instrument_id):
             if new_quantity <= stock:
                 cursor.execute("""
                     UPDATE cart_items 
-                    SET quantity = ? 
-                    WHERE cart_item_id = ?
+                    SET quantity = %s 
+                    WHERE cart_item_id = %s
                 """, (new_quantity, existing[0]))
                 flash(f'Добавлена еще одна единица "{instrument_name}"', 'success')
             else:
@@ -1793,15 +1852,15 @@ def add_to_cart(instrument_id):
         else:
             cursor.execute("""
                 INSERT INTO cart_items (user_id, instrument_id, quantity, is_for_rental)
-                VALUES (?, ?, 1, 0)
+                VALUES (%s, %s, 1, false)
             """, (session['user_id'], instrument_id))
             flash(f'Товар "{instrument_name}" добавлен в корзину', 'success')
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         flash(f'Ошибка при добавлении в корзину: {str(e)}', 'danger')
     
     return redirect(request.referrer or url_for('catalog'))
@@ -1816,14 +1875,14 @@ def remove_from_cart(cart_item_id):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM cart_items WHERE cart_item_id = ? AND user_id = ?",
+        cursor.execute("DELETE FROM cart_items WHERE cart_item_id = %s AND user_id = %s",
                       (cart_item_id, session['user_id']))
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         flash('Товар удален из корзины', 'info')
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         flash(f'Ошибка при удалении из корзины: {str(e)}', 'danger')
     
     return redirect(url_for('cart'))
@@ -1849,12 +1908,12 @@ def update_cart_item():
         SELECT ci.instrument_id, i.quantity_in_stock 
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.cart_item_id = ? AND ci.user_id = ?
+        WHERE ci.cart_item_id = %s AND ci.user_id = %s
         """, (item_id, session['user_id']))
         
         result = cursor.fetchone()
         if not result:
-            conn.close()
+            release_conn(conn)
             return jsonify({'success': False})
         
         stock = result[1]
@@ -1863,16 +1922,16 @@ def update_cart_item():
         
         cursor.execute("""
         UPDATE cart_items 
-        SET quantity = ? 
-        WHERE cart_item_id = ? AND user_id = ?
+        SET quantity = %s 
+        WHERE cart_item_id = %s AND user_id = %s
         """, (quantity, item_id, session['user_id']))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         return jsonify({'success': False})
 
 @app.route('/checkout')
@@ -1891,14 +1950,14 @@ def checkout():
                i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 0
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = false
         """
         cursor.execute(sql, (session['user_id'],))
         cart_items = cursor.fetchall()
         
         if not cart_items:
             flash('Нет товаров для покупки', 'warning')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('cart'))
         
         total = 0
@@ -1918,12 +1977,12 @@ def checkout():
                 'total': item_total
             })
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('checkout.html', cart_items=items_list, total=total)
         
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         flash(f'Ошибка при оформлении заказа: {str(e)}', 'danger')
         return redirect(url_for('cart'))
 
@@ -1940,7 +1999,7 @@ def create_order():
         SELECT ci.instrument_id, ci.quantity, i.purchase_price, i.name, i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = ? AND ci.cart_item_id IS NOT NULL
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL
         """, (session['user_id'],))
         
         cart_items = cursor.fetchall()
@@ -1955,7 +2014,7 @@ def create_order():
             
             if stock < quantity:
                 conn.rollback()
-                conn.close()
+                release_conn(conn)
                 return jsonify({
                     'success': False, 
                     'message': f'Товар "{name}" доступен только в количестве {stock} шт.'
@@ -1969,7 +2028,7 @@ def create_order():
             cursor.execute("""
             SELECT COUNT(*) + 1 
             FROM purchase_orders 
-            WHERE CONVERT(DATE, order_date) = CONVERT(DATE, GETDATE())
+            WHERE order_date::date = CURRENT_DATE
             """)
             today_order_count = cursor.fetchone()[0]
             order_number = f"PO-{datetime.now().strftime('%Y%m%d')}-{today_order_count + index:04d}"
@@ -1980,7 +2039,7 @@ def create_order():
              shipping_first_name, shipping_last_name, shipping_phone, 
              shipping_address, shipping_city, shipping_postal_code,
              delivery_method, delivery_cost, status_id, order_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, GETDATE())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, NOW())
             """, (
                 order_number,
                 session['user_id'],
@@ -2002,14 +2061,14 @@ def create_order():
             
             cursor.execute("""
             UPDATE instruments 
-            SET quantity_in_stock = quantity_in_stock - ?
-            WHERE instrument_id = ?
+            SET quantity_in_stock = quantity_in_stock - %s
+            WHERE instrument_id = %s
             """, (quantity, instrument_id))
         
-        cursor.execute("DELETE FROM cart_items WHERE user_id = ?", (session['user_id'],))
+        cursor.execute("DELETE FROM cart_items WHERE user_id = %s", (session['user_id'],))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         if len(order_numbers) > 1:
             main_order = order_numbers[0] + f" (+{len(order_numbers)-1})"
@@ -2026,7 +2085,7 @@ def create_order():
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         print(f"Error creating order: {e}")
         return jsonify({'success': False, 'message': str(e)})
 
@@ -2056,14 +2115,14 @@ def rental_checkout():
             FROM cart_items ci
             JOIN instruments i ON ci.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
-            WHERE ci.user_id = ? AND ci.is_for_rental = 1
+            WHERE ci.user_id = %s AND ci.is_for_rental = true
         """, (session['user_id'],))
         
         rental_items_raw = cursor.fetchall()
         
         if not rental_items_raw:
             flash('Нет товаров для аренды', 'warning')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('cart'))
         
         items = []
@@ -2088,7 +2147,7 @@ def rental_checkout():
         tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
         next_week = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('rental_checkout.html',
                              rental_items=items,
@@ -2102,7 +2161,7 @@ def rental_checkout():
         import traceback
         traceback.print_exc()
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке: {str(e)}', 'danger')
         return redirect(url_for('cart'))
 
@@ -2125,7 +2184,7 @@ def create_rental_order():
             SELECT ci.instrument_id, ci.quantity, i.rental_price_per_day, i.purchase_price
             FROM cart_items ci
             JOIN instruments i ON ci.instrument_id = i.instrument_id
-            WHERE ci.user_id = ? AND ci.is_for_rental = 1
+            WHERE ci.user_id = %s AND ci.is_for_rental = true
         """, (session['user_id'],))
         
         rental_items = cursor.fetchall()
@@ -2164,7 +2223,8 @@ def create_rental_order():
                 (rental_number, user_id, instrument_id, rental_start_date, rental_end_date,
                  daily_price, deposit_amount, total_amount,
                  delivery_address, status_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, GETDATE())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1, NOW())
+                RETURNING rental_id
             """, (
                 temp_number,
                 session['user_id'],
@@ -2177,7 +2237,6 @@ def create_rental_order():
                 data.get('delivery_address'),
             ))
             
-            cursor.execute("SELECT @@IDENTITY")
             result = cursor.fetchone()
             if result and result[0]:
                 rental_id = int(result[0])
@@ -2188,16 +2247,16 @@ def create_rental_order():
             
             cursor.execute("""
                 UPDATE instruments 
-                SET quantity_in_stock = quantity_in_stock - ?
-                WHERE instrument_id = ?
+                SET quantity_in_stock = quantity_in_stock - %s
+                WHERE instrument_id = %s
             """, (item[1], item[0]))
         
         if first_rental_id is None:
             conn.rollback()
-            conn.close()
+            release_conn(conn)
             return jsonify({'success': False, 'message': 'Не удалось создать запись аренды'})
         
-        cursor.execute("SELECT rental_number FROM rental_orders WHERE rental_id = ?", (first_rental_id,))
+        cursor.execute("SELECT rental_number FROM rental_orders WHERE rental_id = %s", (first_rental_id,))
         result = cursor.fetchone()
         
         if result and result[0]:
@@ -2207,11 +2266,11 @@ def create_rental_order():
         
         cursor.execute("""
             DELETE FROM cart_items 
-            WHERE user_id = ? AND is_for_rental = 1
+            WHERE user_id = %s AND is_for_rental = true
         """, (session['user_id'],))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({
             'success': True,
@@ -2223,7 +2282,7 @@ def create_rental_order():
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         print(f"Error creating rental: {e}")
         import traceback
         traceback.print_exc()
@@ -2275,7 +2334,8 @@ def create_repair_request():
                 INSERT INTO repair_requests 
                 (request_number, user_id, customer_instrument_name, brand, model, 
                  problem_description, problem_photos_urls, status_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1, GETDATE())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 1, NOW())
+                RETURNING request_id
             """, (
                 temp_number,
                 session['user_id'],
@@ -2286,21 +2346,20 @@ def create_repair_request():
                 photos_json
             ))
             
-            cursor.execute("SELECT @@IDENTITY")
             request_id = cursor.fetchone()[0]
             
-            cursor.execute("SELECT request_number FROM repair_requests WHERE request_id = ?", (request_id,))
+            cursor.execute("SELECT request_number FROM repair_requests WHERE request_id = %s", (request_id,))
             request_number = cursor.fetchone()[0]
             
             conn.commit()
-            conn.close()
+            release_conn(conn)
             
             return jsonify({'success': True, 'request_number': request_number})
             
         except Exception as e:
             if 'conn' in locals():
                 conn.rollback()
-                conn.close()
+                release_conn(conn)
             print(f"Error creating repair request: {e}")
             import traceback
             traceback.print_exc()
@@ -2335,17 +2394,17 @@ def repair_requests():
                 rs.color_code
             FROM repair_requests rr
             JOIN repair_statuses rs ON rr.status_id = rs.status_id
-            WHERE rr.user_id = ?
+            WHERE rr.user_id = %s
             ORDER BY rr.created_at DESC
         """, (session['user_id'],))
         
         requests = cursor.fetchall()
-        conn.close()
+        release_conn(conn)
         
         return render_template('repair_requests.html', requests=requests)
         
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         flash(f'Ошибка при загрузке заявок: {str(e)}', 'danger')
         return redirect(url_for('profile'))
 
@@ -2383,31 +2442,31 @@ def admin_dashboard():
         
         cursor.execute("""
             SELECT COUNT(*) FROM purchase_orders 
-            WHERE CONVERT(DATE, order_date) = CONVERT(DATE, GETDATE())
+            WHERE order_date::date = CURRENT_DATE
         """)
         stats['orders_today'] = cursor.fetchone()[0] or 0
         
         cursor.execute("""
             SELECT COUNT(*) FROM users 
-            WHERE CONVERT(DATE, created_at) = CONVERT(DATE, GETDATE())
+            WHERE created_at::date = CURRENT_DATE
         """)
         stats['users_today'] = cursor.fetchone()[0] or 0
         
         cursor.execute("""
             SELECT COUNT(*) FROM rental_orders 
-            WHERE CONVERT(DATE, created_at) = CONVERT(DATE, GETDATE())
+            WHERE created_at::date = CURRENT_DATE
         """)
         stats['rentals_today'] = cursor.fetchone()[0] or 0
         
         cursor.execute("""
             SELECT COUNT(*) FROM repair_requests 
-            WHERE CONVERT(DATE, created_at) = CONVERT(DATE, GETDATE())
+            WHERE created_at::date = CURRENT_DATE
         """)
         stats['repairs_today'] = cursor.fetchone()[0] or 0
         
         cursor.execute("""
             SELECT SUM(total_price) FROM purchase_orders 
-            WHERE order_date >= DATEADD(month, -1, GETDATE())
+            WHERE order_date >= NOW() - INTERVAL '1 month'
         """)
         stats['monthly_revenue'] = cursor.fetchone()[0] or 0
         
@@ -2432,7 +2491,7 @@ def admin_dashboard():
         stats['in_repair'] = cursor.fetchone()[0] or 0
         
         sql = """
-        SELECT TOP 10 
+        SELECT 
             po.order_id,
             po.order_number,
             po.order_date,
@@ -2444,12 +2503,13 @@ def admin_dashboard():
         JOIN users u ON po.user_id = u.user_id
         JOIN order_statuses os ON po.status_id = os.status_id
         ORDER BY po.order_date DESC
+        LIMIT 10
         """
         cursor.execute(sql)
         recent_orders = cursor.fetchall()
         
         sql = """
-        SELECT TOP 5 
+        SELECT 
             u.user_id,
             u.login,
             u.first_name,
@@ -2458,11 +2518,12 @@ def admin_dashboard():
             u.avatar_url
         FROM users u 
         ORDER BY u.created_at DESC
+        LIMIT 5
         """
         cursor.execute(sql)
         recent_users = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         now = datetime.now()
         
@@ -2476,7 +2537,7 @@ def admin_dashboard():
         import traceback
         traceback.print_exc()
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке админ-панели: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
@@ -2499,13 +2560,13 @@ def admin_users():
             ORDER BY u.created_at DESC
         """)
         users = cursor.fetchall()
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/users.html', users=users)
     except Exception as e:
         print(f"Error in admin_users: {e}")
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке пользователей: {str(e)}', 'danger')
         return redirect(url_for('admin_dashboard'))
     
@@ -2521,23 +2582,23 @@ def admin_get_user(user_id):
         cursor = conn.cursor()
         cursor.execute("""
             SELECT user_id, login, email, first_name, last_name, phone, role_id, is_active
-            FROM users WHERE user_id = ?
+            FROM users WHERE user_id = %s
         """, (user_id,))
         
         columns = [column[0] for column in cursor.description]
         row = cursor.fetchone()
         
         if not row:
-            conn.close()
+            release_conn(conn)
             return jsonify({'success': False, 'message': 'Пользователь не найден'})
         
         user = dict(zip(columns, row))
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True, 'user': user})
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
     
 @app.route('/admin/add_user', methods=['POST'])
@@ -2565,11 +2626,11 @@ def admin_add_user():
         cursor.execute("""
             INSERT INTO users (login, email, password_hash, first_name, last_name, 
                              phone, role_id, is_active, is_email_verified, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, GETDATE())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, true, true, NOW())
         """, (login, email, password_hash, first_name, last_name, phone, role_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         flash('Пользователь успешно добавлен', 'success')
         return redirect(url_for('admin_users'))
@@ -2577,7 +2638,7 @@ def admin_add_user():
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при добавлении пользователя: {str(e)}', 'danger')
         return redirect(url_for('admin_users'))
 
@@ -2601,11 +2662,11 @@ def admin_edit_user():
         
         cursor.execute("""
             SELECT user_id FROM users 
-            WHERE (login = ? OR email = ?) AND user_id != ?
+            WHERE (login = %s OR email = %s) AND user_id != %s
         """, (login, email, user_id))
         
         if cursor.fetchone():
-            conn.close()
+            release_conn(conn)
             flash('Пользователь с таким логином или email уже существует', 'danger')
             return redirect(url_for('admin_users'))
         
@@ -2613,21 +2674,21 @@ def admin_edit_user():
             password_hash = hash_password(password)
             cursor.execute("""
                 UPDATE users 
-                SET login = ?, email = ?, first_name = ?, last_name = ?, 
-                    phone = ?, password_hash = ?, role_id = ?, is_active = ?
-                WHERE user_id = ?
+                SET login = %s, email = %s, first_name = %s, last_name = %s, 
+                    phone = %s, password_hash = %s, role_id = %s, is_active = %s
+                WHERE user_id = %s
             """, (login, email, first_name, last_name, phone, password_hash, role_id, is_active, user_id))
         else:
             cursor.execute("""
                 UPDATE users 
-                SET login = ?, email = ?, first_name = ?, last_name = ?, 
-                    phone = ?, role_id = ?, is_active = ?
-                WHERE user_id = ?
+                SET login = %s, email = %s, first_name = %s, last_name = %s, 
+                    phone = %s, role_id = %s, is_active = %s
+                WHERE user_id = %s
             """, (login, email, first_name, last_name, phone, role_id, is_active, user_id))
         
         avatar = request.files.get('avatar')
         if avatar and avatar.filename:
-            cursor.execute("SELECT avatar_url FROM users WHERE user_id = ?", (user_id,))
+            cursor.execute("SELECT avatar_url FROM users WHERE user_id = %s", (user_id,))
             old_avatar = cursor.fetchone()
             if old_avatar and old_avatar[0]:
                 old_path = os.path.join(app.root_path, 'static', old_avatar[0])
@@ -2639,18 +2700,18 @@ def admin_edit_user():
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             avatar.save(filepath)
             
-            cursor.execute("UPDATE users SET avatar_url = ? WHERE user_id = ?", 
+            cursor.execute("UPDATE users SET avatar_url = %s WHERE user_id = %s", 
                          (f"uploads/avatars/{filename}", user_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         flash('Пользователь успешно обновлен', 'success')
         return redirect(url_for('admin_users'))
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при обновлении пользователя: {str(e)}', 'danger')
         return redirect(url_for('admin_users'))
 
@@ -2666,19 +2727,19 @@ def admin_delete_user():
         cursor = conn.cursor()
         
         if user_id == session['user_id']:
-            conn.close()
+            release_conn(conn)
             return jsonify({'success': False, 'message': 'Нельзя удалить самого себя'})
         
-        cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
         
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/orders')
@@ -2708,12 +2769,12 @@ def admin_orders():
         cursor.execute("SELECT * FROM order_statuses")
         statuses = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/orders.html', orders=orders, statuses=statuses)
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке заказов: {str(e)}', 'danger')
         return redirect(url_for('admin_dashboard'))
 
@@ -2737,7 +2798,7 @@ def admin_order_detail(order_id):
             JOIN order_statuses os ON po.status_id = os.status_id
             JOIN instruments i ON po.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
-            WHERE po.order_id = ?
+            WHERE po.order_id = %s
         """, (order_id,))
         
         columns = [column[0] for column in cursor.description]
@@ -2745,7 +2806,7 @@ def admin_order_detail(order_id):
         
         if not order_row:
             flash('Заказ не найден', 'danger')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('admin_orders'))
         
         order = dict(zip(columns, order_row))
@@ -2753,12 +2814,12 @@ def admin_order_detail(order_id):
         cursor.execute("SELECT * FROM order_statuses")
         statuses = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/order_detail.html', order=order, statuses=statuses)
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке заказа: {str(e)}', 'danger')
         return redirect(url_for('admin_orders'))
 
@@ -2774,55 +2835,55 @@ def admin_update_order_status():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT status_name FROM order_statuses WHERE status_id = ?", (status_id,))
+        cursor.execute("SELECT status_name FROM order_statuses WHERE status_id = %s", (status_id,))
         status_name = cursor.fetchone()[0]
         
         if status_name == 'shipped':
             cursor.execute("""
                 UPDATE purchase_orders 
-                SET status_id = ?, shipped_date = GETDATE()
-                WHERE order_id = ?
+                SET status_id = %s, shipped_date = NOW()
+                WHERE order_id = %s
             """, (status_id, order_id))
         elif status_name == 'delivered':
             cursor.execute("""
                 UPDATE purchase_orders 
-                SET status_id = ?, delivered_date = GETDATE()
-                WHERE order_id = ?
+                SET status_id = %s, delivered_date = NOW()
+                WHERE order_id = %s
             """, (status_id, order_id))
         elif status_name == 'cancelled':
             cursor.execute("""
                 SELECT os.status_name, po.instrument_id, po.quantity
                 FROM purchase_orders po
                 JOIN order_statuses os ON po.status_id = os.status_id
-                WHERE po.order_id = ?
+                WHERE po.order_id = %s
             """, (order_id,))
             current = cursor.fetchone()
             if current and current[0] != 'cancelled':
                 cursor.execute("""
                     UPDATE instruments
-                    SET quantity_in_stock = quantity_in_stock + ?
-                    WHERE instrument_id = ?
+                    SET quantity_in_stock = quantity_in_stock + %s
+                    WHERE instrument_id = %s
                 """, (current[2], current[1]))
             cursor.execute("""
                 UPDATE purchase_orders 
-                SET status_id = ?, cancelled_date = GETDATE()
-                WHERE order_id = ?
+                SET status_id = %s, cancelled_date = NOW()
+                WHERE order_id = %s
             """, (status_id, order_id))
         else:
             cursor.execute("""
                 UPDATE purchase_orders 
-                SET status_id = ?
-                WHERE order_id = ?
+                SET status_id = %s
+                WHERE order_id = %s
             """, (status_id, order_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/rentals')
@@ -2851,12 +2912,12 @@ def admin_rentals():
         cursor.execute("SELECT * FROM rental_statuses")
         statuses = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/rentals.html', rentals=rentals, statuses=statuses)
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке аренд: {str(e)}', 'danger')
         return redirect(url_for('admin_dashboard'))
     
@@ -2872,23 +2933,23 @@ def admin_update_rental_status():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT status_name FROM rental_statuses WHERE status_id = ?", (status_id,))
+        cursor.execute("SELECT status_name FROM rental_statuses WHERE status_id = %s", (status_id,))
         status_name = cursor.fetchone()[0]
         
         cursor.execute("""
             UPDATE rental_orders 
-            SET status_id = ?
-            WHERE rental_id = ?
+            SET status_id = %s
+            WHERE rental_id = %s
         """, (status_id, rental_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         print(f"Error updating rental status: {e}")
         return jsonify({'success': False, 'message': str(e)})
 
@@ -2913,7 +2974,7 @@ def admin_rental_detail(rental_id):
             JOIN rental_statuses rs ON ro.status_id = rs.status_id
             JOIN instruments i ON ro.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
-            WHERE ro.rental_id = ?
+            WHERE ro.rental_id = %s
         """, (rental_id,))
         
         columns = [column[0] for column in cursor.description]
@@ -2921,7 +2982,7 @@ def admin_rental_detail(rental_id):
         
         if not rental_row:
             flash('Аренда не найдена', 'danger')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('admin_rentals'))
         
         rental = dict(zip(columns, rental_row))
@@ -2929,12 +2990,12 @@ def admin_rental_detail(rental_id):
         cursor.execute("SELECT * FROM rental_statuses")
         statuses = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/rental_detail.html', rental=rental, statuses=statuses)
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке аренды: {str(e)}', 'danger')
         return redirect(url_for('admin_rentals'))
 
@@ -2991,7 +3052,7 @@ def admin_repair_requests():
         """)
         technicians = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/repair_requests.html', 
                              requests=requests, 
@@ -3003,7 +3064,7 @@ def admin_repair_requests():
         import traceback
         traceback.print_exc()
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке заявок: {str(e)}', 'danger')
         return redirect(url_for('admin_dashboard'))
 
@@ -3034,7 +3095,7 @@ def admin_repair_detail(request_id):
             JOIN users u ON rr.user_id = u.user_id
             JOIN repair_statuses rs ON rr.status_id = rs.status_id
             LEFT JOIN users tech ON rr.assigned_to = tech.user_id
-            WHERE rr.request_id = ?
+            WHERE rr.request_id = %s
         """, (request_id,))
         
         columns = [column[0] for column in cursor.description]
@@ -3042,7 +3103,7 @@ def admin_repair_detail(request_id):
         
         if not repair_row:
             flash('Заявка не найдена', 'danger')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('admin_repair_requests'))
         
         repair = dict(zip(columns, repair_row))
@@ -3057,7 +3118,7 @@ def admin_repair_detail(request_id):
         """)
         technicians = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/repair_detail.html', 
                              repair=repair, 
@@ -3065,7 +3126,7 @@ def admin_repair_detail(request_id):
                              technicians=technicians)
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке заявки: {str(e)}', 'danger')
         return redirect(url_for('admin_repair_requests'))
 
@@ -3081,31 +3142,31 @@ def admin_update_repair_status():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT status_name FROM repair_statuses WHERE status_id = ?", (status_id,))
+        cursor.execute("SELECT status_name FROM repair_statuses WHERE status_id = %s", (status_id,))
         status_name = cursor.fetchone()[0]
         
         if status_name == 'completed':
             cursor.execute("""
                 UPDATE repair_requests 
-                SET status_id = ?, completed_at = GETDATE()
-                WHERE request_id = ?
+                SET status_id = %s, completed_at = NOW()
+                WHERE request_id = %s
             """, (status_id, request_id))
         else:
             cursor.execute("""
                 UPDATE repair_requests 
-                SET status_id = ?
-                WHERE request_id = ?
+                SET status_id = %s
+                WHERE request_id = %s
             """, (status_id, request_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
         
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/assign_repair_technician', methods=['POST'])
@@ -3122,19 +3183,19 @@ def admin_assign_repair_technician():
         
         cursor.execute("""
             UPDATE repair_requests 
-            SET assigned_to = ?
-            WHERE request_id = ?
+            SET assigned_to = %s
+            WHERE request_id = %s
         """, (technician_id if technician_id else None, request_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
         
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/set_repair_cost', methods=['POST'])
@@ -3151,19 +3212,19 @@ def admin_set_repair_cost():
         
         cursor.execute("""
             UPDATE repair_requests 
-            SET actual_cost = ?
-            WHERE request_id = ?
+            SET actual_cost = %s
+            WHERE request_id = %s
         """, (cost, request_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
         
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/brands')
@@ -3179,12 +3240,12 @@ def admin_brands():
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM brands ORDER BY brand_name")
         brands = cursor.fetchall()
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/brands.html', brands=brands)
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке брендов: {str(e)}', 'danger')
         return redirect(url_for('admin_dashboard'))
 
@@ -3203,18 +3264,18 @@ def admin_add_brand():
         
         cursor.execute("""
             INSERT INTO brands (brand_name, country, description, website)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
         """, (brand_name, country, description, website))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         flash('Бренд успешно добавлен', 'success')
         return redirect(url_for('admin_brands'))
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при добавлении бренда: {str(e)}', 'danger')
         return redirect(url_for('admin_brands'))
 
@@ -3234,19 +3295,19 @@ def admin_edit_brand():
         
         cursor.execute("""
             UPDATE brands 
-            SET brand_name = ?, country = ?, description = ?, website = ?
-            WHERE brand_id = ?
+            SET brand_name = %s, country = %s, description = %s, website = %s
+            WHERE brand_id = %s
         """, (brand_name, country, description, website, brand_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         flash('Бренд успешно обновлен', 'success')
         return redirect(url_for('admin_brands'))
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при обновлении бренда: {str(e)}', 'danger')
         return redirect(url_for('admin_brands'))
 
@@ -3296,7 +3357,7 @@ def admin_instruments():
         cursor.execute("SELECT * FROM instrument_conditions ORDER BY condition_name")
         conditions = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('admin/instruments.html',
                              instruments=instruments,
@@ -3304,7 +3365,7 @@ def admin_instruments():
                              brands=brands,
                              conditions=conditions)
     except Exception as e:
-        conn.close()
+        release_conn(conn)
         flash(f'Ошибка при загрузке инструментов: {str(e)}', 'danger')
         return redirect(url_for('admin_dashboard'))
 
@@ -3319,23 +3380,23 @@ def admin_get_instrument(instrument_id):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT * FROM instruments WHERE instrument_id = ?
+            SELECT * FROM instruments WHERE instrument_id = %s
         """, (instrument_id,))
         
         columns = [column[0] for column in cursor.description]
         row = cursor.fetchone()
         
         if not row:
-            conn.close()
+            release_conn(conn)
             return jsonify({'success': False, 'message': 'Инструмент не найден'})
         
         instrument = dict(zip(columns, row))
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True, 'instrument': instrument})
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
     
 @app.route('/admin/add_instrument', methods=['POST'])
@@ -3354,8 +3415,8 @@ def admin_add_instrument():
         condition_id = request.form.get('condition_id') or None
         description = request.form.get('description')
         characteristics = request.form.get('characteristics')
-        is_available_for_sale = 1 if request.form.get('is_available_for_sale') else 0
-        is_available_for_rent = 1 if request.form.get('is_available_for_rent') else 0
+        is_available_for_sale = True if request.form.get('is_available_for_sale') else False
+        is_available_for_rent = True if request.form.get('is_available_for_rent') else False
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -3365,12 +3426,12 @@ def admin_add_instrument():
             (name, model, brand_id, category_id, year_of_manufacture, purchase_price, 
              rental_price_per_day, quantity_in_stock, condition_id, description, 
              characteristics, is_available_for_sale, is_available_for_rent, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            RETURNING instrument_id
         """, (name, model, brand_id, category_id, year_of_manufacture, purchase_price,
               rental_price_per_day, quantity_in_stock, condition_id, description,
               characteristics, is_available_for_sale, is_available_for_rent))
         
-        cursor.execute("SELECT @@IDENTITY")
         instrument_id = cursor.fetchone()[0]
         
         main_image = request.files.get('main_image')
@@ -3385,19 +3446,19 @@ def admin_add_instrument():
             
             cursor.execute("""
                 UPDATE instruments 
-                SET main_image_url = ? 
-                WHERE instrument_id = ?
+                SET main_image_url = %s 
+                WHERE instrument_id = %s
             """, (f"img/instruments/{filename}", instrument_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         flash('Инструмент успешно добавлен', 'success')
         return redirect(url_for('admin_instruments'))
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при добавлении инструмента: {str(e)}', 'danger')
         return redirect(url_for('admin_instruments'))
 
@@ -3418,8 +3479,8 @@ def admin_update_instrument():
         condition_id = request.form.get('condition_id') or None
         description = request.form.get('description')
         characteristics = request.form.get('characteristics')
-        is_available_for_sale = 1 if request.form.get('is_available_for_sale') else 0
-        is_available_for_rent = 1 if request.form.get('is_available_for_rent') else 0
+        is_available_for_sale = True if request.form.get('is_available_for_sale') else False
+        is_available_for_rent = True if request.form.get('is_available_for_rent') else False
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -3433,7 +3494,7 @@ def admin_update_instrument():
             filename = f"{instrument_id}.{ext}"
             filepath = os.path.join(app.config['INSTRUMENT_IMAGES_FOLDER'], filename)
             
-            cursor.execute("SELECT main_image_url FROM instruments WHERE instrument_id = ?", (instrument_id,))
+            cursor.execute("SELECT main_image_url FROM instruments WHERE instrument_id = %s", (instrument_id,))
             old_image = cursor.fetchone()
             if old_image and old_image[0]:
                 old_filepath = os.path.join('static', old_image[0])
@@ -3444,12 +3505,12 @@ def admin_update_instrument():
             
             cursor.execute("""
                 UPDATE instruments 
-                SET name = ?, model = ?, brand_id = ?, category_id = ?, 
-                    year_of_manufacture = ?, purchase_price = ?, rental_price_per_day = ?,
-                    quantity_in_stock = ?, condition_id = ?, description = ?, 
-                    characteristics = ?, is_available_for_sale = ?, is_available_for_rent = ?,
-                    main_image_url = ?
-                WHERE instrument_id = ?
+                SET name = %s, model = %s, brand_id = %s, category_id = %s, 
+                    year_of_manufacture = %s, purchase_price = %s, rental_price_per_day = %s,
+                    quantity_in_stock = %s, condition_id = %s, description = %s, 
+                    characteristics = %s, is_available_for_sale = %s, is_available_for_rent = %s,
+                    main_image_url = %s
+                WHERE instrument_id = %s
             """, (name, model, brand_id, category_id, year_of_manufacture, purchase_price,
                   rental_price_per_day, quantity_in_stock, condition_id, description,
                   characteristics, is_available_for_sale, is_available_for_rent,
@@ -3457,23 +3518,23 @@ def admin_update_instrument():
         else:
             cursor.execute("""
                 UPDATE instruments 
-                SET name = ?, model = ?, brand_id = ?, category_id = ?, 
-                    year_of_manufacture = ?, purchase_price = ?, rental_price_per_day = ?,
-                    quantity_in_stock = ?, condition_id = ?, description = ?, 
-                    characteristics = ?, is_available_for_sale = ?, is_available_for_rent = ?
-                WHERE instrument_id = ?
+                SET name = %s, model = %s, brand_id = %s, category_id = %s, 
+                    year_of_manufacture = %s, purchase_price = %s, rental_price_per_day = %s,
+                    quantity_in_stock = %s, condition_id = %s, description = %s, 
+                    characteristics = %s, is_available_for_sale = %s, is_available_for_rent = %s
+                WHERE instrument_id = %s
             """, (name, model, brand_id, category_id, year_of_manufacture, purchase_price,
                   rental_price_per_day, quantity_in_stock, condition_id, description,
                   characteristics, is_available_for_sale, is_available_for_rent, instrument_id))
         
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/delete_instrument', methods=['POST'])
@@ -3487,22 +3548,22 @@ def admin_delete_instrument():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT COUNT(*) FROM purchase_orders WHERE instrument_id = ?", (instrument_id,))
+        cursor.execute("SELECT COUNT(*) FROM purchase_orders WHERE instrument_id = %s", (instrument_id,))
         orders_count = cursor.fetchone()[0]
         
         if orders_count > 0:
-            conn.close()
+            release_conn(conn)
             return jsonify({'success': False, 'message': 'Нельзя удалить инструмент, по которому есть заказы'})
         
-        cursor.execute("DELETE FROM instruments WHERE instrument_id = ?", (instrument_id,))
+        cursor.execute("DELETE FROM instruments WHERE instrument_id = %s", (instrument_id,))
         conn.commit()
-        conn.close()
+        release_conn(conn)
         
         return jsonify({'success': True})
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
-            conn.close()
+            release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/technician/repair_requests')
@@ -3538,10 +3599,10 @@ def technician_repair_requests():
                 FROM repair_requests rr
                 JOIN repair_statuses rs ON rr.status_id = rs.status_id
                 JOIN users u ON rr.user_id = u.user_id
-                WHERE rr.assigned_to = ? OR rr.assigned_to IS NULL
+                WHERE rr.assigned_to = %s OR rr.assigned_to IS NULL
                 ORDER BY 
                     CASE 
-                        WHEN rr.assigned_to = ? THEN 0
+                        WHEN rr.assigned_to = %s THEN 0
                         ELSE 1
                     END,
                     rr.created_at DESC
@@ -3581,7 +3642,7 @@ def technician_repair_requests():
         cursor.execute("SELECT * FROM repair_statuses ORDER BY sort_order")
         statuses = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('technician/repair_requests.html', 
                              requests=requests, 
@@ -3593,7 +3654,7 @@ def technician_repair_requests():
         import traceback
         traceback.print_exc()
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке заявок: {str(e)}', 'danger')
         return redirect(url_for('index'))
     
@@ -3624,7 +3685,7 @@ def technician_repair_detail(request_id):
             JOIN users u ON rr.user_id = u.user_id
             JOIN repair_statuses rs ON rr.status_id = rs.status_id
             LEFT JOIN users tech ON rr.assigned_to = tech.user_id
-            WHERE rr.request_id = ?
+            WHERE rr.request_id = %s
         """, (request_id,))
         
         columns = [column[0] for column in cursor.description]
@@ -3632,7 +3693,7 @@ def technician_repair_detail(request_id):
         
         if not repair_row:
             flash('Заявка не найдена', 'danger')
-            conn.close()
+            release_conn(conn)
             return redirect(url_for('technician_repair_requests'))
         
         repair = dict(zip(columns, repair_row))
@@ -3640,14 +3701,14 @@ def technician_repair_detail(request_id):
         cursor.execute("SELECT * FROM repair_statuses ORDER BY sort_order")
         statuses = cursor.fetchall()
         
-        conn.close()
+        release_conn(conn)
         
         return render_template('technician/repair_detail.html', 
                              repair=repair, 
                              statuses=statuses)
     except Exception as e:
         if conn:
-            conn.close()
+            release_conn(conn)
         flash(f'Ошибка при загрузке заявки: {str(e)}', 'danger')
         return redirect(url_for('technician_repair_requests'))
 
@@ -3662,14 +3723,14 @@ def api_cart_count():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT SUM(quantity) FROM cart_items WHERE user_id = ?", 
+        cursor.execute("SELECT SUM(quantity) FROM cart_items WHERE user_id = %s", 
                       (session['user_id'],))
         result = cursor.fetchone()
         count = result[0] if result[0] else 0
-        conn.close()
+        release_conn(conn)
         return jsonify({'count': count})
     except:
-        conn.close()
+        release_conn(conn)
         return jsonify({'count': 0})
 
 @app.route('/api/categories')
@@ -3682,12 +3743,12 @@ def api_categories():
         cursor = conn.cursor()
         cursor.execute("SELECT category_id, category_name FROM categories ORDER BY category_name")
         categories = cursor.fetchall()
-        conn.close()
+        release_conn(conn)
         
         result = [{'id': c[0], 'name': c[1]} for c in categories]
         return jsonify(result)
     except:
-        conn.close()
+        release_conn(conn)
         return jsonify([])
 
 @app.errorhandler(404)
@@ -3715,12 +3776,13 @@ if __name__ == '__main__':
         except:
             print("⚠️  Таблица instruments не найдена")
         
-        conn.close()
+        release_conn(conn)
     else:
         print("❌ ОШИБКА: Не удалось подключиться к базе данных")
     
     print("=" * 50)
-    print("Сервер запускается на http://localhost:5000")
+    port = int(os.environ.get('PORT', 5000))
+    print(f"Сервер запускается на http://localhost:{port}")
     print("=" * 50)
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=port)

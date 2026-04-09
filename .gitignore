@@ -1,1 +1,23 @@
-/desktop.ini
+desktop.ini
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.db
+.venv/
+venv/
+env/
+instance/
+.DS_Store
+Thumbs.db
+
+# Загруженные пользователями файлы (не хранить в git)
+static/uploads/avatars/*
+!static/uploads/avatars/.gitkeep
+static/uploads/repair_photos/*
+!static/uploads/repair_photos/.gitkeep
+
+# Логи
+*.log
+logs/

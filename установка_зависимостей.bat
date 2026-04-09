@@ -34,6 +34,9 @@ pip install flask-mail
 echo Устанавливаем dnspython...
 pip install dnspython
 
+echo Устанавливаем psycopg2-binary
+pip install psycopg2-binary
+
 echo.
 echo Все зависимости успешно установлены!
 echo.

@@ -53,17 +53,21 @@ def get_db_pool():
                 database_url = database_url.replace('postgres://', 'postgresql://', 1)
             result = urlparse(database_url)
             _db_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=2, maxconn=10,
+                minconn=1, maxconn=10,
                 host=result.hostname,
                 port=result.port or 5432,
                 database=result.path[1:],
                 user=result.username,
                 password=result.password,
-                sslmode='require'
+                sslmode='require',
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5
             )
         else:
             _db_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=2, maxconn=10,
+                minconn=1, maxconn=10,
                 host=os.environ.get('DB_HOST', 'localhost'),
                 port=int(os.environ.get('DB_PORT', 5432)),
                 database=os.environ.get('DB_NAME', 'soundgoodizerBD'),
@@ -81,7 +85,22 @@ def get_db_connection():
     if not pool:
         return None
     try:
-        return pool.getconn()
+        conn = pool.getconn()
+        # Проверяем что соединение живое
+        if conn.closed:
+            pool.putconn(conn)
+            global _db_pool
+            _db_pool = None
+            pool = get_db_pool()
+            conn = pool.getconn()
+        try:
+            conn.cursor().execute('SELECT 1')
+        except Exception:
+            pool.putconn(conn)
+            _db_pool = None
+            pool = get_db_pool()
+            conn = pool.getconn()
+        return conn
     except Exception as e:
         print(f"ОШИБКА ПОЛУЧЕНИЯ СОЕДИНЕНИЯ ИЗ ПУЛА: {e}")
         return None
@@ -231,76 +250,58 @@ def get_instruments(where_clause="", params=()):
         return []
 
 def send_verification_email(email, verification_code):
-    try:
-        msg = Message(
-            subject='Подтверждение email - SoundGoodizer',
-            recipients=[email]
-        )
-        
-        msg.html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: #667eea; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
-                .code {{ font-size: 32px; font-weight: bold; color: #667eea; text-align: center; padding: 20px; background: #f8f9fa; border-radius: 5px; margin: 20px 0; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>SoundGoodizer</h1>
-                    <p>Подтверждение email адреса</p>
+    import threading
+    def _send():
+        try:
+            msg = Message(
+                subject='Подтверждение email - SoundGoodizer',
+                recipients=[email]
+            )
+            msg.html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: #667eea; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+                    .code {{ font-size: 32px; font-weight: bold; color: #667eea; text-align: center; padding: 20px; background: #f8f9fa; border-radius: 5px; margin: 20px 0; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>SoundGoodizer</h1>
+                        <p>Подтверждение email адреса</p>
+                    </div>
+                    <p>Здравствуйте!</p>
+                    <p>Благодарим вас за регистрацию в SoundGoodizer. Для завершения регистрации необходимо подтвердить ваш email адрес.</p>
+                    <p>Ваш код подтверждения:</p>
+                    <div class="code">{verification_code}</div>
+                    <p>Введите этот 6-значный код на странице подтверждения на сайте SoundGoodizer.</p>
+                    <p><strong>Код действителен 24 часа.</strong></p>
+                    <p>Если вы не регистрировались на SoundGoodizer, просто проигнорируйте это письмо.</p>
+                    <hr>
+                    <p style="color: #666; font-size: 12px;">
+                        © SoundGoodizer. Все права защищены.<br>
+                        Это письмо отправлено автоматически, пожалуйста, не отвечайте на него.
+                    </p>
                 </div>
-                
-                <p>Здравствуйте!</p>
-                <p>Благодарим вас за регистрацию в SoundGoodizer. Для завершения регистрации необходимо подтвердить ваш email адрес.</p>
-                
-                <p>Ваш код подтверждения:</p>
-                <div class="code">{verification_code}</div>
-                
-                <p>Введите этот 6-значный код на странице подтверждения на сайте SoundGoodizer.</p>
-                
-                <p><strong>Код действителен 24 часа.</strong></p>
-                
-                <p>Если вы не регистрировались на SoundGoodizer, просто проигнорируйте это письмо.</p>
-                
-                <hr>
-                
-                <p style="color: #666; font-size: 12px;">
-                    © SoundGoodizer. Все права защищены.<br>
-                    Это письмо отправлено автоматически, пожалуйста, не отвечайте на него.
-                </p>
-            </div>
-        </body>
-        </html>
-        """
-        
-        msg.body = f"""
-        Здравствуйте!
-        
-        Благодарим вас за регистрацию в SoundGoodizer.
-        
-        Ваш код подтверждения: {verification_code}
-        
-        Введите этот 6-значный код на странице подтверждения на сайте SoundGoodizer.
-        
-        Код действителен 24 часа.
-        
-        Если вы не регистрировались на SoundGoodizer, просто проигнорируйте это письмо.
-        
-        © SoundGoodizer
-        """
-        
-        mail.send(msg)
-        print(f"✓ Email с кодом подтверждения отправлен на {email}")
-        return True
-    except Exception as e:
-        print(f"✗ Ошибка отправки email: {e}")
-        return False
+            </body>
+            </html>
+            """
+            msg.body = f"Ваш код подтверждения: {verification_code}\n\nКод действителен 24 часа."
+            with app.app_context():
+                mail.send(msg)
+            print(f"✓ Email с кодом подтверждения отправлен на {email}")
+        except Exception as e:
+            print(f"✗ Ошибка отправки email: {e}")
+
+    thread = threading.Thread(target=_send)
+    thread.daemon = True
+    thread.start()
+    return True
 
 def allowed_repair_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_REPAIR_EXTENSIONS

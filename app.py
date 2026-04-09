@@ -5,7 +5,7 @@ import psycopg2.pool
 import hashlib
 from functools import wraps
 from collections import namedtuple
-from flask_mail import Mail, Message
+import resend
 import secrets
 from datetime import datetime, timedelta
 import os
@@ -30,15 +30,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
 app.config['INSTRUMENT_IMAGES_FOLDER'] = INSTRUMENT_IMAGES_FOLDER
 
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 465))
-app.config['MAIL_USE_TLS'] = False
-app.config['MAIL_USE_SSL'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
-
-mail = Mail(app)
+resend.api_key = os.environ.get('RESEND_API_KEY', '')
 
 _db_pool = None
 
@@ -252,11 +244,13 @@ def get_instruments(where_clause="", params=()):
 
 def send_verification_email(email, verification_code):
     try:
-        msg = Message(
+        from_email = os.environ.get('MAIL_FROM', 'SoundGoodizer <onboarding@resend.dev>')
+        print(f"[MAIL] Отправка на {email}, from: {from_email}")
+        params = resend.Emails.SendParams(
+            from_=from_email,
+            to=[email],
             subject='Подтверждение email - SoundGoodizer',
-            recipients=[email]
-        )
-        msg.html = f"""<!DOCTYPE html>
+            html=f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
@@ -270,10 +264,9 @@ body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
 <p>Код действителен 24 часа.</p>
 <hr><p style="color:#666;font-size:12px;">© SoundGoodizer</p>
 </div></body></html>"""
-        msg.body = f"Ваш код подтверждения: {verification_code}\n\nКод действителен 24 часа."
-        print(f"[MAIL] Отправка на {email}, сервер: {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']}, user: {app.config['MAIL_USERNAME']}")
-        mail.send(msg)
-        print(f"[MAIL] ✓ Email успешно отправлен на {email}")
+        )
+        result = resend.Emails.send(params)
+        print(f"[MAIL] ✓ Email успешно отправлен на {email}, id: {result.get('id')}")
         return True
     except Exception as e:
         print(f"[MAIL] ✗ Ошибка отправки email на {email}: {e}")
@@ -1610,7 +1603,7 @@ def add_to_rental_cart():
         cursor.execute("""
             SELECT cart_item_id, quantity 
             FROM cart_items 
-            WHERE user_id = %s AND instrument_id = %s AND is_for_rental = 1
+            WHERE user_id = %s AND instrument_id = %s AND is_for_rental = TRUE
         """, (session['user_id'], instrument_id))
         
         existing = cursor.fetchone()
@@ -1628,7 +1621,7 @@ def add_to_rental_cart():
             cursor.execute("""
                 INSERT INTO cart_items 
                 (user_id, instrument_id, quantity, is_for_rental, rental_start_date, rental_end_date)
-                VALUES (%s, %s, %s, 1, %s, %s)
+                VALUES (%s, %s, %s, TRUE, %s, %s)
             """, (session['user_id'], instrument_id, quantity, rental_start, rental_end))
             print(f"Created new cart item")
         
@@ -1668,7 +1661,7 @@ def cart():
             i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 0
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = FALSE
         """
         cursor.execute(purchase_sql, (session['user_id'],))
         purchase_items = cursor.fetchall()
@@ -1687,7 +1680,7 @@ def cart():
             i.purchase_price  -- Добавляем purchase_price для расчета залога
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 1
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = TRUE
         """
         cursor.execute(rental_sql, (session['user_id'],))
         rental_items_raw = cursor.fetchall()
@@ -1827,7 +1820,7 @@ def add_to_cart(instrument_id):
         else:
             cursor.execute("""
                 INSERT INTO cart_items (user_id, instrument_id, quantity, is_for_rental)
-                VALUES (%s, %s, 1, 0)
+                VALUES (%s, %s, 1, FALSE)
             """, (session['user_id'], instrument_id))
             flash(f'Товар "{instrument_name}" добавлен в корзину', 'success')
         
@@ -1925,7 +1918,7 @@ def checkout():
                i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = 0
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.quantity > 0 AND ci.is_for_rental = FALSE
         """
         cursor.execute(sql, (session['user_id'],))
         cart_items = cursor.fetchall()
@@ -2086,7 +2079,7 @@ def rental_checkout():
             FROM cart_items ci
             JOIN instruments i ON ci.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
-            WHERE ci.user_id = %s AND ci.is_for_rental = 1
+            WHERE ci.user_id = %s AND ci.is_for_rental = TRUE
         """, (session['user_id'],))
         
         rental_items_raw = cursor.fetchall()
@@ -2155,7 +2148,7 @@ def create_rental_order():
             SELECT ci.instrument_id, ci.quantity, i.rental_price_per_day, i.purchase_price
             FROM cart_items ci
             JOIN instruments i ON ci.instrument_id = i.instrument_id
-            WHERE ci.user_id = %s AND ci.is_for_rental = 1
+            WHERE ci.user_id = %s AND ci.is_for_rental = TRUE
         """, (session['user_id'],))
         
         rental_items = cursor.fetchall()
@@ -2237,7 +2230,7 @@ def create_rental_order():
         
         cursor.execute("""
             DELETE FROM cart_items 
-            WHERE user_id = %s AND is_for_rental = 1
+            WHERE user_id = %s AND is_for_rental = TRUE
         """, (session['user_id'],))
         
         conn.commit()

@@ -292,13 +292,17 @@ def send_verification_email(email, verification_code):
             </html>
             """
             msg.body = f"Ваш код подтверждения: {verification_code}\n\nКод действителен 24 часа."
-            with app.app_context():
-                mail.send(msg)
+            mail.send(msg)
             print(f"✓ Email с кодом подтверждения отправлен на {email}")
         except Exception as e:
             print(f"✗ Ошибка отправки email: {e}")
 
-    thread = threading.Thread(target=_send)
+    ctx = app._get_current_object().app_context()
+    def _send_with_ctx():
+        with ctx:
+            _send()
+
+    thread = threading.Thread(target=_send_with_ctx)
     thread.daemon = True
     thread.start()
     return True

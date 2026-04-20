@@ -2185,7 +2185,7 @@ def create_order():
         SELECT ci.instrument_id, ci.quantity, i.purchase_price, i.name, i.quantity_in_stock
         FROM cart_items ci
         JOIN instruments i ON ci.instrument_id = i.instrument_id
-        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL
+        WHERE ci.user_id = %s AND ci.cart_item_id IS NOT NULL AND ci.is_for_rental = FALSE
         """, (session['user_id'],))
         
         cart_items = cursor.fetchall()
@@ -2211,9 +2211,12 @@ def create_order():
             delivery_cost = data.get('delivery_cost', 0) if index == 0 else 0
             total_with_delivery = item_total + delivery_cost
             
-            cursor.execute("SELECT COUNT(*) FROM purchase_orders WHERE DATE(order_date) = CURRENT_DATE")
-            today_order_count = cursor.fetchone()[0]
-            order_number = f"PO-{datetime.now().strftime('%Y%m%d')}-{today_order_count + index + 1:04d}"
+            # Генерируем уникальный номер заказа с повторными попытками при коллизии
+            for _ in range(10):
+                order_number = generate_order_number()
+                cursor.execute("SELECT 1 FROM purchase_orders WHERE order_number = %s", (order_number,))
+                if cursor.fetchone() is None:
+                    break
             
             cursor.execute("""
             INSERT INTO purchase_orders 
@@ -2247,7 +2250,7 @@ def create_order():
             WHERE instrument_id = %s
             """, (quantity, instrument_id))
         
-        cursor.execute("DELETE FROM cart_items WHERE user_id = %s", (session['user_id'],))
+        cursor.execute("DELETE FROM cart_items WHERE user_id = %s AND is_for_rental = FALSE", (session['user_id'],))
         
         conn.commit()
         release_conn(conn)

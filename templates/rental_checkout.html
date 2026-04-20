@@ -2,6 +2,71 @@
 
 {% block title %}Оформление аренды - SoundGoodizer{% endblock %}
 
+{% block extra_css %}
+<style>
+    .map-wrapper {
+        position: relative;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 2px solid #dee2e6;
+        margin-bottom: 10px;
+    }
+    #deliveryMap {
+        height: 300px;
+        width: 100%;
+    }
+    .map-expand-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(0,0,0,0.55);
+        border: 1px solid rgba(255,255,255,0.2);
+        color: #fff;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: background 0.2s;
+    }
+    .map-expand-btn:hover {
+        background: rgba(0,0,0,0.72);
+    }
+    .map-info {
+        background: rgba(52, 152, 219, 0.12);
+        color: inherit;
+        border: 1px solid rgba(52, 152, 219, 0.25);
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+    }
+    .distance-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+    /* Поля адреса */
+    .address-fields .form-control {
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+    }
+    .address-fields .form-control::placeholder {
+        color: #adb5bd;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div id="rental-data" 
      data-items='{{ rental_items|tojson|safe }}' 
@@ -62,26 +127,89 @@
                             </div>
                         </div>
                         
-                        <div class="row mb-3">
-                            <div class="col-md-6 mb-2">
-                                <label class="form-label fw-bold">Город *</label>
-                                <input type="text" class="form-control" name="city" required id="cityInput" value="Новокузнецк">
-                                <div class="form-text text-muted small">При вводе другого города даты аренды автоматически сдвинутся</div>
-                                <div class="invalid-feedback">Введите город</div>
+                        <div class="mb-3" id="deliverySection" style="position:relative;">
+                            <div id="pickupOverlay" style="display:none;position:absolute;inset:0;background:rgba(128,128,128,0.18);border-radius:10px;z-index:10;backdrop-filter:blur(1px);pointer-events:all;"></div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6 mb-2">
+                                    <label class="form-label fw-bold">Город *</label>
+                                    <input type="text" class="form-control" name="city" id="cityInput" value="Новокузнецк">
+                                    <div class="form-text text-muted small">Заполняется автоматически при выборе на карте</div>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label class="form-label fw-bold">Индекс *</label>
+                                    <input type="text" class="form-control" name="postal_code" id="postalCode" placeholder="654000" maxlength="6">
+                                    <div class="form-text text-muted small">6 цифр почтового индекса</div>
+                                </div>
                             </div>
-                            <div class="col-md-6 mb-2">
-                                <label class="form-label fw-bold">Индекс *</label>
-                                <input type="text" class="form-control" name="postal_code" required id="postalCode" placeholder="654000" maxlength="6">
-                                <div class="form-text text-muted small">6 цифр почтового индекса</div>
-                                <div class="invalid-feedback">Введите индекс</div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-map me-1 text-primary"></i>Выберите адрес на карте *</label>
+                                <div class="map-info">
+                                    <i class="bi bi-cursor me-1"></i>Кликните на карту или введите адрес — стоимость доставки и даты аренды рассчитаются автоматически
+                                </div>
+                                <div class="map-wrapper">
+                                    <div id="deliveryMap"></div>
+                                    <button type="button" class="map-expand-btn" onclick="openMapModal()">
+                                        <i class="bi bi-arrows-fullscreen"></i> Развернуть
+                                    </button>
+                                </div>
+                                <div class="input-group mb-2">
+                                    <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                                    <input type="text" class="form-control" id="addressSearch"
+                                           placeholder="Введите адрес для поиска...">
+                                    <button class="btn btn-outline-primary" type="button" id="searchAddressBtn">
+                                        Найти
+                                    </button>
+                                </div>
+                                <div id="geocodeResults" class="list-group mb-2" style="display:none;"></div>
+                                <div id="distanceInfo" class="d-flex align-items-center gap-2 mb-2" style="display:none!important;">
+                                    <i class="bi bi-geo-alt-fill text-primary"></i>
+                                    <span class="text-muted small">Расстояние от Новокузнецка:</span>
+                                    <span class="distance-badge" id="distanceBadge">—</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-3" id="addressContainer" style="display:none;">
+                                <label class="form-label fw-bold">Адрес доставки</label>
+                                <div class="address-fields">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-8">
+                                            <input type="text" class="form-control" id="streetInput" name="street"
+                                                   placeholder="Улица">
+                                        </div>
+                                        <div class="col-4">
+                                            <input type="text" class="form-control" id="houseInput" name="house"
+                                                   placeholder="Дом / корп.">
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="apartmentInput" name="apartment"
+                                                   placeholder="Квартира">
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="entranceInput" name="entrance"
+                                                   placeholder="Подъезд">
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="floorInput" name="floor"
+                                                   placeholder="Этаж">
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="intercomInput" name="intercom"
+                                                   placeholder="Домофон">
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="commentInput" name="comment" value="">
+                                </div>
+                                <input type="hidden" id="deliveryAddress" name="delivery_address">
                             </div>
                         </div>
-                        
-                        <div class="mb-3" id="addressContainer">
-                            <label class="form-label fw-bold">Адрес доставки</label>
-                            <textarea class="form-control" name="delivery_address" rows="2" id="deliveryAddress"
-                                      placeholder="Улица, дом, квартира (для доставки)"></textarea>
-                        </div>
+
+                        <input type="hidden" id="deliveryLat" name="delivery_lat" value="">
+                        <input type="hidden" id="deliveryLon" name="delivery_lon" value="">
+                        <input type="hidden" id="deliveryDistanceKm" name="delivery_distance_km" value="0">
                         
                         <div class="mb-3">
                             <label class="form-label fw-bold mb-3">Способ получения *</label>
@@ -226,7 +354,7 @@
                         </li>
                         <li class="mb-0">
                             <i class="bi bi-check-circle-fill text-success me-2"></i>
-                            Для др. городов +4 дня к доставке
+                            Для др. городов даты сдвигаются по расстоянию
                         </li>
                     </ul>
                 </div>
@@ -235,14 +363,119 @@
     </div>
 </div>
 
+<div id="mapModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;width:95vw;height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+        <div style="padding:12px 16px;border-bottom:1px solid #dee2e6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <strong><i class="bi bi-map me-1 text-primary"></i>Выбор адреса доставки</strong>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="closeMapModal()"><i class="bi bi-x-lg"></i> Закрыть</button>
+        </div>
+        <div id="mapModalMap" style="flex:1;width:100%;"></div>
+        <div style="padding:10px 16px;border-top:1px solid #dee2e6;display:flex;align-items:center;gap:8px;flex-shrink:0;position:relative;">
+            <div class="input-group" style="flex:1;">
+                <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" id="modalAddressSearch" placeholder="Введите адрес...">
+                <button class="btn btn-outline-primary" type="button" id="modalSearchBtn">Найти</button>
+            </div>
+            <button type="button" class="btn btn-success" onclick="closeMapModal()"><i class="bi bi-check-lg me-1"></i>Выбрать</button>
+            <div id="modalGeocodeResults" class="list-group" style="display:none;position:absolute;bottom:60px;left:16px;right:16px;z-index:10001;max-height:200px;overflow-y:auto;"></div>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var rentalItems = JSON.parse(document.getElementById('rental-data').getAttribute('data-items'));
     var totalDeposit = parseFloat(document.getElementById('rental-data').getAttribute('data-deposit'));
-    
+
+    var NOVOKUZNETSK_LAT = 53.7557;
+    var NOVOKUZNETSK_LON = 87.1099;
+    var MAX_DELIVERY_COST = 1500;
+    var MIN_DELIVERY_COST = 300;
+    var FREE_ZONE_KM = 50;
+    var MAX_DISTANCE_KM = 5000;
+
+    var RUSSIA_BOUNDS = L.latLngBounds([41.2, 19.6], [81.9, 190.0]);
+    var map = L.map('deliveryMap', {
+        attributionControl: false,
+        maxBounds: RUSSIA_BOUNDS,
+        maxBoundsViscosity: 0.9
+    }).setView([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);
+    L.control.attribution({prefix: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+
+    var mapModal = L.map('mapModalMap', {
+        attributionControl: false,
+        maxBounds: RUSSIA_BOUNDS,
+        maxBoundsViscosity: 0.9
+    }).setView([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(mapModal);
+    L.control.attribution({prefix: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(mapModal);
+
+    window.openMapModal = function() {
+        var modal = document.getElementById('mapModal');
+        modal.style.display = 'flex';
+        setTimeout(function() { mapModal.invalidateSize(); mapModal.setView(map.getCenter(), map.getZoom()); }, 100);
+    };
+    window.closeMapModal = function() {
+        document.getElementById('mapModal').style.display = 'none';
+        map.invalidateSize();
+    };
+    document.getElementById('mapModal').addEventListener('click', function(e) {
+        if (e.target === this) closeMapModal();
+    });
+
+    var shopIcon = L.divIcon({
+        html: '<div style="background:#3498db;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>',
+        iconSize: [32, 32], iconAnchor: [16, 16], className: ''
+    });
+    var deliveryIcon = L.divIcon({
+        html: '<div style="background:#e74c3c;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">📍</div>',
+        iconSize: [32, 32], iconAnchor: [16, 32], className: ''
+    });
+
+    L.marker([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], {icon: shopIcon}).addTo(map).bindPopup('<b>SoundGoodizer</b><br>Новокузнецк');
+    L.marker([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], {icon: shopIcon}).addTo(mapModal).bindPopup('<b>SoundGoodizer</b><br>Новокузнецк');
+
+    var deliveryMarker = null;
+    var modalDeliveryMarker = null;
+    var deliveryLine = null;
+    var modalDeliveryLine = null;
+
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+        var R = 6371;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLon = (lon2 - lon1) * Math.PI / 180;
+        var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function calcDeliveryCost(distanceKm) {
+        if (distanceKm <= FREE_ZONE_KM) return MIN_DELIVERY_COST;
+        var ratio = Math.min((distanceKm - FREE_ZONE_KM) / (MAX_DISTANCE_KM - FREE_ZONE_KM), 1);
+        return Math.round(MIN_DELIVERY_COST + ratio * (MAX_DELIVERY_COST - MIN_DELIVERY_COST));
+    }
+
+    function calcDateShiftDays(distanceKm) {
+        if (distanceKm <= FREE_ZONE_KM) return 0;
+        if (distanceKm <= 200) return 1;
+        if (distanceKm <= 500) return 2;
+        if (distanceKm <= 1000) return 3;
+        if (distanceKm <= 2000) return 5;
+        return 7;
+    }
+
+    function pluralDays(n) {
+        if (n === 1) return 'день';
+        if (n >= 2 && n <= 4) return 'дня';
+        return 'дней';
+    }
+
     var cityInput = document.getElementById('cityInput');
     var postalCode = document.getElementById('postalCode');
-    var deliveryAddress = document.getElementById('deliveryAddress');
     var addressContainer = document.getElementById('addressContainer');
     var pickupRadio = document.getElementById('pickup');
     var deliveryRadio = document.getElementById('delivery');
@@ -259,96 +492,82 @@ document.addEventListener('DOMContentLoaded', function() {
     var rentalTotalSpan = document.getElementById('rentalTotal');
     var grandTotalSpan = document.getElementById('grandTotal');
     var depositTotalSpan = document.getElementById('depositTotal');
-    
+
     var rentalStart = document.getElementById('rentalStartDate');
     var rentalEnd = document.getElementById('rentalEndDate');
-    
+
     depositTotalSpan.textContent = totalDeposit.toFixed(2) + ' ₽';
-    
+
     var originalStartDate = rentalStart.value;
     var originalEndDate = rentalEnd.value;
-    
-    function calculateDeliveryCost() {
-        var city = cityInput.value.trim().toLowerCase();
-        return city === 'новокузнецк' ? 300 : 1500;
-    }
     
     function calculateDays() {
         var start = rentalStart.value;
         var end = rentalEnd.value;
-        
         if (!start || !end) return 1;
-        
         var startDate = new Date(start);
         var endDate = new Date(end);
-        
         if (endDate <= startDate) return 1;
-        
-        var diffTime = endDate - startDate;
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
     }
-    
+
     function calculateRentalTotal() {
         var days = calculateDays();
         var total = 0;
-        
         for (var i = 0; i < rentalItems.length; i++) {
             total += rentalItems[i].daily_price * days * rentalItems[i].quantity;
         }
-        
         return total;
     }
-    
-    function shiftDatesForDelivery() {
-        var city = cityInput.value.trim().toLowerCase();
-        var isNovokuznetsk = city === 'новокузнецк';
-        
-        if (!isNovokuznetsk && deliveryRadio && deliveryRadio.checked) {
-            var startDate = new Date(originalStartDate);
-            var endDate = new Date(originalEndDate);
-            
-            startDate.setDate(startDate.getDate() + 4);
-            endDate.setDate(endDate.getDate() + 4);
-            
-            rentalStart.value = startDate.toISOString().split('T')[0];
-            rentalEnd.value = endDate.toISOString().split('T')[0];
-            
-            dateShiftNotice.style.display = 'block';
-            dateShiftNotice.textContent = '⚠️ Даты сдвинуты на 4 дня (с учетом доставки)';
-        } else {
-            rentalStart.value = originalStartDate;
-            rentalEnd.value = originalEndDate;
-            dateShiftNotice.style.display = 'none';
-        }
-        
-        updateTotals();
-    }
-    
+
     function updateTotals() {
         var days = calculateDays();
         var rentalTotal = calculateRentalTotal();
-        var deliveryCost = deliveryRadio && deliveryRadio.checked ? calculateDeliveryCost() : 0;
+        var distKm = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+        var deliveryCost = (deliveryRadio && deliveryRadio.checked) ? calcDeliveryCost(distKm) : 0;
         var grandTotal = rentalTotal + totalDeposit + deliveryCost;
-        
+
         daysCountSpan.textContent = days;
         rentalTotalSpan.textContent = rentalTotal.toFixed(2) + ' ₽';
         deliveryCostSpan.textContent = deliveryCost === 0 ? '0 ₽' : deliveryCost + ' ₽';
         grandTotalSpan.textContent = grandTotal.toFixed(2) + ' ₽';
     }
-    
-    function updateDeliveryOptions() {
-        var city = cityInput.value.trim().toLowerCase();
-        var isNovokuznetsk = city === 'новокузнецк';
-        
-        if (deliveryPriceText) {
-            deliveryPriceText.textContent = isNovokuznetsk ? '(+300 ₽)' : '(+1500 ₽)';
+
+    function shiftDatesForDelivery(distanceKm) {
+        var shiftDays = calcDateShiftDays(distanceKm);
+
+        if (shiftDays > 0 && deliveryRadio && deliveryRadio.checked) {
+            var startDate = new Date(originalStartDate);
+            var endDate = new Date(originalEndDate);
+            startDate.setDate(startDate.getDate() + shiftDays);
+            endDate.setDate(endDate.getDate() + shiftDays);
+            rentalStart.value = startDate.toISOString().split('T')[0];
+            rentalEnd.value = endDate.toISOString().split('T')[0];
+            dateShiftNotice.style.display = 'block';
+            dateShiftNotice.textContent = '⚠️ Даты сдвинуты на ' + shiftDays + ' ' + pluralDays(shiftDays) + ' (с учётом доставки ' + Math.round(distanceKm) + ' км)';
+        } else {
+            rentalStart.value = originalStartDate;
+            rentalEnd.value = originalEndDate;
+            dateShiftNotice.style.display = 'none';
         }
-        
-        if (deliveryTimeText) {
-            deliveryTimeText.textContent = isNovokuznetsk ? '1-3 дня' : '3-7 дней';
-        }
-        
-        if (isNovokuznetsk) {
+        updateTotals();
+    }
+
+    function updateDeliveryUI(distanceKm) {
+        var cost = calcDeliveryCost(distanceKm);
+        var isLocal = distanceKm <= FREE_ZONE_KM;
+
+        if (deliveryPriceText) deliveryPriceText.textContent = '(+' + cost + ' ₽)';
+
+        var deliveryDays;
+        if (distanceKm <= FREE_ZONE_KM) deliveryDays = '1-2 дня';
+        else if (distanceKm <= 500) deliveryDays = '2-4 дня';
+        else if (distanceKm <= 2000) deliveryDays = '4-7 дней';
+        else deliveryDays = '7-14 дней';
+
+        if (deliveryTimeText) deliveryTimeText.textContent = deliveryDays;
+
+        if (isLocal) {
             pickupRadio.disabled = false;
             pickupCard.style.opacity = '1';
             pickupCard.style.pointerEvents = 'auto';
@@ -356,125 +575,286 @@ document.addEventListener('DOMContentLoaded', function() {
             pickupRadio.disabled = true;
             pickupCard.style.opacity = '0.5';
             pickupCard.style.pointerEvents = 'none';
-            
             if (pickupRadio.checked) {
                 deliveryRadio.checked = true;
                 updateCardSelection();
                 if (addressContainer) addressContainer.style.display = 'block';
             }
         }
-        
-        shiftDatesForDelivery();
+
+        shiftDatesForDelivery(distanceKm);
     }
-    
+
     function updateCardSelection() {
+        var overlay = document.getElementById('pickupOverlay');
         pickupCard.classList.remove('border-primary');
         deliveryCard.classList.remove('border-primary');
-        
         if (pickupRadio && pickupRadio.checked && !pickupRadio.disabled) {
             pickupCard.classList.add('border-primary');
+            if (overlay) overlay.style.display = 'block';
         } else if (deliveryRadio && deliveryRadio.checked) {
             deliveryCard.classList.add('border-primary');
+            if (overlay) overlay.style.display = 'none';
         }
     }
-    
+
+    function setDeliveryPoint(lat, lon, street, house, city, postal) {
+        if (deliveryMarker) map.removeLayer(deliveryMarker);
+        if (deliveryLine) map.removeLayer(deliveryLine);
+        deliveryMarker = L.marker([lat, lon], {icon: deliveryIcon, draggable: true})
+            .addTo(map).bindPopup('Адрес доставки').openPopup();
+        deliveryLine = L.polyline([[NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], [lat, lon]],
+            {color: '#3498db', weight: 2, dashArray: '6,6', opacity: 0.7}).addTo(map);
+        deliveryMarker.on('dragend', function(e) {
+            var pos = e.target.getLatLng();
+            reverseGeocode(pos.lat, pos.lng);
+        });
+
+        if (modalDeliveryMarker) mapModal.removeLayer(modalDeliveryMarker);
+        if (modalDeliveryLine) mapModal.removeLayer(modalDeliveryLine);
+        modalDeliveryMarker = L.marker([lat, lon], {icon: deliveryIcon, draggable: true})
+            .addTo(mapModal).bindPopup('Адрес доставки').openPopup();
+        modalDeliveryLine = L.polyline([[NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], [lat, lon]],
+            {color: '#3498db', weight: 2, dashArray: '6,6', opacity: 0.7}).addTo(mapModal);
+        modalDeliveryMarker.on('dragend', function(e) {
+            var pos = e.target.getLatLng();
+            reverseGeocode(pos.lat, pos.lng);
+        });
+
+        document.getElementById('deliveryLat').value = lat;
+        document.getElementById('deliveryLon').value = lon;
+
+        var dist = haversineDistance(NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON, lat, lon);
+        document.getElementById('deliveryDistanceKm').value = Math.round(dist);
+
+        if (street) document.getElementById('streetInput').value = street;
+        if (house) document.getElementById('houseInput').value = house;
+        if (city) cityInput.value = city;
+        if (postal) postalCode.value = postal;
+        updateAddressHidden();
+
+        var distInfo = document.getElementById('distanceInfo');
+        distInfo.style.setProperty('display', 'flex', 'important');
+        document.getElementById('distanceBadge').textContent = Math.round(dist) + ' км';
+
+        updateDeliveryUI(dist);
+        var bounds = [[NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], [lat, lon]];
+        map.fitBounds(bounds, {padding: [40, 40]});
+        mapModal.fitBounds(bounds, {padding: [40, 40]});
+    }
+
+    function updateAddressHidden() {
+        var street = document.getElementById('streetInput') ? document.getElementById('streetInput').value : '';
+        var house = document.getElementById('houseInput') ? document.getElementById('houseInput').value : '';
+        var apt = document.getElementById('apartmentInput') ? document.getElementById('apartmentInput').value : '';
+        var ent = document.getElementById('entranceInput') ? document.getElementById('entranceInput').value : '';
+        var fl = document.getElementById('floorInput') ? document.getElementById('floorInput').value : '';
+        var ic = document.getElementById('intercomInput') ? document.getElementById('intercomInput').value : '';
+        var cm = document.getElementById('commentInput') ? document.getElementById('commentInput').value : '';
+        var parts = [
+            street,
+            house ? 'д. ' + house : '',
+            apt ? 'кв. ' + apt : '',
+            ent ? 'подъезд ' + ent : '',
+            fl ? 'этаж ' + fl : '',
+            ic ? 'домофон ' + ic : '',
+            cm
+        ].filter(Boolean);
+        var addrEl = document.getElementById('deliveryAddress');
+        if (addrEl) addrEl.value = parts.join(', ');
+    }
+    ['streetInput','houseInput','apartmentInput','entranceInput','floorInput','intercomInput','commentInput'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateAddressHidden);
+    });
+
+    function showToast(msg, type) {
+        var t = document.createElement('div');
+        t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99999;padding:12px 20px;border-radius:10px;font-size:0.9rem;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:opacity 0.4s;white-space:nowrap;';
+        t.style.background = type === 'error' ? '#e74c3c' : '#27ae60';
+        t.style.color = 'white';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 400); }, 3000);
+    }
+
+    map.on('click', function(e) { reverseGeocode(e.latlng.lat, e.latlng.lng); });
+    mapModal.on('click', function(e) { reverseGeocode(e.latlng.lat, e.latlng.lng); });
+
+    function reverseGeocode(lat, lon) {
+        fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&accept-language=ru')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var addr = data.address || {};
+            var country_code = (addr.country_code || '').toLowerCase();
+            if (country_code && country_code !== 'ru') {
+                showToast('⚠️ Доставка только по России', 'error');
+                return;
+            }
+            var city = addr.city || addr.town || addr.village || addr.county || '';
+            var road = addr.road || addr.pedestrian || addr.footway || '';
+            var house = addr.house_number || '';
+            var postal = (addr.postcode || '').replace(/\D/g, '').slice(0, 6);
+            setDeliveryPoint(lat, lon, road, house, city, postal);
+        })
+        .catch(function() { setDeliveryPoint(lat, lon, '', '', '', ''); });
+    }
+
+    function searchAddress(query, resultsElId) {
+        if (!query.trim()) return;
+        var resultsEl = document.getElementById(resultsElId);
+        resultsEl.innerHTML = '<div class="list-group-item text-muted small"><i class="bi bi-hourglass-split me-1"></i>Поиск...</div>';
+        resultsEl.style.display = 'block';
+
+        fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&accept-language=ru&countrycodes=ru')
+        .then(function(r) { return r.json(); })
+        .then(function(results) {
+            resultsEl.innerHTML = '';
+            if (!results.length) {
+                resultsEl.innerHTML = '<div class="list-group-item text-muted small">Ничего не найдено</div>';
+                return;
+            }
+            results.forEach(function(item) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'list-group-item list-group-item-action small';
+                btn.innerHTML = '<i class="bi bi-geo-alt me-1 text-primary"></i>' + item.display_name;
+                btn.addEventListener('click', function() {
+                    resultsEl.style.display = 'none';
+                    reverseGeocode(parseFloat(item.lat), parseFloat(item.lon));
+                });
+                resultsEl.appendChild(btn);
+            });
+        })
+        .catch(function() {
+            resultsEl.innerHTML = '<div class="list-group-item text-danger small">Ошибка поиска</div>';
+        });
+    }
+
+    document.getElementById('searchAddressBtn').addEventListener('click', function() {
+        searchAddress(document.getElementById('addressSearch').value, 'geocodeResults');
+    });
+    document.getElementById('addressSearch').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); searchAddress(this.value, 'geocodeResults'); }
+    });
+    document.getElementById('modalSearchBtn').addEventListener('click', function() {
+        searchAddress(document.getElementById('modalAddressSearch').value, 'modalGeocodeResults');
+    });
+    document.getElementById('modalAddressSearch').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); searchAddress(this.value, 'modalGeocodeResults'); }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#geocodeResults') && !e.target.closest('#addressSearch') && !e.target.closest('#searchAddressBtn'))
+            document.getElementById('geocodeResults').style.display = 'none';
+        if (!e.target.closest('#modalGeocodeResults') && !e.target.closest('#modalAddressSearch') && !e.target.closest('#modalSearchBtn'))
+            document.getElementById('modalGeocodeResults').style.display = 'none';
+    });
+
     pickupRadio.addEventListener('change', function() {
         if (!pickupRadio.disabled) {
             updateCardSelection();
             if (addressContainer) addressContainer.style.display = 'none';
-            shiftDatesForDelivery();
+            var dist = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+            shiftDatesForDelivery(dist);
         }
     });
-    
+
     deliveryRadio.addEventListener('change', function() {
         updateCardSelection();
         if (addressContainer) addressContainer.style.display = 'block';
-        shiftDatesForDelivery();
+        var dist = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+        shiftDatesForDelivery(dist);
     });
-    
-    cityInput.addEventListener('input', function() {
-        clearTimeout(window.cityTimeout);
-        window.cityTimeout = setTimeout(updateDeliveryOptions, 500);
-    });
-    
+
     rentalStart.addEventListener('change', function() {
         originalStartDate = this.value;
-        if (cityInput.value.trim().toLowerCase() !== 'новокузнецк' && deliveryRadio.checked) {
-            shiftDatesForDelivery();
+        var dist = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+        if (dist > FREE_ZONE_KM && deliveryRadio.checked) {
+            shiftDatesForDelivery(dist);
         } else {
             updateTotals();
         }
     });
-    
+
     rentalEnd.addEventListener('change', function() {
         originalEndDate = this.value;
-        if (cityInput.value.trim().toLowerCase() !== 'новокузнецк' && deliveryRadio.checked) {
-            shiftDatesForDelivery();
+        var dist = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+        if (dist > FREE_ZONE_KM && deliveryRadio.checked) {
+            shiftDatesForDelivery(dist);
         } else {
             updateTotals();
         }
     });
-    
+
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function() {
+            var value = this.value.replace(/\D/g, '');
+            if (value.length > 0) {
+                if (value.length <= 3) value = '(' + value;
+                else if (value.length <= 6) value = '(' + value.substring(0,3) + ') ' + value.substring(3);
+                else if (value.length <= 8) value = '(' + value.substring(0,3) + ') ' + value.substring(3,6) + '-' + value.substring(6);
+                else value = '(' + value.substring(0,3) + ') ' + value.substring(3,6) + '-' + value.substring(6,8) + '-' + value.substring(8,10);
+            }
+            this.value = value;
+        });
+    }
+
     if (postalCode) {
         postalCode.addEventListener('input', function() {
             this.value = this.value.replace(/\D/g, '').slice(0, 6);
         });
     }
-    
-    if (phoneInput) {
-        phoneInput.addEventListener('input', function(e) {
-            var value = this.value.replace(/\D/g, '');
-            
-            if (value.length > 0) {
-                if (value.length <= 3) {
-                    value = '(' + value;
-                } else if (value.length <= 6) {
-                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3);
-                } else if (value.length <= 8) {
-                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + '-' + value.substring(6);
-                } else {
-                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + '-' + value.substring(6, 8) + '-' + value.substring(8, 10);
-                }
-            }
-            
-            this.value = value;
-        });
-    }
-    
+
     if (confirmBtn) {
         confirmBtn.addEventListener('click', function() {
             if (!form) return;
-            
             if (!form.checkValidity()) {
                 form.classList.add('was-validated');
                 alert('Пожалуйста, заполните все обязательные поля');
                 return;
             }
-            
+
+            var lat = document.getElementById('deliveryLat').value;
+            var lon = document.getElementById('deliveryLon').value;
+            var distKm = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+
+            if (deliveryRadio && deliveryRadio.checked && (!lat || !lon)) {
+                alert('Пожалуйста, выберите адрес доставки на карте');
+                return;
+            }
+
+            if (deliveryRadio && deliveryRadio.checked && postalCode.value.trim().length !== 6) {
+                alert('Пожалуйста, введите корректный почтовый индекс (6 цифр)');
+                postalCode.focus();
+                return;
+            }
+
             var formData = new FormData(form);
-            var deliveryCost = deliveryRadio && deliveryRadio.checked ? calculateDeliveryCost() : 0;
+            var deliveryCost = (deliveryRadio && deliveryRadio.checked) ? calcDeliveryCost(distKm) : 0;
             var days = calculateDays();
             var rentalTotal = calculateRentalTotal();
             var grandTotal = rentalTotal + totalDeposit + deliveryCost;
-            
             var city = cityInput.value.trim();
-            var cityText = city.toLowerCase() === 'новокузнецк' ? 'Новокузнецк' : city;
-            var deliveryMethod = deliveryRadio && deliveryRadio.checked ? 'delivery' : 'pickup';
-            
+            var deliveryMethod = (deliveryRadio && deliveryRadio.checked) ? 'delivery' : 'pickup';
+            var shiftDays = calcDateShiftDays(distKm);
+
             var confirmMessage = 'Подтвердите аренду:\n\n';
-            confirmMessage += 'Город: ' + cityText + '\n';
+            confirmMessage += 'Город: ' + city + '\n';
+            confirmMessage += 'Расстояние: ' + Math.round(distKm) + ' км\n';
             confirmMessage += 'Способ: ' + (deliveryMethod === 'delivery' ? 'Доставка' : 'Самовывоз') + '\n';
             confirmMessage += 'Даты: ' + rentalStart.value + ' — ' + rentalEnd.value + ' (' + days + ' дн.)\n';
+            if (shiftDays > 0 && deliveryMethod === 'delivery') {
+                confirmMessage += '⚠️ Сдвиг дат: +' + shiftDays + ' ' + pluralDays(shiftDays) + '\n';
+            }
             confirmMessage += 'Аренда: ' + rentalTotal.toFixed(2) + ' ₽\n';
             confirmMessage += 'Залог (10%): ' + totalDeposit.toFixed(2) + ' ₽\n';
             confirmMessage += 'Доставка: ' + (deliveryCost === 0 ? 'бесплатно' : deliveryCost + ' ₽') + '\n\n';
             confirmMessage += 'Итого к оплате: ' + grandTotal.toFixed(2) + ' ₽';
-            
-            if (city.toLowerCase() !== 'новокузнецк' && deliveryMethod === 'delivery') {
-                confirmMessage += '\n\n⚠️ Даты аренды сдвинуты на 4 дня с учетом доставки';
-            }
-            
+
             if (confirm(confirmMessage)) {
+                updateAddressHidden();
+                var addrEl = document.getElementById('deliveryAddress');
                 var data = {
                     first_name: formData.get('first_name'),
                     last_name: formData.get('last_name'),
@@ -482,24 +862,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     email: formData.get('email'),
                     city: cityInput.value,
                     postal_code: postalCode.value,
-                    delivery_address: deliveryAddress.value || '',
+                    delivery_address: addrEl ? addrEl.value : '',
                     delivery_method: deliveryMethod,
                     delivery_cost: deliveryCost,
+                    delivery_lat: lat,
+                    delivery_lon: lon,
+                    delivery_distance_km: Math.round(distKm),
                     notes: formData.get('notes'),
                     rental_start: rentalStart.value,
                     rental_end: rentalEnd.value
                 };
-                
+
                 fetch('/create_rental_order', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(data)
                 })
-                .then(function(response) {
-                    return response.json();
-                })
+                .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.success) {
                         alert('✅ Аренда успешно оформлена!\n\nНомер заказа: ' + data.rental_number);
@@ -508,24 +887,22 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert('❌ Ошибка: ' + (data.message || 'Неизвестная ошибка'));
                     }
                 })
-                .catch(function(error) {
-                    console.error('Error:', error);
+                .catch(function() {
                     alert('❌ Ошибка соединения с сервером');
                 });
             }
         });
     }
-    
+
     if (pickupRadio) {
         pickupRadio.checked = true;
         pickupCard.classList.add('border-primary');
+        var overlay = document.getElementById('pickupOverlay');
+        if (overlay) overlay.style.display = 'block';
     }
-    if (addressContainer) {
-        addressContainer.style.display = 'none';
-    }
-    
+    if (addressContainer) addressContainer.style.display = 'none';
+
     updateTotals();
-    setTimeout(updateDeliveryOptions, 100);
 });
 </script>
 {% endblock %}

@@ -2,6 +2,116 @@
 
 {% block title %}Оформление покупки - SoundGoodizer{% endblock %}
 
+{% block extra_css %}
+<style>
+    .map-wrapper {
+        position: relative;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 2px solid #dee2e6;
+        margin-bottom: 10px;
+    }
+    #deliveryMap {
+        height: 350px;
+        width: 100%;
+    }
+    .map-expand-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(0,0,0,0.55);
+        border: 1px solid rgba(255,255,255,0.2);
+        color: #fff;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: background 0.2s;
+    }
+    .map-expand-btn:hover {
+        background: rgba(0,0,0,0.72);
+    }
+
+    #mapModal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0,0,0,0.7);
+        align-items: center;
+        justify-content: center;
+    }
+    #mapModal.open { display: flex; }
+    #mapModalInner {
+        background: white;
+        border-radius: 12px;
+        width: 95vw;
+        height: 90vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    #mapModalHeader {
+        padding: 12px 16px;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+    #mapModalMap {
+        flex: 1;
+        width: 100%;
+    }
+    #mapModalFooter {
+        padding: 10px 16px;
+        border-top: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    #mapModalSearch {
+        flex: 1;
+    }
+
+    .map-info {
+        background: rgba(52, 152, 219, 0.12);
+        color: inherit;
+        border: 1px solid rgba(52, 152, 219, 0.25);
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+    }
+    .distance-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+    /* Поля адреса */
+    .address-fields .form-control {
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+    }
+    .address-fields .form-control::placeholder {
+        color: #adb5bd;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
     <div class="row mb-4">
@@ -49,29 +159,90 @@
                             </div>
                         </div>
                         
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Адрес доставки *</label>
-                            <textarea class="form-control" name="address" rows="2" required 
-                                      placeholder="Улица, дом, квартира, подъезд, этаж"></textarea>
-                            <div class="invalid-feedback">Пожалуйста, введите адрес доставки</div>
+                        <div class="mb-3" id="deliverySection" style="position:relative;">
+                            <div id="pickupOverlay" style="display:none;position:absolute;inset:0;background:rgba(128,128,128,0.18);border-radius:10px;z-index:10;backdrop-filter:blur(1px);pointer-events:all;"></div>
+
+                            <label class="form-label fw-bold"><i class="bi bi-map me-1 text-primary"></i>Выберите адрес на карте *</label>
+                            <div class="map-info">
+                                <i class="bi bi-cursor me-1"></i>Кликните на карту или введите адрес в поле ниже — стоимость доставки рассчитается автоматически
+                            </div>
+                            <div class="map-wrapper">
+                                <div id="deliveryMap"></div>
+                                <button type="button" class="map-expand-btn" onclick="openMapModal()">
+                                    <i class="bi bi-arrows-fullscreen"></i> Развернуть
+                                </button>
+                            </div>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control" id="addressSearch"
+                                       placeholder="Введите адрес для поиска...">
+                                <button class="btn btn-outline-primary" type="button" id="searchAddressBtn">
+                                    Найти
+                                </button>
+                            </div>
+                            <div id="geocodeResults" class="list-group mb-2" style="display:none;"></div>
+                            <div id="distanceInfo" class="d-flex align-items-center gap-2 mb-2" style="display:none!important;">
+                                <i class="bi bi-geo-alt-fill text-primary"></i>
+                                <span class="text-muted small">Расстояние от Новокузнецка:</span>
+                                <span class="distance-badge" id="distanceBadge">—</span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Адрес доставки *</label>
+                                <div class="address-fields">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-8">
+                                            <input type="text" class="form-control" id="streetInput" name="street"
+                                                   placeholder="Улица">
+                                        </div>
+                                        <div class="col-4">
+                                            <input type="text" class="form-control" id="houseInput" name="house"
+                                                   placeholder="Дом / корп.">
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="apartmentInput" name="apartment"
+                                                   placeholder="Квартира">
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="entranceInput" name="entrance"
+                                                   placeholder="Подъезд">
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="floorInput" name="floor"
+                                                   placeholder="Этаж">
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="text" class="form-control" id="intercomInput" name="intercom"
+                                                   placeholder="Домофон">
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="commentInput" name="comment" value="">
+                                </div>
+                                <input type="hidden" id="addressInput" name="address">
+                                <div class="invalid-feedback">Пожалуйста, введите улицу и дом</div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6 mb-2">
+                                    <label class="form-label fw-bold">Город *</label>
+                                    <input type="text" class="form-control" name="city" id="cityInput" value="Новокузнецк">
+                                    <div class="form-text text-muted small">Заполняется автоматически при выборе на карте</div>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label class="form-label fw-bold">Индекс *</label>
+                                    <input type="text" class="form-control" name="postal_code" id="postalCode"
+                                           placeholder="654000" maxlength="6">
+                                    <div class="form-text text-muted small">6 цифр почтового индекса</div>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="row mb-3">
-                            <div class="col-md-6 mb-2">
-                                <label class="form-label fw-bold">Город *</label>
-                                <input type="text" class="form-control" name="city" required id="cityInput" value="Новокузнецк">
-                                <div class="form-text text-muted small">При вводе другого города стоимость доставки изменится</div>
-                                <div class="invalid-feedback">Пожалуйста, введите город</div>
-                            </div>
-                            <div class="col-md-6 mb-2">
-                                <label class="form-label fw-bold">Индекс *</label>
-                                <input type="text" class="form-control" name="postal_code" required id="postalCode"
-                                       placeholder="654000" maxlength="6">
-                                <div class="form-text text-muted small">6 цифр почтового индекса</div>
-                                <div class="invalid-feedback">Пожалуйста, введите корректный почтовый индекс</div>
-                            </div>
-                        </div>
-                        
+                        <input type="hidden" id="deliveryLat" name="delivery_lat" value="">
+                        <input type="hidden" id="deliveryLon" name="delivery_lon" value="">
+                        <input type="hidden" id="deliveryDistanceKm" name="delivery_distance_km" value="0">
+
                         <div class="mb-3">
                             <label class="form-label fw-bold mb-3">Способ получения *</label>
                             <div class="row">
@@ -211,39 +382,182 @@
     </div>
 </div>
 
+<div id="mapModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;width:95vw;height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+        <div style="padding:12px 16px;border-bottom:1px solid #dee2e6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <strong><i class="bi bi-map me-1 text-primary"></i>Выбор адреса доставки</strong>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="closeMapModal()"><i class="bi bi-x-lg"></i> Закрыть</button>
+        </div>
+        <div id="mapModalMap" style="flex:1;width:100%;"></div>
+        <div style="padding:10px 16px;border-top:1px solid #dee2e6;display:flex;align-items:center;gap:8px;flex-shrink:0;position:relative;">
+            <div class="input-group" style="flex:1;">
+                <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" id="modalAddressSearch" placeholder="Введите адрес...">
+                <button class="btn btn-outline-primary" type="button" id="modalSearchBtn">Найти</button>
+            </div>
+            <button type="button" class="btn btn-success" onclick="closeMapModal()"><i class="bi bi-check-lg me-1"></i>Выбрать</button>
+            <div id="modalGeocodeResults" class="list-group" style="display:none;position:absolute;bottom:60px;left:16px;right:16px;z-index:10001;max-height:200px;overflow-y:auto;"></div>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const cityInput = document.getElementById('cityInput');
-    const deliveryPriceText = document.getElementById('deliveryPriceText');
-    const deliveryTimeText = document.getElementById('deliveryTimeText');
-    const deliveryCost = document.getElementById('deliveryCost');
-    const deliveryDetails = document.getElementById('deliveryDetails');
-    const deliveryTime = document.getElementById('deliveryTime');
-    const totalWithDelivery = document.getElementById('totalWithDelivery');
-    const deliveryCard = document.getElementById('deliveryCard');
-    const pickupCard = document.getElementById('pickupCard');
-    const deliveryRadio = document.getElementById('delivery');
-    const pickupRadio = document.getElementById('pickup');
+    const NOVOKUZNETSK_LAT = 53.7557;
+    const NOVOKUZNETSK_LON = 87.1099;
+    const MAX_DELIVERY_COST = 1500;
+    const MIN_DELIVERY_COST = 300;
+    const FREE_ZONE_KM = 50;
+    const MAX_DISTANCE_KM = 5000;
+
     const baseTotal = parseFloat('{{ total|default(0) }}'.replace(',', '.'));
-    
-    function calculateDeliveryCost() {
-        const city = cityInput.value.trim().toLowerCase();
-        return city === 'новокузнецк' ? 300 : 1500;
+
+    const RUSSIA_BOUNDS = L.latLngBounds([41.2, 19.6], [81.9, 190.0]);
+    const map = L.map('deliveryMap', {
+        attributionControl: false,
+        maxBounds: RUSSIA_BOUNDS,
+        maxBoundsViscosity: 0.9
+    }).setView([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);
+    L.control.attribution({prefix: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+
+    const mapModal = L.map('mapModalMap', {
+        attributionControl: false,
+        maxBounds: RUSSIA_BOUNDS,
+        maxBoundsViscosity: 0.9
+    }).setView([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(mapModal);
+    L.control.attribution({prefix: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(mapModal);
+
+    window.openMapModal = function() {
+        const modal = document.getElementById('mapModal');
+        modal.style.display = 'flex';
+        setTimeout(() => { mapModal.invalidateSize(); mapModal.setView(map.getCenter(), map.getZoom()); }, 100);
+    };
+    window.closeMapModal = function() {
+        document.getElementById('mapModal').style.display = 'none';
+        map.invalidateSize();
+    };
+    document.getElementById('mapModal').addEventListener('click', function(e) {
+        if (e.target === this) closeMapModal();
+    });
+
+    const shopIcon = L.divIcon({
+        html: '<div style="background:#3498db;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>',
+        iconSize: [32, 32], iconAnchor: [16, 16], className: ''
+    });
+    const deliveryIcon = L.divIcon({
+        html: '<div style="background:#e74c3c;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">📍</div>',
+        iconSize: [32, 32], iconAnchor: [16, 32], className: ''
+    });
+
+    L.marker([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], {icon: shopIcon}).addTo(map).bindPopup('<b>SoundGoodizer</b><br>Новокузнецк');
+    L.marker([NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], {icon: shopIcon}).addTo(mapModal).bindPopup('<b>SoundGoodizer</b><br>Новокузнецк');
+
+    let deliveryMarker = null;
+    let modalDeliveryMarker = null;
+    let deliveryLine = null;
+    let modalDeliveryLine = null;
+
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
-    
-    function updateDeliveryOptions() {
-        const city = cityInput.value.trim().toLowerCase();
-        const isNovokuznetsk = city === 'новокузнецк';
-        
-        if (deliveryPriceText) {
-            deliveryPriceText.textContent = isNovokuznetsk ? '(+300 ₽)' : '(+1500 ₽)';
-        }
-        
-        if (deliveryTimeText) {
-            deliveryTimeText.textContent = isNovokuznetsk ? '1-3 дня' : '3-7 дней';
-        }
-        
-        if (isNovokuznetsk) {
+
+    function calcDeliveryCost(distanceKm) {
+        if (distanceKm <= FREE_ZONE_KM) return MIN_DELIVERY_COST;
+        const ratio = Math.min((distanceKm - FREE_ZONE_KM) / (MAX_DISTANCE_KM - FREE_ZONE_KM), 1);
+        return Math.round(MIN_DELIVERY_COST + ratio * (MAX_DELIVERY_COST - MIN_DELIVERY_COST));
+    }
+
+    function setDeliveryPoint(lat, lon, street, house, city, postalCode) {
+        if (deliveryMarker) map.removeLayer(deliveryMarker);
+        if (deliveryLine) map.removeLayer(deliveryLine);
+        deliveryMarker = L.marker([lat, lon], {icon: deliveryIcon, draggable: true})
+            .addTo(map).bindPopup('Адрес доставки').openPopup();
+        deliveryLine = L.polyline([[NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], [lat, lon]],
+            {color: '#3498db', weight: 2, dashArray: '6,6', opacity: 0.7}).addTo(map);
+        deliveryMarker.on('dragend', e => reverseGeocode(e.target.getLatLng().lat, e.target.getLatLng().lng));
+
+        if (modalDeliveryMarker) mapModal.removeLayer(modalDeliveryMarker);
+        if (modalDeliveryLine) mapModal.removeLayer(modalDeliveryLine);
+        modalDeliveryMarker = L.marker([lat, lon], {icon: deliveryIcon, draggable: true})
+            .addTo(mapModal).bindPopup('Адрес доставки').openPopup();
+        modalDeliveryLine = L.polyline([[NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], [lat, lon]],
+            {color: '#3498db', weight: 2, dashArray: '6,6', opacity: 0.7}).addTo(mapModal);
+        modalDeliveryMarker.on('dragend', e => reverseGeocode(e.target.getLatLng().lat, e.target.getLatLng().lng));
+
+        document.getElementById('deliveryLat').value = lat;
+        document.getElementById('deliveryLon').value = lon;
+        const dist = haversineDistance(NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON, lat, lon);
+        document.getElementById('deliveryDistanceKm').value = Math.round(dist);
+
+        if (street) document.getElementById('streetInput').value = street;
+        if (house) document.getElementById('houseInput').value = house;
+        if (city) document.getElementById('cityInput').value = city;
+        if (postalCode) document.getElementById('postalCode').value = postalCode;
+        updateAddressHidden();
+
+        updateDistanceUI(dist);
+        updateDeliveryOptions(dist);
+        const bounds = [[NOVOKUZNETSK_LAT, NOVOKUZNETSK_LON], [lat, lon]];
+        map.fitBounds(bounds, {padding: [40, 40]});
+        mapModal.fitBounds(bounds, {padding: [40, 40]});
+    }
+
+    function updateAddressHidden() {
+        const parts = [
+            document.getElementById('streetInput').value,
+            document.getElementById('houseInput').value ? 'д. ' + document.getElementById('houseInput').value : '',
+            document.getElementById('apartmentInput').value ? 'кв. ' + document.getElementById('apartmentInput').value : '',
+            document.getElementById('entranceInput').value ? 'подъезд ' + document.getElementById('entranceInput').value : '',
+            document.getElementById('floorInput').value ? 'этаж ' + document.getElementById('floorInput').value : '',
+            document.getElementById('intercomInput').value ? 'домофон ' + document.getElementById('intercomInput').value : '',
+            document.getElementById('commentInput').value
+        ].filter(Boolean);
+        document.getElementById('addressInput').value = parts.join(', ');
+    }
+    ['streetInput','houseInput','apartmentInput','entranceInput','floorInput','intercomInput','commentInput'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateAddressHidden);
+    });
+
+    function updateDistanceUI(dist) {
+        const distInfo = document.getElementById('distanceInfo');
+        distInfo.style.setProperty('display', 'flex', 'important');
+        document.getElementById('distanceBadge').textContent = Math.round(dist) + ' км';
+    }
+
+    function updateDeliveryOptions(distanceKm) {
+        const cost = calcDeliveryCost(distanceKm);
+        const isLocal = distanceKm <= FREE_ZONE_KM;
+
+        const deliveryPriceText = document.getElementById('deliveryPriceText');
+        const deliveryTimeText = document.getElementById('deliveryTimeText');
+        const deliveryCostEl = document.getElementById('deliveryCost');
+        const deliveryDetails = document.getElementById('deliveryDetails');
+        const deliveryTime = document.getElementById('deliveryTime');
+        const totalWithDelivery = document.getElementById('totalWithDelivery');
+        const pickupRadio = document.getElementById('pickup');
+        const pickupCard = document.getElementById('pickupCard');
+        const deliveryRadio = document.getElementById('delivery');
+
+        if (deliveryPriceText) deliveryPriceText.textContent = '(+' + cost + ' ₽)';
+
+        let deliveryDays;
+        if (distanceKm <= FREE_ZONE_KM) deliveryDays = '1-2 дня';
+        else if (distanceKm <= 500) deliveryDays = '2-4 дня';
+        else if (distanceKm <= 2000) deliveryDays = '4-7 дней';
+        else deliveryDays = '7-14 дней';
+
+        if (deliveryTimeText) deliveryTimeText.textContent = deliveryDays;
+
+        if (isLocal) {
             pickupRadio.disabled = false;
             pickupCard.style.opacity = '1';
             pickupCard.style.pointerEvents = 'auto';
@@ -251,174 +565,217 @@ document.addEventListener('DOMContentLoaded', function() {
             pickupRadio.disabled = true;
             pickupCard.style.opacity = '0.5';
             pickupCard.style.pointerEvents = 'none';
-            
             if (pickupRadio.checked) {
                 deliveryRadio.checked = true;
                 updateCardSelection();
             }
         }
-        
-        updateTotal();
+
+        const method = document.querySelector('input[name="delivery_method"]:checked');
+        if (method && method.value === 'pickup' && !pickupRadio.disabled) {
+            if (deliveryCostEl) deliveryCostEl.textContent = 'бесплатно';
+            if (deliveryDetails) deliveryDetails.innerHTML = '<i class="bi bi-shop me-1"></i>Самовывоз';
+            if (deliveryTime) deliveryTime.textContent = 'Готово сегодня';
+            if (totalWithDelivery) totalWithDelivery.textContent = baseTotal.toFixed(2) + ' ₽';
+        } else {
+            if (deliveryCostEl) deliveryCostEl.textContent = '+' + cost + ' ₽';
+            if (deliveryDetails) deliveryDetails.innerHTML = '<i class="bi bi-truck me-1"></i>' + (document.getElementById('cityInput').value || 'Адрес не выбран');
+            if (deliveryTime) deliveryTime.textContent = deliveryDays;
+            if (totalWithDelivery) totalWithDelivery.textContent = (baseTotal + cost).toFixed(2) + ' ₽';
+        }
     }
-    
+
     function updateCardSelection() {
+        const pickupCard = document.getElementById('pickupCard');
+        const deliveryCard = document.getElementById('deliveryCard');
+        const pickupRadio = document.getElementById('pickup');
+        const deliveryRadio = document.getElementById('delivery');
+        const overlay = document.getElementById('pickupOverlay');
+
         pickupCard.classList.remove('border-primary');
         deliveryCard.classList.remove('border-primary');
-        
         if (pickupRadio && pickupRadio.checked && !pickupRadio.disabled) {
             pickupCard.classList.add('border-primary');
+            if (overlay) overlay.style.display = 'block';
         } else if (deliveryRadio && deliveryRadio.checked) {
             deliveryCard.classList.add('border-primary');
+            if (overlay) overlay.style.display = 'none';
         }
     }
-    
-    function updateTotal() {
-        const city = cityInput.value.trim();
-        const isNovokuznetsk = city.toLowerCase() === 'новокузнецк';
-        const method = document.querySelector('input[name="delivery_method"]:checked').value;
-        
-        updateCardSelection();
-        
-        if (method === 'pickup' && !pickupRadio.disabled) {
-            deliveryCost.textContent = 'бесплатно';
-            deliveryDetails.innerHTML = '<i class="bi bi-shop me-1"></i>Самовывоз';
-            deliveryTime.textContent = 'Готово сегодня';
-            totalWithDelivery.textContent = baseTotal.toFixed(2) + ' ₽';
-        } else {
-            const cost = calculateDeliveryCost();
-            const total = baseTotal + cost;
-            
-            deliveryCost.textContent = '+' + cost + ' ₽';
-            deliveryDetails.innerHTML = '<i class="bi bi-truck me-1"></i>' + (isNovokuznetsk ? 'Новокузнецк' : 'Другой город');
-            deliveryTime.textContent = isNovokuznetsk ? '1-3 дня' : '3-7 дней';
-            totalWithDelivery.textContent = total.toFixed(2) + ' ₽';
-        }
+
+    function showToast(msg, type) {
+        const t = document.createElement('div');
+        t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99999;padding:12px 20px;border-radius:10px;font-size:0.9rem;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:opacity 0.4s;white-space:nowrap;';
+        t.style.background = type === 'error' ? '#e74c3c' : '#27ae60';
+        t.style.color = 'white';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 3000);
     }
-    
-    deliveryRadio.addEventListener('change', updateTotal);
-    pickupRadio.addEventListener('change', updateTotal);
-    
-    cityInput.addEventListener('input', function() {
-        clearTimeout(window.cityTimeout);
-        window.cityTimeout = setTimeout(updateDeliveryOptions, 500);
+
+    map.on('click', e => reverseGeocode(e.latlng.lat, e.latlng.lng));
+    mapModal.on('click', e => reverseGeocode(e.latlng.lat, e.latlng.lng));
+
+    function reverseGeocode(lat, lon) {
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`)
+        .then(r => r.json())
+        .then(data => {
+            const addr = data.address || {};
+            const country_code = (addr.country_code || '').toLowerCase();
+            if (country_code && country_code !== 'ru') {
+                showToast('⚠️ Доставка только по России', 'error');
+                return;
+            }
+            const city = addr.city || addr.town || addr.village || addr.county || '';
+            const road = addr.road || addr.pedestrian || addr.footway || '';
+            const house = addr.house_number || '';
+            const postcode = (addr.postcode || '').replace(/\D/g, '').slice(0, 6);
+            setDeliveryPoint(lat, lon, road, house, city, postcode);
+        })
+        .catch(() => setDeliveryPoint(lat, lon, '', '', '', ''));
+    }
+
+    function searchAddress(query, resultsElId) {
+        if (!query.trim()) return;
+        const resultsEl = document.getElementById(resultsElId);
+        resultsEl.innerHTML = '<div class="list-group-item text-muted small"><i class="bi bi-hourglass-split me-1"></i>Поиск...</div>';
+        resultsEl.style.display = 'block';
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=ru&countrycodes=ru`)
+        .then(r => r.json())
+        .then(results => {
+            resultsEl.innerHTML = '';
+            if (!results.length) { resultsEl.innerHTML = '<div class="list-group-item text-muted small">Ничего не найдено</div>'; return; }
+            results.forEach(item => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'list-group-item list-group-item-action small';
+                btn.innerHTML = '<i class="bi bi-geo-alt me-1 text-primary"></i>' + item.display_name;
+                btn.addEventListener('click', function() {
+                    resultsEl.style.display = 'none';
+                    reverseGeocode(parseFloat(item.lat), parseFloat(item.lon));
+                });
+                resultsEl.appendChild(btn);
+            });
+        })
+        .catch(() => { resultsEl.innerHTML = '<div class="list-group-item text-danger small">Ошибка поиска</div>'; });
+    }
+
+    document.getElementById('searchAddressBtn').addEventListener('click', () => searchAddress(document.getElementById('addressSearch').value, 'geocodeResults'));
+    document.getElementById('addressSearch').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); searchAddress(this.value, 'geocodeResults'); } });
+    document.getElementById('modalSearchBtn').addEventListener('click', () => searchAddress(document.getElementById('modalAddressSearch').value, 'modalGeocodeResults'));
+    document.getElementById('modalAddressSearch').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); searchAddress(this.value, 'modalGeocodeResults'); } });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#geocodeResults') && !e.target.closest('#addressSearch') && !e.target.closest('#searchAddressBtn'))
+            document.getElementById('geocodeResults').style.display = 'none';
+        if (!e.target.closest('#modalGeocodeResults') && !e.target.closest('#modalAddressSearch') && !e.target.closest('#modalSearchBtn'))
+            document.getElementById('modalGeocodeResults').style.display = 'none';
     });
-    
+
+    document.getElementById('delivery').addEventListener('change', function() {
+        updateCardSelection();
+        const dist = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+        updateDeliveryOptions(dist);
+    });
+    document.getElementById('pickup').addEventListener('change', function() {
+        updateCardSelection();
+        const dist = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+        updateDeliveryOptions(dist);
+    });
+
     const phoneInput = document.getElementById('phoneInput');
     if (phoneInput) {
-        phoneInput.addEventListener('input', function(e) {
+        phoneInput.addEventListener('input', function() {
             let value = this.value.replace(/\D/g, '');
-            
             if (value.length > 0) {
-                if (value.length <= 3) {
-                    value = '(' + value;
-                } else if (value.length <= 6) {
-                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3);
-                } else if (value.length <= 8) {
-                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + '-' + value.substring(6);
-                } else {
-                    value = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + '-' + value.substring(6, 8) + '-' + value.substring(8, 10);
-                }
+                if (value.length <= 3) value = '(' + value;
+                else if (value.length <= 6) value = '(' + value.substring(0,3) + ') ' + value.substring(3);
+                else if (value.length <= 8) value = '(' + value.substring(0,3) + ') ' + value.substring(3,6) + '-' + value.substring(6);
+                else value = '(' + value.substring(0,3) + ') ' + value.substring(3,6) + '-' + value.substring(6,8) + '-' + value.substring(8,10);
             }
-            
             this.value = value;
         });
     }
-    
+
     const postalCodeInput = document.getElementById('postalCode');
     if (postalCodeInput) {
-        postalCodeInput.addEventListener('input', function(e) {
+        postalCodeInput.addEventListener('input', function() {
             this.value = this.value.replace(/\D/g, '').slice(0, 6);
         });
     }
-    
-    const confirmOrderBtn = document.getElementById('confirmOrderBtn');
-    if (confirmOrderBtn) {
-        confirmOrderBtn.addEventListener('click', function() {
-            const form = document.getElementById('deliveryForm');
-            
-            if (!form || !form.checkValidity()) {
-                alert('Пожалуйста, заполните все обязательные поля');
-                if (form) form.reportValidity();
+
+    document.getElementById('confirmOrderBtn').addEventListener('click', function() {
+        const form = document.getElementById('deliveryForm');
+        const deliveryMethod = document.querySelector('input[name="delivery_method"]:checked');
+        const pickupRadio = document.getElementById('pickup');
+        const isPickup = deliveryMethod && deliveryMethod.value === 'pickup' && !pickupRadio.disabled;
+
+        if (!isPickup) {
+            const street = document.getElementById('streetInput').value.trim();
+            const house = document.getElementById('houseInput').value.trim();
+            if (!street || !house) {
+                alert('Пожалуйста, укажите улицу и номер дома');
+                document.getElementById('streetInput').focus();
                 return;
             }
-            
-            const postalCode = postalCodeInput.value.trim();
-            if (postalCode.length !== 6) {
-                alert('Пожалуйста, введите корректный почтовый индекс (6 цифр)');
-                postalCodeInput.focus();
-                return;
-            }
-            
-            const city = cityInput.value.trim();
-            if (city === '') {
-                alert('Пожалуйста, укажите город доставки');
-                cityInput.focus();
-                return;
-            }
-            
-            const deliveryMethod = document.querySelector('input[name="delivery_method"]:checked');
-            let deliveryCost = 0;
-            let deliveryMethodName = 'delivery';
-            
-            if (deliveryMethod) {
-                if (deliveryMethod.value === 'pickup' && !pickupRadio.disabled) {
-                    deliveryCost = 0;
-                    deliveryMethodName = 'pickup';
-                } else {
-                    deliveryCost = calculateDeliveryCost();
-                    deliveryMethodName = city.toLowerCase() === 'новокузнецк' ? 'delivery' : 'transport';
-                }
-            }
-            
+        }
+        if (!form.checkValidity()) {
+            alert('Пожалуйста, заполните все обязательные поля');
+            form.reportValidity();
+            return;
+        }
+        const postalCode = postalCodeInput.value.trim();
+        if (!isPickup && postalCode.length !== 6) {
+            alert('Пожалуйста, введите корректный почтовый индекс (6 цифр)');
+            postalCodeInput.focus();
+            return;
+        }
+        const lat = document.getElementById('deliveryLat').value;
+        const lon = document.getElementById('deliveryLon').value;
+        if (!isPickup && (!lat || !lon)) {
+            alert('Пожалуйста, выберите адрес доставки на карте');
+            return;
+        }
+        const distanceKm = parseFloat(document.getElementById('deliveryDistanceKm').value) || 0;
+        const city = document.getElementById('cityInput').value.trim();
+        let deliveryCost = 0;
+        let deliveryMethodName = 'delivery';
+        if (isPickup) {
+            deliveryCost = 0; deliveryMethodName = 'pickup';
+        } else {
+            deliveryCost = calcDeliveryCost(distanceKm);
+            deliveryMethodName = distanceKm <= FREE_ZONE_KM ? 'delivery' : 'transport';
+        }
+        const total = baseTotal + deliveryCost;
+        const deliveryType = deliveryMethodName === 'pickup' ? 'Самовывоз' :
+                             deliveryMethodName === 'delivery' ? 'Курьерская доставка' : 'Транспортная компания';
+        if (confirm(`Подтверждаете оформление заказа?\n\nГород: ${city}\nСпособ: ${deliveryType}\nРасстояние: ${Math.round(distanceKm)} км\nДоставка: ${deliveryCost === 0 ? 'бесплатно' : deliveryCost + ' ₽'}\nИтого: ${total.toFixed(2)} ₽`)) {
+            updateAddressHidden();
             const formData = new FormData(form);
             const orderData = {
-                delivery_method: deliveryMethodName,
-                delivery_cost: deliveryCost,
-                city: city,
-                postal_code: postalCode
+                delivery_method: deliveryMethodName, delivery_cost: deliveryCost,
+                city: city, postal_code: postalCode,
+                delivery_lat: lat, delivery_lon: lon, delivery_distance_km: Math.round(distanceKm)
             };
-            
-            for (let pair of formData.entries()) {
-                orderData[pair[0]] = pair[1];
-            }
-            
-            const cityText = city.toLowerCase() === 'новокузнецк' ? 'Новокузнецк' : city;
-            const total = baseTotal + deliveryCost;
-            const deliveryType = deliveryMethodName === 'pickup' ? 'Самовывоз' : 
-                                deliveryMethodName === 'delivery' ? 'Курьерская доставка' : 
-                                'Транспортная компания';
-            const deliveryTimeText = deliveryMethodName === 'pickup' ? 'Готово сегодня' : 
-                                   deliveryMethodName === 'delivery' ? '1-3 дня' : '3-7 дней';
-            
-            if (confirm(`Подтверждаете оформление заказа?\n\nГород: ${cityText}\nСпособ: ${deliveryType}\nДоставка: ${deliveryCost === 0 ? 'бесплатно' : deliveryCost + ' ₽'}\nИтого: ${total.toFixed(2)} ₽`)) {
-                
-                fetch('/create_order', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(orderData)
-                })
-                .then(function(response) {
-                    return response.json();
-                })
-                .then(function(data) {
-                    if (data.success) {
-                        alert('✅ Заказ успешно оформлен!\n\nНомер заказа: ' + data.order_number);
-                        window.location.href = "{{ url_for('orders') }}";
-                    } else {
-                        alert('❌ Ошибка при оформлении заказа: ' + (data.message || 'Неизвестная ошибка'));
-                    }
-                })
-                .catch(function(error) {
-                    console.error('Error:', error);
-                    alert('❌ Ошибка соединения с сервером');
-                });
-            }
-        });
-    }
-    
-    updateDeliveryOptions();
+            for (let [k, v] of formData.entries()) orderData[k] = v;
+            fetch('/create_order', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(orderData)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Заказ успешно оформлен!\n\nНомер заказа: ' + data.order_number);
+                    window.location.href = "{{ url_for('orders') }}";
+                } else {
+                    alert('❌ Ошибка при оформлении заказа: ' + (data.message || 'Неизвестная ошибка'));
+                }
+            })
+            .catch(() => alert('❌ Ошибка соединения с сервером'));
+        }
+    });
+
+    updateDeliveryOptions(0);
     updateCardSelection();
 });
 </script>

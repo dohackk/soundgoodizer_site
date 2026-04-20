@@ -17,6 +17,9 @@ import dns.resolver
 import random
 import uuid
 from urllib.parse import urlparse
+import magic
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 
 UPLOAD_FOLDER = 'static/uploads/avatars'
@@ -48,6 +51,27 @@ from flask_mail import Mail, Message
 mail = Mail(app)
 
 resend.api_key = os.environ.get('RESEND_API_KEY', '')
+
+# Rate limiting
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri="memory://",
+)
+
+# Лимиты размера файлов
+MAX_AVATAR_SIZE = 5 * 1024 * 1024        # 5 MB
+MAX_REPAIR_PHOTO_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_REVIEW_PHOTO_SIZE = 5 * 1024 * 1024   # 5 MB
+
+# Разрешённые MIME-типы для изображений
+ALLOWED_IMAGE_MIMES = {
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+}
 
 _db_pool = None
 
@@ -175,22 +199,58 @@ def hash_password(password):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def _validate_image_file(file, max_size):
+    """
+    Проверяет файл изображения: расширение, MIME-тип и размер.
+    Возвращает (True, None) при успехе или (False, 'сообщение об ошибке').
+    """
+    if not file or not file.filename:
+        return False, 'Файл не выбран'
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_EXTENSIONS:
+        return False, f'Недопустимое расширение файла. Разрешены: {", ".join(ALLOWED_EXTENSIONS)}'
+
+    # Читаем первые байты для определения MIME-типа
+    header = file.read(2048)
+    file.seek(0)
+
+    try:
+        mime = magic.from_buffer(header, mime=True)
+    except Exception:
+        return False, 'Не удалось определить тип файла'
+
+    if mime not in ALLOWED_IMAGE_MIMES:
+        return False, f'Недопустимый тип файла ({mime}). Разрешены только изображения.'
+
+    # Проверяем размер: читаем весь файл, потом сбрасываем позицию
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+
+    if size > max_size:
+        mb = max_size // (1024 * 1024)
+        return False, f'Файл слишком большой. Максимальный размер: {mb} МБ'
+
+    return True, None
+
 def save_avatar(file, login):
-    if not allowed_file(file.filename):
-        return None
-    
+    ok, err = _validate_image_file(file, MAX_AVATAR_SIZE)
+    if not ok:
+        return None, err
+
     extension = file.filename.rsplit('.', 1)[1].lower()
     filename = f"{login}.{extension}"
-    
+
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
 
     delete_old_avatar(login)
-    
+
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
-    
-    return f"uploads/avatars/{filename}"
+
+    return f"uploads/avatars/{filename}", None
 
 def delete_old_avatar(login):
     folder = app.config['UPLOAD_FOLDER']
@@ -717,6 +777,7 @@ def instrument_detail(instrument_id):
         return render_template('error.html', error=f"Ошибка при загрузке инструмента: {str(e)}")
     
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
 def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -795,6 +856,7 @@ def login():
     return render_template('login.html')
 
 @app.route('/api/check-unique', methods=['POST'])
+@limiter.limit("30 per minute")
 def api_check_unique():
     data = request.get_json()
     field = data.get('field')
@@ -854,6 +916,7 @@ def api_check_unique():
         return jsonify({'exists': False})
 
 @app.route('/api/check-email-dns', methods=['POST'])
+@limiter.limit("20 per minute")
 def api_check_email_dns():
     data = request.get_json()
     email = data.get('email', '').strip()
@@ -888,6 +951,7 @@ def api_check_email_dns():
         return jsonify({'valid': True, 'message': ''})
     
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def register():
     if request.method == 'POST':
         login = request.form.get('login', '').strip()
@@ -1023,6 +1087,7 @@ def register():
     return render_template('register.html')
 
 @app.route('/verify-email', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
 def verify_email():
     email = session.get('pending_verification_email')
     user_id = session.get('pending_user_id')
@@ -1107,6 +1172,7 @@ def verify_email():
     return render_template('verify_email.html', email=email)
 
 @app.route('/resend-verification', methods=['POST'])
+@limiter.limit("3 per 10 minutes")
 def resend_verification():
     email = session.get('pending_verification_email')
     user_id = session.get('pending_user_id')
@@ -1152,6 +1218,7 @@ def resend_verification():
 
 @app.route('/resend-password-code', methods=['POST'])
 @login_required
+@limiter.limit("3 per 10 minutes")
 def resend_password_code():
     code = secrets.randbelow(900000) + 100000
     session['password_change_code'] = str(code)
@@ -1247,7 +1314,7 @@ def profile():
                             except:
                                 pass
                     
-                    avatar_path = save_avatar(file, user_login)
+                    avatar_path, avatar_err = save_avatar(file, user_login)
                     
                     if avatar_path:
                         cursor.execute("UPDATE users SET avatar_url = %s WHERE user_id = %s", 
@@ -1257,7 +1324,7 @@ def profile():
                         session['user_avatar'] = avatar_path
                         flash('Фото профиля успешно обновлено', 'success')
                     else:
-                        flash('Недопустимый формат файла', 'danger')
+                        flash(avatar_err or 'Недопустимый формат файла', 'danger')
                     
                     release_conn(conn)
                     return redirect(url_for('profile'))
@@ -1612,6 +1679,7 @@ def get_search_variants(query):
 
 
 @app.route('/api/search_suggestions')
+@limiter.limit("60 per minute")
 def api_search_suggestions():
     """API для автодополнения поиска с поддержкой транслитерации"""
     query = request.args.get('q', '').strip()
@@ -2499,7 +2567,11 @@ def create_repair_request():
                 os.makedirs(app.config['REPAIR_PHOTOS_FOLDER'], exist_ok=True)
                 
                 for photo in photos:
-                    if photo and photo.filename and allowed_repair_file(photo.filename):
+                    if photo and photo.filename:
+                        ok, err = _validate_image_file(photo, MAX_REPAIR_PHOTO_SIZE)
+                        if not ok:
+                            return jsonify({'success': False, 'message': f'Ошибка фото: {err}'})
+
                         ext = photo.filename.rsplit('.', 1)[1].lower() if '.' in photo.filename else 'jpg'
                         new_filename = f"repair_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
                         
@@ -4238,7 +4310,12 @@ def submit_review():
         for photo in photos:
             if saved_count >= 5:
                 break
-            if photo and photo.filename and allowed_file(photo.filename):
+            if photo and photo.filename:
+                ok, err = _validate_image_file(photo, MAX_REVIEW_PHOTO_SIZE)
+                if not ok:
+                    conn.rollback()
+                    release_conn(conn)
+                    return jsonify({'success': False, 'message': f'Ошибка фото: {err}'})
                 ext = photo.filename.rsplit('.', 1)[1].lower()
                 filename = f"review_{review_id}_{uuid.uuid4().hex[:8]}.{ext}"
                 filepath = os.path.join(review_photos_folder, filename)
@@ -4535,6 +4612,12 @@ def page_not_found(e):
 @app.errorhandler(500)
 def internal_server_error(e):
     return render_template('error.html', error='Внутренняя ошибка сервера'), 500
+
+@app.errorhandler(429)
+def too_many_requests(e):
+    if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+        return jsonify({'success': False, 'message': 'Слишком много запросов. Попробуйте позже.'}), 429
+    return render_template('error.html', error='Слишком много запросов. Пожалуйста, подождите немного и попробуйте снова.'), 429
 
 if __name__ == '__main__':
     print("=" * 50)

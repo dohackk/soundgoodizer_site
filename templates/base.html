@@ -826,6 +826,32 @@
     </style>
 </head>
 <body>
+    <div id="pageSpinner" style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: rgba(0,0,0,0.35);
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+    ">
+        <div style="
+            background: var(--bs-body-bg, #fff);
+            border-radius: 16px;
+            padding: 28px 36px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+        ">
+            <div class="spinner-border text-primary" style="width:2.8rem;height:2.8rem;" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <span style="font-size:0.95rem;color:var(--bs-body-color,#333);font-weight:500;">Загрузка...</span>
+        </div>
+    </div>
     <nav class="navbar navbar-expand-lg fixed-top shadow-sm" id="mainNavbar">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('index') }}">
@@ -1094,7 +1120,7 @@
     
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=2"></script>
     
     <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -1319,7 +1345,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function updateCartCount() {
             $.get('/api/cart_count', function(data) {
-                $('#cartBadge').text(data.count || 0);
+                var count = data.count || 0;
+                var $badge = $('#cartBadge');
+                $badge.text(count);
+                if (count > 0) {
+                    $badge.removeClass('d-none');
+                } else {
+                    $badge.addClass('d-none');
+                }
             });
         }
         
@@ -1348,6 +1381,48 @@ document.addEventListener('DOMContentLoaded', function() {
     </script>
     
     {% block extra_js %}{% endblock %}
+
+    <script>
+    (function() {
+        var spinner = document.getElementById('pageSpinner');
+        if (!spinner) return;
+
+        function show() { spinner.style.display = 'flex'; }
+        function hide() { spinner.style.display = 'none'; }
+
+        hide();
+
+        document.addEventListener('click', function(e) {
+            var link = e.target.closest('a');
+            if (!link) return;
+            if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+            var href = link.getAttribute('href');
+            if (!href) return;
+            if (href.startsWith('#')) return;
+            if (href.startsWith('javascript')) return;
+            if (href.startsWith('mailto') || href.startsWith('tel')) return;
+            if (link.target === '_blank') return;
+            if (link.closest('.add-to-cart-btn')) return;
+            show();
+        });
+
+        document.addEventListener('submit', function(e) {
+            var form = e.target;
+
+            setTimeout(function() {
+                if (!form.dataset.submitCancelled) show();
+            }, 10);
+        });
+
+        window.addEventListener('pageshow', function(e) {
+            hide();
+        });
+
+        window.addEventListener('load', function() {
+            hide();
+        });
+    })();
+    </script>
 
 </body>
 </html>

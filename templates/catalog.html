@@ -320,7 +320,7 @@
                     <div class="position-relative overflow-hidden">
                         {% if instrument.main_image_url %}
                         <img src="{{ url_for('static', filename=instrument.main_image_url) }}" 
-                             class="card-img-top" alt="{{ instrument.name }}">
+                             class="card-img-top" alt="{{ instrument.name }}" loading="lazy">
                         {% else %}
                         <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
                              style="height: 220px;">
@@ -387,10 +387,11 @@
                                     <i class="bi bi-eye"></i>
                                 </a>
                                 {% if instrument.quantity_in_stock > 0 %}
-                                <a href="{{ url_for('add_to_cart', instrument_id=instrument.instrument_id) }}" 
-                                   class="btn btn-sm btn-primary" title="В корзину">
+                                <button class="btn btn-sm btn-primary add-to-cart-btn" 
+                                        data-instrument-id="{{ instrument.instrument_id }}" 
+                                        title="В корзину">
                                     <i class="bi bi-cart-plus"></i>
-                                </a>
+                                </button>
                                 {% endif %}
                             </div>
                         </div>
@@ -501,8 +502,20 @@
 <script>
 document.querySelectorAll('.instrument-col').forEach(function(el) {
     el.addEventListener('click', function(e) {
-        if (!e.target.closest('.btn-group') && !e.target.closest('a')) {
+        if (!e.target.closest('.btn-group') && !e.target.closest('a') && !e.target.closest('button')) {
             window.location.href = this.dataset.href;
+        }
+    });
+});
+
+document.querySelectorAll('.add-to-cart-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var instrumentId = parseInt(this.dataset.instrumentId);
+        var $btn = $(this);
+        if (typeof addToCartAjax === 'function') {
+            addToCartAjax(instrumentId, $btn);
         }
     });
 });

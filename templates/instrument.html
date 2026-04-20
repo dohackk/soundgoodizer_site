@@ -34,7 +34,7 @@
                 <div class="card-body text-center p-3">
                     {% if instrument.main_image_url %}
                     <img id="mainImage" src="{{ url_for('static', filename=instrument.main_image_url) }}" 
-                         class="img-fluid main-image rounded" alt="{{ instrument.name }}">
+                         class="img-fluid main-image rounded" alt="{{ instrument.name }}" loading="lazy">
                     {% else %}
                     <div class="bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                         <i class="bi bi-music-note-beamed display-1 text-secondary"></i>
@@ -104,10 +104,10 @@
 
                     <div class="d-grid gap-2 mb-4">
                         {% if instrument.quantity_in_stock > 0 %}
-                        <a href="{{ url_for('add_to_cart', instrument_id=instrument.instrument_id) }}" 
-                           class="btn btn-primary btn-lg">
+                        <button class="btn btn-primary btn-lg add-to-cart-btn"
+                                data-instrument-id="{{ instrument.instrument_id }}">
                             <i class="bi bi-cart-plus me-2"></i>Добавить в корзину
-                        </a>
+                        </button>
                         {% endif %}
                         
                         {% if instrument.rental_price_per_day and instrument.rental_price_per_day > 0 and instrument.quantity_in_stock > 0 %}
@@ -197,7 +197,7 @@
                                         {% if review.user_avatar %}
                                         <img src="{{ url_for('static', filename=review.user_avatar) }}"
                                              style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #e9ecef;"
-                                             alt="{{ review.user_login }}">
+                                             alt="{{ review.user_login }}" loading="lazy">
                                         {% else %}
                                         <div class="rounded-circle d-flex align-items-center justify-content-center"
                                              style="width:36px;height:36px;font-weight:bold;color:#fff;background:linear-gradient(135deg,#3498db,#2c3e50);font-size:14px;flex-shrink:0;">
@@ -227,7 +227,7 @@
                                     <a href="{{ url_for('static', filename=photo.photo_url) }}" target="_blank">
                                         <img src="{{ url_for('static', filename=photo.photo_url) }}"
                                              style="width:70px;height:70px;object-fit:cover;border-radius:6px;cursor:pointer;"
-                                             alt="Фото отзыва">
+                                             alt="Фото отзыва" loading="lazy">
                                     </a>
                                     {% endfor %}
                                 </div>
@@ -257,7 +257,7 @@
                     <div class="card h-100">
                         {% if item[9] and item[9] != 'NULL' %}
                         <img src="{{ url_for('static', filename=item[10]) }}" class="card-img-top" alt="{{ item[1] }}" 
-                             style="height: 150px; object-fit: cover;">
+                             loading="lazy" style="height: 150px; object-fit: cover;">
                         {% else %}
                         <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
                              style="height: 150px;">
@@ -404,9 +404,12 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Инструмент добавлен в корзину для аренды');
-                var modal = bootstrap.Modal.getInstance(document.getElementById('rentalModal'));
-                modal.hide();
+                var modalInstance = bootstrap.Modal.getInstance(document.getElementById('rentalModal'));
+                modalInstance.hide();
+                if (typeof updateCartCount === 'function') updateCartCount();
+                if (typeof showNotification === 'function') {
+                    showNotification('Инструмент добавлен в корзину для аренды', 'success');
+                }
             } else {
                 alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
             }

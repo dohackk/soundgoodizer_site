@@ -36,7 +36,6 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
 app.config['INSTRUMENT_IMAGES_FOLDER'] = INSTRUMENT_IMAGES_FOLDER
 
-# Flask-Mail через Gmail SMTP
 app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT']     = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS']  = True
@@ -52,7 +51,6 @@ mail = Mail(app)
 
 resend.api_key = os.environ.get('RESEND_API_KEY', '')
 
-# Rate limiting
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
@@ -60,12 +58,10 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
-# Лимиты размера файлов
 MAX_AVATAR_SIZE = 5 * 1024 * 1024        # 5 MB
 MAX_REPAIR_PHOTO_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_REVIEW_PHOTO_SIZE = 5 * 1024 * 1024   # 5 MB
 
-# Разрешённые MIME-типы для изображений
 ALLOWED_IMAGE_MIMES = {
     'image/jpeg',
     'image/png',
@@ -167,6 +163,9 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            # Для AJAX-запросов возвращаем JSON вместо редиректа
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'message': 'Необходимо войти в систему', 'redirect': url_for('login')}), 401
             flash('Сначала войдите в систему', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -4164,6 +4163,78 @@ def technician_repair_detail(request_id):
             release_conn(conn)
         flash(f'Ошибка при загрузке заявки: {str(e)}', 'danger')
         return redirect(url_for('technician_repair_requests'))
+
+@app.route('/api/add_to_cart', methods=['POST'])
+@login_required
+def api_add_to_cart():
+    """AJAX-эндпоинт для добавления товара в корзину без перезагрузки страницы."""
+    data = request.get_json()
+    instrument_id = data.get('instrument_id') if data else None
+
+    if not instrument_id:
+        return jsonify({'success': False, 'message': 'Не указан инструмент'})
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'success': False, 'message': 'Ошибка подключения к базе данных'})
+
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT quantity_in_stock, name
+            FROM instruments
+            WHERE instrument_id = %s AND is_available_for_sale = true
+        """, (instrument_id,))
+        result = cursor.fetchone()
+
+        if not result:
+            release_conn(conn)
+            return jsonify({'success': False, 'message': 'Товар не найден или недоступен'})
+
+        stock, instrument_name = result
+
+        if stock <= 0:
+            release_conn(conn)
+            return jsonify({'success': False, 'message': 'Товар отсутствует в наличии'})
+
+        cursor.execute("""
+            SELECT cart_item_id, quantity
+            FROM cart_items
+            WHERE user_id = %s AND instrument_id = %s AND cart_item_id IS NOT NULL
+        """, (session['user_id'], instrument_id))
+        existing = cursor.fetchone()
+
+        if existing:
+            new_quantity = existing[1] + 1
+            if new_quantity <= stock:
+                cursor.execute("""
+                    UPDATE cart_items SET quantity = %s WHERE cart_item_id = %s
+                """, (new_quantity, existing[0]))
+                message = f'Добавлена еще одна единица «{instrument_name}»'
+            else:
+                release_conn(conn)
+                return jsonify({'success': False, 'message': f'Недостаточно товара. Осталось: {stock} шт.'})
+        else:
+            cursor.execute("""
+                INSERT INTO cart_items (user_id, instrument_id, quantity, is_for_rental)
+                VALUES (%s, %s, 1, FALSE)
+            """, (session['user_id'], instrument_id))
+            message = f'«{instrument_name}» добавлен в корзину'
+
+        conn.commit()
+
+        cursor.execute("SELECT SUM(quantity) FROM cart_items WHERE user_id = %s", (session['user_id'],))
+        count_row = cursor.fetchone()
+        cart_count = int(count_row[0]) if count_row[0] else 0
+
+        release_conn(conn)
+        return jsonify({'success': True, 'message': message, 'cart_count': cart_count})
+
+    except Exception as e:
+        release_conn(conn)
+        return jsonify({'success': False, 'message': str(e)})
+
 
 @app.route('/api/cart_count')
 def api_cart_count():

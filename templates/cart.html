@@ -21,11 +21,11 @@
                             {% if item.image %}
                             <img src="{{ url_for('static', filename=item.image) }}" 
                                  class="img-fluid rounded" alt="{{ item.name }}"
-                                 style="height: 80px; object-fit: cover;">
+                                 loading="lazy" style="height: 80px; object-fit: cover;">
                             {% else %}
                             <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
                                  class="img-fluid rounded" alt="No image"
-                                 style="height: 80px; object-fit: cover;">
+                                 loading="lazy" style="height: 80px; object-fit: cover;">
                             {% endif %}
                         </div>
                         <div class="col-md-5 col-9">
@@ -68,11 +68,11 @@
                             {% if item.image %}
                             <img src="{{ url_for('static', filename=item.image) }}" 
                                  class="img-fluid rounded" alt="{{ item.name }}"
-                                 style="height: 80px; object-fit: cover;">
+                                 loading="lazy" style="height: 80px; object-fit: cover;">
                             {% else %}
                             <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
                                  class="img-fluid rounded" alt="No image"
-                                 style="height: 80px; object-fit: cover;">
+                                 loading="lazy" style="height: 80px; object-fit: cover;">
                             {% endif %}
                         </div>
                         <div class="col-md-5 col-9">

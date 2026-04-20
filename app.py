@@ -1564,9 +1564,56 @@ def check_current_password():
         traceback.print_exc()
         return jsonify({'valid': False, 'message': str(e)})
 
+def transliterate_ru_to_en(text):
+    """Транслитерация русского текста в латиницу (для поиска)"""
+    mapping = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+        'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+        'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+        'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+        'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+        'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'Yo',
+        'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+        'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+        'Ф': 'F', 'Х': 'Kh', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sch',
+        'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya',
+    }
+    return ''.join(mapping.get(c, c) for c in text)
+
+
+def transliterate_en_to_ru(text):
+    """Транслитерация латиницы в русский (для поиска по раскладке)"""
+    mapping = {
+        'fender': 'фендер', 'gibson': 'гибсон', 'yamaha': 'ямаха',
+        'roland': 'роланд', 'casio': 'касио', 'ibanez': 'ибанез',
+        'marshall': 'маршалл', 'boss': 'босс', 'korg': 'корг',
+        'steinway': 'стейнвей', 'kawai': 'кавай', 'pearl': 'перл',
+        'zildjian': 'зилджиан', 'meinl': 'майнл', 'tama': 'тама',
+    }
+    lower = text.lower()
+    return mapping.get(lower, text)
+
+
+def get_search_variants(query):
+    """Возвращает список вариантов запроса для поиска"""
+    variants = [query]
+    
+    has_cyrillic = any('\u0400' <= c <= '\u04ff' for c in query)
+    if has_cyrillic:
+        translit = transliterate_ru_to_en(query)
+        if translit != query:
+            variants.append(translit)
+    else:
+        ru_equiv = transliterate_en_to_ru(query)
+        if ru_equiv != query:
+            variants.append(ru_equiv)
+    
+    return variants
+
+
 @app.route('/api/search_suggestions')
 def api_search_suggestions():
-    """API для автодополнения поиска"""
+    """API для автодополнения поиска с поддержкой транслитерации"""
     query = request.args.get('q', '').strip()
     
     if len(query) < 2:
@@ -1579,32 +1626,49 @@ def api_search_suggestions():
     try:
         cursor = conn.cursor()
         
-        sql = """
+        variants = get_search_variants(query)
+        
+        like_conditions = []
+        params = []
+        for v in variants:
+            term = f"%{v}%"
+            like_conditions.append("(i.name ILIKE %s OR i.model ILIKE %s OR b.brand_name ILIKE %s OR c.category_name ILIKE %s)")
+            params.extend([term, term, term, term])
+        
+        where_clause = " OR ".join(like_conditions)
+        
+        order_params = []
+        for v in variants:
+            order_params.append(f"{v}%")
+        
+        primary = f"{variants[0]}%"
+        
+        sql = f"""
         SELECT 
             i.instrument_id,
             i.name,
             i.model,
             b.brand_name,
             i.main_image_url,
-            i.purchase_price
+            i.purchase_price,
+            c.category_name
         FROM instruments i
         LEFT JOIN brands b ON i.brand_id = b.brand_id
+        LEFT JOIN categories c ON i.category_id = c.category_id
         WHERE i.is_available_for_sale = true
-          AND (i.name ILIKE %s OR i.model ILIKE %s OR b.brand_name ILIKE %s)
+          AND ({where_clause})
         ORDER BY 
             CASE 
                 WHEN i.name ILIKE %s THEN 1
-                WHEN i.model ILIKE %s THEN 2
-                WHEN b.brand_name ILIKE %s THEN 3
+                WHEN b.brand_name ILIKE %s THEN 2
+                WHEN i.model ILIKE %s THEN 3
                 ELSE 4
             END,
             i.views_count DESC
+        LIMIT 8
         """
         
-        search_term = f"%{query}%"
-        params = [search_term, search_term, search_term, 
-                  f"{query}%", f"{query}%", f"{query}%"]
-        
+        params.extend([primary, primary, primary])
         cursor.execute(sql, params)
         
         suggestions = []
@@ -1616,6 +1680,7 @@ def api_search_suggestions():
                 'brand': row[3],
                 'image': row[4] if row[4] else 'img/default-instrument.jpg',
                 'price': row[5],
+                'category': row[6],
                 'url': url_for('instrument_detail', instrument_id=row[0])
             })
         

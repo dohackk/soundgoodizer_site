@@ -1128,6 +1128,27 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 300);
         });
         
+        const RU_TO_EN = {
+            'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z',
+            'и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r',
+            'с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh',
+            'щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'
+        };
+
+        function transliterateRuToEn(text) {
+            return text.toLowerCase().split('').map(c => RU_TO_EN[c] !== undefined ? RU_TO_EN[c] : c).join('');
+        }
+
+        function getSearchVariants(query) {
+            const variants = [query.toLowerCase()];
+            const hasCyrillic = /[а-яёА-ЯЁ]/.test(query);
+            if (hasCyrillic) {
+                const translit = transliterateRuToEn(query);
+                if (translit !== query.toLowerCase()) variants.push(translit);
+            }
+            return variants;
+        }
+
         function displaySuggestions(suggestions, query) {
             if (suggestions.length === 0) {
                 suggestionsContainer.innerHTML = `
@@ -1141,24 +1162,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
                 return;
             }
-            
+
             let html = '';
             suggestions.forEach(item => {
                 const brand = item.brand ? item.brand : '';
                 const model = item.model ? item.model : '';
+                const category = item.category ? item.category : '';
                 const name = item.name;
-                
+
                 const highlightedName = highlightMatch(name, query);
-                
+                const highlightedBrand = brand ? highlightMatch(brand, query) : '';
+
                 const detailParts = [];
-                if (brand) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-tag"></i> ${brand}</span>`);
+                if (brand) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-tag"></i> ${highlightedBrand}</span>`);
                 if (model) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-upc-scan"></i> ${model}</span>`);
-                
+                if (category) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-music-note"></i> ${category}</span>`);
+
                 html += `
                     <div class="search-suggestion-item" onclick="window.location.href='${item.url}'">
                         <div class="suggestion-image-container">
-                            <img src="${item.image.startsWith('http') ? item.image : '/static/' + item.image}" 
-                                 class="suggestion-image" 
+                            <img src="${item.image.startsWith('http') ? item.image : '/static/' + item.image}"
+                                 class="suggestion-image"
                                  alt="${item.name}"
                                  loading="lazy"
                                  onerror="this.src='/static/img/default-instrument.jpg'">
@@ -1178,28 +1202,39 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 `;
             });
-            
+
             html += `
                 <a href="/catalog?search=${encodeURIComponent(query)}" class="view-all-results">
                     <span><i class="bi bi-grid me-2"></i>Все результаты</span>
                     <i class="bi bi-arrow-right"></i>
                 </a>
             `;
-            
+
             suggestionsContainer.innerHTML = html;
         }
-        
+
         function highlightMatch(text, query) {
             if (!text) return '';
-            const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
-            return text.replace(regex, '<span class="highlight">$1</span>');
+            const variants = getSearchVariants(query);
+            let result = text;
+            for (const variant of variants) {
+                if (!variant) continue;
+                try {
+                    const regex = new RegExp('(' + escapeRegExp(variant) + ')', 'gi');
+                    if (regex.test(result)) {
+                        result = result.replace(new RegExp('(' + escapeRegExp(variant) + ')', 'gi'), '<span class="highlight">$1</span>');
+                        break;
+                    }
+                } catch(e) {}
+            }
+            return result;
         }
-        
+
         function escapeRegExp(string) {
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
-        
-        document.addEventListener('click', function(e) {
+
+                document.addEventListener('click', function(e) {
             if (!searchInput.contains(e.target) && !suggestionsContainer.contains(e.target)) {
                 suggestionsContainer.style.display = 'none';
             }

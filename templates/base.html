@@ -1,8 +1,15 @@
 <!DOCTYPE html>
-<html lang="ru" data-bs-theme="light">
+<html lang="ru" id="htmlRoot">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function() {
+            var t = localStorage.getItem('sg_theme') || 'light';
+            document.documentElement.setAttribute('data-bs-theme', t);
+            document.documentElement.id = 'htmlRoot';
+        })();
+    </script>
     <title>{% block title %}SoundGoodizer - Музыкальные инструменты{% endblock %}</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -418,10 +425,407 @@
 #searchSuggestions::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #95a5a6, #7f8c8d);
 }
+
+[data-bs-theme="dark"] {
+    --bs-body-bg: #1a1d23;
+    --bs-body-color: #e0e0e0;
+}
+
+#mainNavbar {
+    background-color: #fff;
+}
+[data-bs-theme="dark"] #mainNavbar {
+    background-color: #212529 !important;
+    border-bottom: 1px solid #2d3238;
+}
+[data-bs-theme="dark"] .navbar-brand,
+[data-bs-theme="dark"] .nav-link {
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .nav-link:hover { color: #3498db !important; }
+
+[data-bs-theme="dark"] .input-group-text,
+[data-bs-theme="dark"] #searchInput,
+[data-bs-theme="dark"] .form-control {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] #searchInput::placeholder { color: #888 !important; }
+
+[data-bs-theme="dark"] .card {
+    background-color: #252930 !important;
+    border-color: #2d3238 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .card-header {
+    background-color: #1e2228 !important;
+    border-color: #2d3238 !important;
+}
+[data-bs-theme="dark"] .card-title,
+[data-bs-theme="dark"] .card-text { color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] .table {
+    color: #e0e0e0 !important;
+    --bs-table-bg: #252930;
+    --bs-table-striped-bg: #2a2f38;
+    --bs-table-hover-bg: #2d3340;
+    --bs-table-border-color: #3d4248;
+}
+[data-bs-theme="dark"] .table-light,
+[data-bs-theme="dark"] thead.table-light th {
+    background-color: #1e2228 !important;
+    color: #adb5bd !important;
+    border-color: #3d4248 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+    color: #3498db !important;
+    border-color: #3498db !important;
+}
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+    background-color: #3498db !important;
+    color: #fff !important;
+}
+[data-bs-theme="dark"] .btn-outline-secondary {
+    color: #adb5bd !important;
+    border-color: #6c757d !important;
+}
+
+[data-bs-theme="dark"] .dropdown-menu {
+    background-color: #252930 !important;
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] .dropdown-item {
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .dropdown-item:hover {
+    background-color: #2d3340 !important;
+    color: #fff !important;
+}
+[data-bs-theme="dark"] .dropdown-divider { border-color: #3d4248 !important; }
+[data-bs-theme="dark"] .dropdown-item-text { color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] body { background-color: #1a1d23 !important; }
+
+[data-bs-theme="dark"] footer { background-color: #111318 !important; }
+
+[data-bs-theme="dark"] .alert-success { background-color: #1a3a2a !important; color: #75c99a !important; border-color: #2d6a4f !important; }
+[data-bs-theme="dark"] .alert-danger  { background-color: #3a1a1a !important; color: #f08080 !important; border-color: #6a2d2d !important; }
+[data-bs-theme="dark"] .alert-warning { background-color: #3a2e1a !important; color: #f0c060 !important; border-color: #6a5020 !important; }
+[data-bs-theme="dark"] .alert-info    { background-color: #1a2a3a !important; color: #80b8f0 !important; border-color: #2d4a6a !important; }
+
+[data-bs-theme="dark"] .modal-content {
+    background-color: #252930 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .modal-header {
+    background-color: #1e2228 !important;
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] .btn-close { filter: invert(1); }
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus {
+    background-color: #2d3238 !important;
+    border-color: #3498db !important;
+    color: #e0e0e0 !important;
+    box-shadow: 0 0 0 0.2rem rgba(52,152,219,.25) !important;
+}
+[data-bs-theme="dark"] .form-text { color: #888 !important; }
+[data-bs-theme="dark"] .input-group-text {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+    color: #adb5bd !important;
+}
+
+[data-bs-theme="dark"] .nav-tabs { border-color: #3d4248 !important; }
+[data-bs-theme="dark"] .nav-tabs .nav-link { color: #adb5bd !important; }
+[data-bs-theme="dark"] .nav-tabs .nav-link.active {
+    background-color: #252930 !important;
+    border-color: #3d4248 #3d4248 #252930 !important;
+    color: #3498db !important;
+}
+
+[data-bs-theme="dark"] .text-muted { color: #888 !important; }
+[data-bs-theme="dark"] h1,[data-bs-theme="dark"] h2,[data-bs-theme="dark"] h3,
+[data-bs-theme="dark"] h4,[data-bs-theme="dark"] h5,[data-bs-theme="dark"] h6 { color: #e0e0e0; }
+
+[data-bs-theme="dark"] hr { border-color: #3d4248 !important; }
+[data-bs-theme="dark"] .border { border-color: #3d4248 !important; }
+[data-bs-theme="dark"] .border-top,
+[data-bs-theme="dark"] .border-bottom { border-color: #3d4248 !important; }
+
+[data-bs-theme="dark"] .bg-light { background-color: #2d3238 !important; }
+[data-bs-theme="dark"] .bg-white { background-color: #252930 !important; }
+
+[data-bs-theme="dark"] #searchSuggestions {
+    background-color: #252930 !important;
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] .search-suggestion-item { border-color: #3d4248 !important; }
+[data-bs-theme="dark"] .search-suggestion-item:hover { background: #2d3340 !important; }
+[data-bs-theme="dark"] .suggestion-name { color: #e0e0e0 !important; }
+[data-bs-theme="dark"] .suggestion-detail-item { background: #2d3238 !important; color: #adb5bd !important; }
+[data-bs-theme="dark"] .view-all-results {
+    background: #1e2228 !important;
+    border-color: #3d4248 !important;
+    color: #3498db !important;
+}
+[data-bs-theme="dark"] .no-results { background: #252930 !important; }
+[data-bs-theme="dark"] .no-results h6 { color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] .page-link {
+    background-color: #252930 !important;
+    border-color: #3d4248 !important;
+    color: #3498db !important;
+}
+[data-bs-theme="dark"] .page-item.active .page-link {
+    background-color: #3498db !important;
+    border-color: #3498db !important;
+    color: #fff !important;
+}
+[data-bs-theme="dark"] .page-item.disabled .page-link { color: #555 !important; }
+
+[data-bs-theme="dark"] .badge.bg-secondary { background-color: #495057 !important; }
+
+[data-bs-theme="dark"] .list-group-item {
+    background-color: #252930 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+
+
+[data-bs-theme="dark"] .filter-section {
+    background-color: #2d3238 !important;
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] .form-control[type="file"] {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .form-control[type="file"]::file-selector-button {
+    background-color: #3d4248;
+    color: #e0e0e0;
+    border: 1px solid #4d5258;
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin-right: 12px;
+}
+[data-bs-theme="dark"] .form-control[type="file"]::file-selector-button:hover {
+    background-color: #4d5258;
+}
+
+[data-bs-theme="dark"] .photo-upload-section {
+    background-color: #2d3238 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .photo-item {
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] .photo-item .remove-photo {
+    background-color: rgba(45,50,56,0.95) !important;
+    color: #e74c3c !important;
+}
+
+[data-bs-theme="dark"] .instrument-thumb,
+[data-bs-theme="dark"] .repair-thumb,
+[data-bs-theme="dark"] .user-avatar {
+    border-color: #3d4248 !important;
+}
+
+[data-bs-theme="dark"] textarea.form-control {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] .form-check-input {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] .form-check-input:checked {
+    background-color: #3498db !important;
+    border-color: #3498db !important;
+}
+[data-bs-theme="dark"] .form-check-label { color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] [style*="background:#f8f9fa"],
+[data-bs-theme="dark"] [style*="background: #f8f9fa"],
+[data-bs-theme="dark"] [style*="background-color: #f8f9fa"],
+[data-bs-theme="dark"] [style*="background-color:#f8f9fa"] {
+    background-color: #2d3238 !important;
+    background: #2d3238 !important;
+}
+[data-bs-theme="dark"] [style*="background:#fff"],
+[data-bs-theme="dark"] [style*="background: #fff"],
+[data-bs-theme="dark"] [style*="background-color: white"],
+[data-bs-theme="dark"] [style*="background-color:white"],
+[data-bs-theme="dark"] [style*="background-color: #fff"],
+[data-bs-theme="dark"] [style*="background-color:#fff"] {
+    background-color: #252930 !important;
+    background: #252930 !important;
+}
+
+[data-bs-theme="dark"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-bs-theme="dark"] ::-webkit-scrollbar-track { background: #1a1d23; }
+[data-bs-theme="dark"] ::-webkit-scrollbar-thumb { background: #3d4248; border-radius: 4px; }
+[data-bs-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5258; }
+
+[data-bs-theme="dark"] section.bg-light,
+[data-bs-theme="dark"] .bg-light.rounded {
+    background-color: #252930 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] section.bg-light span,
+[data-bs-theme="dark"] section.bg-light p,
+[data-bs-theme="dark"] section.bg-light h2 {
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .card-footer.bg-white {
+    background-color: #252930 !important;
+}
+
+[data-bs-theme="dark"] .sort-select {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .active-filters {
+    background-color: #2d3238 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .empty-state {
+    background: #252930 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .empty-state i { color: #4d5258 !important; }
+[data-bs-theme="dark"] .instrument-card {
+    border-color: #3d4248 !important;
+    background-color: #252930 !important;
+}
+[data-bs-theme="dark"] .card-footer {
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] .rental-price { color: #adb5bd !important; }
+
+[data-bs-theme="dark"] .add-photo-card {
+    background-color: #2d3238 !important;
+    border-color: #4d5258 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .add-photo-card:hover {
+    background-color: #353b44 !important;
+    border-color: #3498db !important;
+}
+[data-bs-theme="dark"] .add-photo-card i,
+[data-bs-theme="dark"] .add-photo-card span { color: #adb5bd !important; }
+[data-bs-theme="dark"] .add-photo-card:hover i,
+[data-bs-theme="dark"] .add-photo-card:hover span { color: #3498db !important; }
+[data-bs-theme="dark"] .photo-stats {
+    background-color: #2d3238 !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .photo-limit-text { color: #adb5bd !important; }
+
+[data-bs-theme="dark"] .card-header.bg-white {
+    background-color: #1e2228 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .card-header.bg-white .text-dark { color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] .breadcrumb-item a { color: #3498db !important; }
+[data-bs-theme="dark"] .breadcrumb-item.active { color: #adb5bd !important; }
+[data-bs-theme="dark"] .breadcrumb-item + .breadcrumb-item::before { color: #6c757d !important; }
+
+[data-bs-theme="dark"] .stat-card {
+    background: linear-gradient(135deg, #252930 0%, #1e2228 100%) !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .stat-card .stat-label { color: #adb5bd !important; }
+[data-bs-theme="dark"] .stat-card .stat-value { color: inherit; }
+[data-bs-theme="dark"] .stat-card .border-top { border-color: #3d4248 !important; }
+[data-bs-theme="dark"] .stat-card a { color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] .quick-action-btn {
+    background: #2d3238 !important;
+    color: #e0e0e0 !important;
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] .quick-action-btn:hover {
+    background: #353b44 !important;
+    border-color: #3498db !important;
+    color: #fff !important;
+}
+
+[data-bs-theme="dark"] .recent-item {
+    background: #2d3238 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .recent-item:hover {
+    background: linear-gradient(90deg, #353b44 0%, #2d3238 100%) !important;
+}
+
+[data-bs-theme="dark"] .analytics-card {
+    background: linear-gradient(135deg, #252930 0%, #1e2228 100%) !important;
+    border-color: #3d4248 !important;
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] .table th {
+    background: #1e2228 !important;
+    color: #adb5bd !important;
+    border-color: #3d4248 !important;
+}
+
+[data-bs-theme="dark"] .user-avatar-sm {
+    border: 2px solid #3d4248;
+}
+
+[data-bs-theme="dark"] .p-3.bg-light.rounded-3 {
+    background-color: #2d3238 !important;
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .p-3.bg-light.rounded-3 .h4,
+[data-bs-theme="dark"] .p-3.bg-light.rounded-3 small { color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] .table-hover tbody tr:hover {
+    background-color: #2d3340 !important;
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] .text-dark { color: #e0e0e0 !important; }
+[data-bs-theme="dark"] .text-secondary { color: #adb5bd !important; }
+
+[data-bs-theme="dark"] .modal-body .bg-light {
+    background-color: #2d3238 !important;
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] select.form-select,
+[data-bs-theme="dark"] select.form-control {
+    background-color: #2d3238 !important;
+    color: #e0e0e0 !important;
+    border-color: #3d4248 !important;
+}
+[data-bs-theme="dark"] select option {
+    background-color: #2d3238;
+    color: #e0e0e0;
+}
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-white fixed-top shadow-sm">
+    <nav class="navbar navbar-expand-lg fixed-top shadow-sm" id="mainNavbar">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="bi bi-music-note-beamed me-2"></i>SoundGoodizer
@@ -468,7 +872,7 @@
                     {% endif %}
                 </ul>
                 
-<div class="position-relative me-3" style="min-width: 300px;">
+<div class="position-relative me-2" style="min-width: 260px;">
     <form class="d-flex" action="{{ url_for('catalog') }}" method="get" id="searchForm">
         <div class="input-group">
             <span class="input-group-text bg-white border-end-0">
@@ -488,76 +892,78 @@
          style="z-index: 1000; display: none; max-height: 450px; overflow-y: auto; border: 1px solid rgba(0,0,0,0.05);">
     </div>
 </div>
-                    
-                    <a href="{{ url_for('cart') }}" class="btn btn-outline-primary me-3 position-relative">
-                        <i class="bi bi-cart3"></i>
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="cartBadge">
-                            0
-                        </span>
-                    </a>
-                    
-                    {% if session.username %}
-<div class="dropdown">
-    <button class="btn btn-outline-primary dropdown-toggle d-flex align-items-center" type="button" data-bs-toggle="dropdown">
-        {% if session.user_avatar %}
-        <img src="{{ url_for('static', filename=session.user_avatar) }}" 
-             class="rounded-circle me-2" 
-             style="width: 32px; height: 32px; object-fit: cover;"
-             alt="Аватар">
-        {% else %}
-        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-2" 
-             style="width: 32px; height: 32px;">
-            <i class="bi bi-person text-secondary"></i>
-        </div>
-        {% endif %}
-        {{ session.username }}
-    </button>
-    <ul class="dropdown-menu dropdown-menu-end">
-        <li>
-            <span class="dropdown-item-text d-flex align-items-center">
-                {% if session.user_avatar %}
-                <img src="{{ url_for('static', filename=session.user_avatar) }}" 
-                     class="rounded-circle me-2" 
-                     style="width: 48px; height: 48px; object-fit: cover;"
-                     alt="Аватар">
-                {% else %}
-                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-2" 
-                     style="width: 48px; height: 48px;">
-                    <i class="bi bi-person fs-4 text-secondary"></i>
-                </div>
-                {% endif %}
-                <div>
-                    <small>Вошли как</small><br>
-                    <strong>{{ session.user_name }}</strong>
-                </div>
-            </span>
-        </li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bi bi-person me-2"></i>Профиль</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('orders') }}"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
-        {% if session.user_role == 'admin' %}
-        <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
-            <i class="bi bi-speedometer2 me-2"></i>Админ-панель
-        </a></li>
 
-{% elif session.user_role == 'technician' %}
-<li><a class="dropdown-item text-info" href="{{ url_for('technician_repair_requests') }}">
-    <i class="fas fa-wrench me-2"></i>Панель мастера
-</a></li>
-        {% endif %}
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-            <i class="bi bi-box-arrow-right me-2"></i>Выйти
-        </a></li>
-    </ul>
-</div>
-{% else %}
-<div class="btn-group">
+<div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('cart') }}" class="btn btn-outline-primary position-relative px-3">
+        <i class="bi bi-cart3 fs-5"></i>
+        <span class="position-absolute top-0 start-100 badge rounded-pill bg-danger"
+              id="cartBadge" style="transform:translate(-60%,-40%);font-size:0.65rem;padding:2px 5px;">
+            0
+        </span>
+    </a>
+
+    <button class="btn btn-outline-secondary px-3" onclick="toggleTheme()" title="Сменить тему">
+        <i class="bi bi-moon-fill fs-5" id="themeIconNav"></i>
+    </button>
+
+    {% if session.username %}
+    <div class="dropdown">
+        <button class="btn btn-outline-primary dropdown-toggle d-flex align-items-center gap-2 px-3" 
+                type="button" data-bs-toggle="dropdown">
+            {% if session.user_avatar %}
+            <img src="{{ url_for('static', filename=session.user_avatar) }}" 
+                 class="rounded-circle" 
+                 style="width:30px;height:30px;object-fit:cover;"
+                 alt="Аватар">
+            {% else %}
+            <i class="bi bi-person-circle fs-5"></i>
+            {% endif %}
+            {{ session.username }}
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+                <span class="dropdown-item-text d-flex align-items-center">
+                    {% if session.user_avatar %}
+                    <img src="{{ url_for('static', filename=session.user_avatar) }}" 
+                         class="rounded-circle me-2" 
+                         style="width:40px;height:40px;object-fit:cover;"
+                         alt="Аватар">
+                    {% else %}
+                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-2" 
+                         style="width:40px;height:40px;">
+                        <i class="bi bi-person fs-5 text-secondary"></i>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <small class="text-muted">Вошли как</small><br>
+                        <strong>{{ session.user_name }}</strong>
+                    </div>
+                </span>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bi bi-person me-2"></i>Профиль</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('orders') }}"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('my_reviews') }}"><i class="bi bi-star me-2"></i>Мои отзывы</a></li>
+            {% if session.user_role == 'admin' %}
+            <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
+                <i class="bi bi-speedometer2 me-2"></i>Админ-панель
+            </a></li>
+            {% elif session.user_role == 'technician' %}
+            <li><a class="dropdown-item text-info" href="{{ url_for('technician_repair_requests') }}">
+                <i class="fas fa-wrench me-2"></i>Панель мастера
+            </a></li>
+            {% endif %}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                <i class="bi bi-box-arrow-right me-2"></i>Выйти
+            </a></li>
+        </ul>
+    </div>
+    {% else %}
     <a href="{{ url_for('login') }}" class="btn btn-outline-primary">Войти</a>
     <a href="{{ url_for('register') }}" class="btn btn-primary">Регистрация</a>
+    {% endif %}
 </div>
-{% endif %}
-                </div>
             </div>
         </div>
     </nav>
@@ -584,6 +990,9 @@
                         Срок аренды истёк, но инструмент не возвращён:
                         <span id="overdue-rental-list"></span>
                         Пожалуйста, свяжитесь с нами для возврата.
+                        <span class="d-block mt-1 small opacity-75">
+                            <i class="bi bi-envelope me-1"></i>Уведомление также отправлено на вашу почту.
+                        </span>
                     </div>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>

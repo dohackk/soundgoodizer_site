@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Мои отзывы - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+.review-card { border-radius: 12px; transition: box-shadow 0.2s; }
+.review-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.1) !important; }
+.star-fill { color: #f39c12; }
+.star-empty { color: #dee2e6; }
+.review-photo {
+    width: 70px; height: 70px;
+    object-fit: cover; border-radius: 8px;
+    cursor: pointer; transition: transform 0.2s;
+}
+.review-photo:hover { transform: scale(1.08); }
+.status-badge { font-size: 0.78rem; padding: 4px 12px; border-radius: 20px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0"><i class="bi bi-star-fill text-warning me-2"></i>Мои отзывы</h1>
+            <p class="text-muted mb-0">Отзывы, которые вы оставили</p>
+        </div>
+        <a href="{{ url_for('orders') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Мои заказы
+        </a>
+    </div>
+
+    {% if reviews %}
+    <!-- Статистика -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#e3f2fd;">
+                <div class="h3 mb-0" style="color:#2980b9;">{{ reviews|length }}</div>
+                <small class="text-muted">Всего отзывов</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#e8f5e9;">
+                <div class="h3 mb-0" style="color:#27ae60;">{{ reviews|selectattr('is_approved')|list|length }}</div>
+                <small class="text-muted">Опубликовано</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#fff8e1;">
+                <div class="h3 mb-0" style="color:#f39c12;">
+                    {{ reviews|rejectattr('is_approved')|rejectattr('is_rejected')|list|length }}
+                </div>
+                <small class="text-muted">На модерации</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#f8f9fa;">
+                {% set total_rating = namespace(val=0) %}
+                {% set approved = reviews|selectattr('is_approved')|list %}
+                {% for r in approved %}{% set total_rating.val = total_rating.val + r.rating %}{% endfor %}
+                <div class="h3 mb-0 text-warning">
+                    {% if approved %}{{ "%.1f"|format(total_rating.val / approved|length) }}{% else %}—{% endif %}
+                </div>
+                <small class="text-muted">Средняя оценка</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        {% for review in reviews %}
+        <div class="col-12">
+            <div class="card review-card shadow-sm">
+                <div class="card-body">
+                    <div class="row align-items-start">
+                        <!-- Инструмент -->
+                        <div class="col-md-3 mb-3 mb-md-0">
+                            <div class="d-flex gap-2 align-items-start">
+                                {% if review.main_image_url %}
+                                <img src="{{ url_for('static', filename=review.main_image_url) }}"
+                                     style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;"
+                                     alt="{{ review.instrument_name }}">
+                                {% else %}
+                                <div class="bg-light d-flex align-items-center justify-content-center rounded flex-shrink-0"
+                                     style="width:56px;height:56px;">
+                                    <i class="bi bi-music-note-beamed text-muted fs-4"></i>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <div class="fw-bold small">{{ review.instrument_name }}</div>
+                                    <div class="text-muted small">{{ review.brand_name or '' }}</div>
+                                    <a href="{{ url_for('instrument_detail', instrument_id=review.instrument_id) }}"
+                                       class="small text-primary">Открыть</a>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">Заказ: <span class="fw-bold">{{ review.order_number }}</span></small><br>
+                                <small class="text-muted">{{ review.created_at.strftime('%d.%m.%Y') if review.created_at else '' }}</small>
+                            </div>
+                        </div>
+
+                        <!-- Содержимое -->
+                        <div class="col-md-7 mb-3 mb-md-0">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                {% for i in range(1, 6) %}
+                                <i class="bi {% if i <= review.rating %}bi-star-fill star-fill{% else %}bi-star star-empty{% endif %}"></i>
+                                {% endfor %}
+                                <span class="fw-bold ms-1">{{ review.rating }}/5</span>
+                                {% if review.title %}
+                                <span class="text-muted">—</span>
+                                <span class="fw-semibold">{{ review.title }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="mb-2 small">{{ review.comment }}</p>
+                            {% if review.photos %}
+                            <div class="d-flex gap-2 flex-wrap">
+                                {% for photo in review.photos %}
+                                <a href="{{ url_for('static', filename=photo.photo_url) }}" target="_blank">
+                                    <img src="{{ url_for('static', filename=photo.photo_url) }}"
+                                         class="review-photo" alt="Фото">
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Статус -->
+                        <div class="col-md-2 text-md-end">
+                            {% if review.is_approved %}
+                            <span class="badge bg-success status-badge">
+                                <i class="bi bi-check-circle me-1"></i>Опубликован
+                            </span>
+                            {% elif review.is_rejected %}
+                            <span class="badge bg-danger status-badge">
+                                <i class="bi bi-x-circle me-1"></i>Отклонён
+                            </span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark status-badge">
+                                <i class="bi bi-clock me-1"></i>На модерации
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="text-center py-5">
+        <i class="bi bi-star display-1 text-muted mb-3"></i>
+        <h4>Отзывов пока нет</h4>
+        <p class="text-muted">Оставьте отзыв после получения заказа</p>
+        <a href="{{ url_for('orders') }}" class="btn btn-primary">
+            <i class="bi bi-bag me-2"></i>Мои заказы
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

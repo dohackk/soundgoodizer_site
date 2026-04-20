@@ -11,7 +11,6 @@
         overflow: hidden;
         background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
     }
-    
     .stat-card:hover {
         transform: translateY(-5px);
         box-shadow: 0 15px 30px rgba(0,0,0,0.1) !important;
@@ -146,6 +145,89 @@
         height: 32px;
         border-radius: 50%;
         object-fit: cover;
+    }
+
+    [data-bs-theme="dark"] .stat-card {
+        background: linear-gradient(135deg, #252930 0%, #1e2228 100%) !important;
+        color: #e0e0e0 !important;
+    }
+    [data-bs-theme="dark"] .analytics-card {
+        background: linear-gradient(135deg, #252930 0%, #1e2228 100%) !important;
+        border-color: #3d4248 !important;
+        color: #e0e0e0 !important;
+    }
+    [data-bs-theme="dark"] .quick-action-btn {
+        background: #2d3238 !important;
+        color: #e0e0e0 !important;
+        border-color: #3d4248 !important;
+    }
+    [data-bs-theme="dark"] .quick-action-btn:hover {
+        background: #353b44 !important;
+        border-color: #3498db !important;
+        color: #fff !important;
+    }
+    [data-bs-theme="dark"] .recent-item {
+        background: #2d3238 !important;
+        color: #e0e0e0 !important;
+    }
+    [data-bs-theme="dark"] .recent-item:hover {
+        background: linear-gradient(90deg, #353b44 0%, #2d3238 100%) !important;
+    }
+    [data-bs-theme="dark"] .stat-label { color: #adb5bd !important; }
+    [data-bs-theme="dark"] .table th {
+        background: #1e2228 !important;
+        color: #adb5bd !important;
+    }
+    [data-bs-theme="dark"] .p-3.bg-light {
+        background-color: #2d3238 !important;
+        color: #e0e0e0 !important;
+    }
+    [data-bs-theme="dark"] .p-3.bg-light .h4,
+    [data-bs-theme="dark"] .p-3.bg-light small { color: #e0e0e0 !important; }
+    [data-bs-theme="dark"] .user-avatar-img { border-color: #3d4248 !important; }
+
+    [data-bs-theme="dark"] .filter-section {
+        background-color: #2d3238 !important;
+        color: #e0e0e0 !important;
+    }
+
+    [data-bs-theme="dark"] .instrument-thumb,
+    [data-bs-theme="dark"] .repair-thumb {
+        border-color: #3d4248 !important;
+    }
+
+    [data-bs-theme="dark"] .user-avatar,
+    [data-bs-theme="dark"] .user-avatar-placeholder {
+        border-color: #3d4248 !important;
+    }
+
+    [data-bs-theme="dark"] .photo-upload-section {
+        background-color: #2d3238 !important;
+        color: #e0e0e0 !important;
+    }
+    [data-bs-theme="dark"] .photo-item .remove-photo {
+        background-color: rgba(45, 50, 56, 0.95) !important;
+        color: #e74c3c !important;
+    }
+    [data-bs-theme="dark"] .photo-item {
+        border-color: #3d4248 !important;
+    }
+
+    [data-bs-theme="dark"] .form-control[type="file"] {
+        background-color: #2d3238 !important;
+        border-color: #3d4248 !important;
+        color: #e0e0e0 !important;
+    }
+    [data-bs-theme="dark"] .form-control[type="file"]::file-selector-button {
+        background-color: #3d4248;
+        color: #e0e0e0;
+        border: 1px solid #4d5258;
+        border-radius: 4px;
+        padding: 6px 12px;
+        margin-right: 12px;
+    }
+    [data-bs-theme="dark"] .form-control[type="file"]::file-selector-button:hover {
+        background-color: #4d5258;
     }
 </style>
 {% endblock %}
@@ -301,6 +383,15 @@
                         <a href="{{ url_for('admin_brands') }}" class="quick-action-btn">
                             <i class="fas fa-tag fa-3x text-dark mb-2"></i>
                             <span class="d-block small fw-bold">Бренды</span>
+                        </a>
+                    </div>
+                    <div class="col-xl-2 col-md-4 col-6">
+                        <a href="{{ url_for('admin_reviews') }}" class="quick-action-btn">
+                            <i class="fas fa-star fa-3x text-warning mb-2"></i>
+                            <span class="d-block small fw-bold">Отзывы</span>
+                            {% if stats.pending_reviews %}
+                            <span class="badge bg-danger">{{ stats.pending_reviews }}</span>
+                            {% endif %}
                         </a>
                     </div>
                 </div>

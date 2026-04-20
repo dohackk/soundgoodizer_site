@@ -164,6 +164,89 @@
         </div>
     </div>
     
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-star-fill text-warning me-2"></i>Отзывы покупателей
+                        {% if reviews %}
+                        <span class="badge bg-secondary ms-2">{{ reviews|length }}</span>
+                        {% endif %}
+                    </h5>
+                    {% if avg_rating %}
+                    <div class="d-flex align-items-center gap-2">
+                        <div>
+                            {% for i in range(1, 6) %}
+                            <i class="bi {% if i <= avg_rating|round %}bi-star-fill text-warning{% else %}bi-star text-muted{% endif %}"></i>
+                            {% endfor %}
+                        </div>
+                        <span class="fw-bold">{{ "%.1f"|format(avg_rating) }}</span>
+                        <span class="text-muted small">({{ reviews|length }} отзыв{{ 'ов' if reviews|length > 4 else ('а' if reviews|length > 1 else '') }})</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if reviews %}
+                    <div class="row g-3">
+                        {% for review in reviews %}
+                        <div class="col-12">
+                            <div class="border rounded-3 p-3">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        {% if review.user_avatar %}
+                                        <img src="{{ url_for('static', filename=review.user_avatar) }}"
+                                             style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #e9ecef;"
+                                             alt="{{ review.user_login }}">
+                                        {% else %}
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center"
+                                             style="width:36px;height:36px;font-weight:bold;color:#fff;background:linear-gradient(135deg,#3498db,#2c3e50);font-size:14px;flex-shrink:0;">
+                                            {{ review.user_login[0]|upper if review.user_login else '?' }}
+                                        </div>
+                                        {% endif %}
+                                        <div>
+                                            <div class="fw-semibold small">{{ review.user_login }}</div>
+                                            <div class="text-muted" style="font-size:0.75rem;">
+                                                {{ review.created_at.strftime('%d.%m.%Y') if review.created_at else '' }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        {% for i in range(1, 6) %}
+                                        <i class="bi {% if i <= review.rating %}bi-star-fill text-warning{% else %}bi-star text-muted{% endif %}" style="font-size:0.9rem;"></i>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% if review.title %}
+                                <div class="fw-semibold mb-1">{{ review.title }}</div>
+                                {% endif %}
+                                <p class="mb-2 small">{{ review.comment }}</p>
+                                {% if review.photos %}
+                                <div class="d-flex gap-2 flex-wrap">
+                                    {% for photo in review.photos %}
+                                    <a href="{{ url_for('static', filename=photo.photo_url) }}" target="_blank">
+                                        <img src="{{ url_for('static', filename=photo.photo_url) }}"
+                                             style="width:70px;height:70px;object-fit:cover;border-radius:6px;cursor:pointer;"
+                                             alt="Фото отзыва">
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-chat-square-text display-4 mb-2"></i>
+                        <p>Отзывов пока нет. Будьте первым!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% if similar %}
     <div class="row mt-5">
         <div class="col-12">

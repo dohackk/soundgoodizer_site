@@ -4,7 +4,28 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h1 class="mb-4">Мои заказы</h1>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Мои заказы</h1>
+        <a href="{{ url_for('export_orders') }}" class="btn btn-outline-success">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Экспорт в CSV
+        </a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-2">
+            <div class="input-group">
+                <span class="input-group-text bg-white border-end-0">
+                    <i class="bi bi-search text-muted"></i>
+                </span>
+                <input type="text" id="ordersSearch" class="form-control border-start-0 ps-0"
+                       placeholder="Поиск по номеру заказа, инструменту, статусу..."
+                       style="box-shadow:none;">
+                <button class="btn btn-outline-secondary" onclick="clearSearch()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+        </div>
+    </div>
     
     <ul class="nav nav-tabs mb-4" id="ordersTab" role="tablist">
         <li class="nav-item" role="presentation">
@@ -46,7 +67,7 @@
                     </thead>
                     <tbody>
                         {% for order in purchase_orders %}
-                        <tr>
+                        <tr class="order-row" data-search="{{ order[1]|lower }} {{ order[7]|lower }} {{ order[9]|lower if order[9] else '' }} {{ order[5]|lower }}">
                             <td class="fw-bold">{{ order[1] }}</td>
                             <td>{{ order[2].strftime('%d.%m.%Y') }}</td>
                             <td>
@@ -89,9 +110,22 @@
                             </td>
                             <td>
                                 <a href="{{ url_for('instrument_detail', instrument_id=order[8]) }}" 
-                                   class="btn btn-sm btn-outline-primary">
+                                   class="btn btn-sm btn-outline-primary me-1">
                                     <i class="bi bi-eye"></i>
                                 </a>
+                                {% if order[5] == 'delivered' %}
+                                {% if order[0] in reviewed_order_ids %}
+                                <button class="btn btn-sm btn-secondary" disabled title="Отзыв уже написан">
+                                    <i class="bi bi-star-fill"></i> Отзыв написан
+                                </button>
+                                {% else %}
+                                <button class="btn btn-sm btn-success" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#reviewModal{{ order[0] }}">
+                                    <i class="bi bi-star"></i> Написать отзыв
+                                </button>
+                                {% endif %}
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -125,7 +159,7 @@
                     </thead>
                     <tbody>
                         {% for rental in rental_orders %}
-                        <tr>
+                        <tr class="order-row" data-search="{{ rental[1]|lower }} {{ rental[9]|lower }} {{ rental[11]|lower if rental[11] else '' }} {{ rental[7]|lower }}">
                             <td class="fw-bold">{{ rental[1] }}</td>
                             <td>{{ rental[2].strftime('%d.%m.%Y') }}</td>
                             <td>
@@ -199,7 +233,7 @@
                     </thead>
                     <tbody>
                         {% for repair in repair_requests %}
-                        <tr>
+                        <tr class="order-row" data-search="{{ repair[1]|lower }} {{ repair[3]|lower }} {{ repair[8]|lower }}">
                             <td class="fw-bold">{{ repair[1] }}</td>
                             <td>{{ repair[2].strftime('%d.%m.%Y') if repair[2] else 'Н/Д' }}</td>
                             <td>
@@ -363,6 +397,161 @@
 </div>
 {% endfor %}
 
+{% for order in purchase_orders %}
+{% if order[5] == 'delivered' and order[0] not in reviewed_order_ids %}
+<div class="modal fade" id="reviewModal{{ order[0] }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-star-fill me-2"></i>Написать отзыв
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex align-items-center gap-3 mb-4 p-3 bg-light rounded-3">
+                    {% if order[10] %}
+                    <img src="{{ url_for('static', filename=order[10]) }}" 
+                         style="width:60px;height:60px;object-fit:cover;border-radius:8px;" alt="{{ order[7] }}">
+                    {% endif %}
+                    <div>
+                        <div class="fw-bold">{{ order[7] }}</div>
+                        <small class="text-muted">Заказ {{ order[1] }} от {{ order[2].strftime('%d.%m.%Y') }}</small>
+                    </div>
+                </div>
+
+                <form id="reviewForm{{ order[0] }}" enctype="multipart/form-data">
+                    <input type="hidden" name="order_id" value="{{ order[0] }}">
+                    <input type="hidden" name="instrument_id" value="{{ order[8] }}">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Оценка *</label>
+                        <div class="star-select d-flex gap-2" 
+                             id="stars{{ order[0] }}"
+                             data-order-id="{{ order[0] }}">
+                            {% for i in range(1, 6) %}
+                            <i class="bi bi-star fs-2 text-muted star-btn" 
+                               data-value="{{ i }}"
+                               data-order-id="{{ order[0] }}"
+                               style="cursor:pointer;transition:color 0.15s;"
+                               onmouseover="hoverStars(this.dataset.orderId, this.dataset.value)"
+                               onmouseout="resetStars(this.dataset.orderId)"
+                               onclick="selectStar(this.dataset.orderId, this.dataset.value)"></i>
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" name="rating" id="ratingInput{{ order[0] }}" value="0">
+                        <div class="invalid-feedback" id="ratingError{{ order[0] }}">Выберите оценку</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Заголовок</label>
+                        <input type="text" class="form-control" name="title" 
+                               placeholder="Кратко о впечатлении" maxlength="200">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Отзыв *</label>
+                        <textarea class="form-control" name="comment" rows="4" 
+                                  placeholder="Расскажите о качестве инструмента, доставке, впечатлениях..." 
+                                  required minlength="10" maxlength="2000"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Фотографии (до 5 шт.)</label>
+                        <input type="file" class="form-control" name="photos" 
+                               accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+                        <div class="form-text">Форматы: JPG, PNG, WEBP, GIF. Максимум 5 фото.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success"
+                        data-order-id="{{ order[0] }}"
+                        onclick="submitReview(this.dataset.orderId)">
+                    <i class="bi bi-send me-1"></i>Отправить отзыв
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<script>
+var selectedRatings = {};
+
+function hoverStars(orderId, value) {
+    var stars = document.querySelectorAll('#stars' + orderId + ' .star-btn');
+    stars.forEach(function(s, idx) {
+        s.className = 'bi fs-2 star-btn ' + (idx < value ? 'bi-star-fill text-warning' : 'bi-star text-muted');
+    });
+}
+
+function resetStars(orderId) {
+    var selected = selectedRatings[orderId] || 0;
+    var stars = document.querySelectorAll('#stars' + orderId + ' .star-btn');
+    stars.forEach(function(s, idx) {
+        s.className = 'bi fs-2 star-btn ' + (idx < selected ? 'bi-star-fill text-warning' : 'bi-star text-muted');
+    });
+}
+
+function selectStar(orderId, value) {
+    selectedRatings[orderId] = value;
+    document.getElementById('ratingInput' + orderId).value = value;
+    resetStars(orderId);
+}
+
+function submitReview(orderId) {
+    var rating = parseInt(document.getElementById('ratingInput' + orderId).value);
+    if (!rating || rating < 1) {
+        document.getElementById('ratingError' + orderId).style.display = 'block';
+        return;
+    }
+    document.getElementById('ratingError' + orderId).style.display = 'none';
+
+    var form = document.getElementById('reviewForm' + orderId);
+    var comment = form.querySelector('[name="comment"]').value.trim();
+    if (!comment || comment.length < 10) {
+        alert('Напишите отзыв (минимум 10 символов)');
+        return;
+    }
+
+    var formData = new FormData(form);
+
+    var btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Отправка...';
+
+    fetch('/submit_review', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            var modal = bootstrap.Modal.getInstance(document.getElementById('reviewModal' + orderId));
+            modal.hide();
+            var alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+            alert.style.zIndex = '9999';
+            alert.innerHTML = '<i class="bi bi-check-circle me-2"></i>Отзыв отправлен на модерацию! <button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+            document.body.appendChild(alert);
+            setTimeout(() => alert.remove(), 4000);
+        } else {
+            alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i>Отправить отзыв';
+        }
+    })
+    .catch(() => {
+        alert('Ошибка соединения с сервером');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Отправить отзыв';
+    });
+}
+</script>
+
 <style>
 .nav-tabs .nav-link {
     color: #495057;
@@ -416,4 +605,23 @@
     margin-bottom: 0.25rem;
 }
 </style>
+
+<script>
+const searchInput = document.getElementById('ordersSearch');
+if (searchInput) {
+    searchInput.addEventListener('input', filterOrders);
+}
+
+function filterOrders() {
+    const q = (searchInput.value || '').toLowerCase().trim();
+    document.querySelectorAll('.order-row').forEach(row => {
+        const text = (row.dataset.search || '').toLowerCase();
+        row.style.display = (!q || text.includes(q)) ? '' : 'none';
+    });
+}
+
+function clearSearch() {
+    if (searchInput) { searchInput.value = ''; filterOrders(); }
+}
+</script>
 {% endblock %}

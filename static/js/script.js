@@ -198,6 +198,30 @@ function loadFromLocalStorage(key) {
     return null;
 }
 
+function loadTheme() {
+    const saved = localStorage.getItem('sg_theme') || 'light';
+    applyTheme(saved, false);
+}
+
+function applyTheme(theme, save) {
+    const html = document.getElementById('htmlRoot') || document.documentElement;
+    html.setAttribute('data-bs-theme', theme);
+
+    const iconNav = document.getElementById('themeIconNav');
+    if (iconNav) {
+        iconNav.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    }
+
+    if (save) localStorage.setItem('sg_theme', theme);
+}
+
+function toggleTheme() {
+    const html = document.getElementById('htmlRoot') || document.documentElement;
+    const current = html.getAttribute('data-bs-theme') || 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark', true);
+}
+// ─────────────────────────────────────────────────────────────
+
 loadTheme();
 initGallery();
 initRating();

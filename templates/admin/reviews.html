@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Модерация отзывов - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .review-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        transition: box-shadow 0.2s;
+    }
+    .review-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .star-rating .bi-star-fill { color: #f39c12; }
+    .star-rating .bi-star { color: #dee2e6; }
+    .review-photo {
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    .review-photo:hover { transform: scale(1.05); }
+    .filter-btn.active { font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0">
+                <i class="fas fa-star text-warning me-2"></i>Модерация отзывов
+            </h1>
+            <p class="text-muted mb-0">Управление отзывами покупателей</p>
+        </div>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Назад
+        </a>
+    </div>
+
+    <!-- Статистика -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#fff8e1;">
+                <div class="h3 mb-0" style="color:#f39c12;">{{ stats.pending }}</div>
+                <small class="text-muted">На модерации</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#e8f5e9;">
+                <div class="h3 mb-0" style="color:#27ae60;">{{ stats.approved }}</div>
+                <small class="text-muted">Одобрено</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#fdecea;">
+                <div class="h3 mb-0" style="color:#e74c3c;">{{ stats.rejected }}</div>
+                <small class="text-muted">Отклонено</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 text-center p-3" style="background:#e3f2fd;">
+                <div class="h3 mb-0" style="color:#2980b9;">{{ stats.total }}</div>
+                <small class="text-muted">Всего</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-2">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ url_for('admin_reviews') }}" 
+                   class="btn btn-sm {% if not filter_status %}btn-primary{% else %}btn-outline-secondary{% endif %} filter-btn">
+                    Все <span class="badge bg-white text-dark ms-1">{{ stats.total }}</span>
+                </a>
+                <a href="{{ url_for('admin_reviews', status='pending') }}" 
+                   class="btn btn-sm {% if filter_status == 'pending' %}btn-warning{% else %}btn-outline-warning{% endif %} filter-btn">
+                    На модерации <span class="badge bg-white text-dark ms-1">{{ stats.pending }}</span>
+                </a>
+                <a href="{{ url_for('admin_reviews', status='approved') }}" 
+                   class="btn btn-sm {% if filter_status == 'approved' %}btn-success{% else %}btn-outline-success{% endif %} filter-btn">
+                    Одобренные <span class="badge bg-white text-dark ms-1">{{ stats.approved }}</span>
+                </a>
+                <a href="{{ url_for('admin_reviews', status='rejected') }}" 
+                   class="btn btn-sm {% if filter_status == 'rejected' %}btn-danger{% else %}btn-outline-danger{% endif %} filter-btn">
+                    Отклонённые <span class="badge bg-white text-dark ms-1">{{ stats.rejected }}</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Список отзывов -->
+    {% if reviews %}
+    <div class="row g-3">
+        {% for review in reviews %}
+        <div class="col-12">
+            <div class="card review-card" id="review-{{ review.review_id }}">
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Инфо об инструменте -->
+                        <div class="col-md-3 mb-3 mb-md-0">
+                            <div class="d-flex align-items-start gap-2">
+                                {% if review.instrument_image %}
+                                <img src="{{ url_for('static', filename=review.instrument_image) }}" 
+                                     style="width:60px;height:60px;object-fit:cover;border-radius:8px;" 
+                                     alt="{{ review.instrument_name }}">
+                                {% else %}
+                                <div class="bg-light d-flex align-items-center justify-content-center rounded" 
+                                     style="width:60px;height:60px;">
+                                    <i class="fas fa-guitar text-muted"></i>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <div class="fw-bold small">{{ review.instrument_name }}</div>
+                                    <div class="text-muted small">{{ review.brand_name or '' }}</div>
+                                    <a href="{{ url_for('instrument_detail', instrument_id=review.instrument_id) }}" 
+                                       class="small text-primary" target="_blank">Открыть</a>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">Заказ: <span class="fw-bold">{{ review.order_number }}</span></small>
+                            </div>
+                        </div>
+
+                        <!-- Содержимое отзыва -->
+                        <div class="col-md-6 mb-3 mb-md-0">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <div class="star-rating">
+                                    {% for i in range(1, 6) %}
+                                    <i class="bi {% if i <= review.rating %}bi-star-fill{% else %}bi-star{% endif %}"></i>
+                                    {% endfor %}
+                                </div>
+                                <span class="fw-bold">{{ review.rating }}/5</span>
+                                {% if review.title %}
+                                <span class="text-muted">—</span>
+                                <span class="fw-semibold">{{ review.title }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="mb-2 small">{{ review.comment }}</p>
+
+                            {% if review.photos %}
+                            <div class="d-flex gap-2 flex-wrap mt-2">
+                                {% for photo in review.photos %}
+                                <a href="{{ url_for('static', filename=photo.photo_url) }}" target="_blank">
+                                    <img src="{{ url_for('static', filename=photo.photo_url) }}" 
+                                         class="review-photo" alt="Фото отзыва">
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-user me-1"></i>{{ review.user_login }}
+                                    &nbsp;•&nbsp;
+                                    <i class="fas fa-clock me-1"></i>{{ review.created_at.strftime('%d.%m.%Y %H:%M') if review.created_at else '' }}
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Действия -->
+                        <div class="col-md-3 d-flex flex-column align-items-end justify-content-between">
+                            <div class="mb-2">
+                                {% if review.is_approved %}
+                                <span class="badge bg-success px-3 py-2">
+                                    <i class="fas fa-check me-1"></i>Одобрен
+                                </span>
+                                {% elif review.is_rejected %}
+                                <span class="badge bg-danger px-3 py-2">
+                                    <i class="fas fa-times me-1"></i>Отклонён
+                                </span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark px-3 py-2">
+                                    <i class="fas fa-clock me-1"></i>На модерации
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <div class="d-flex gap-2 flex-wrap justify-content-end">
+                                {% if not review.is_approved %}
+                                <button class="btn btn-sm btn-success"
+                                        data-review-id="{{ review.review_id }}"
+                                        onclick="moderateReview(this.dataset.reviewId, 'approve')">
+                                    <i class="fas fa-check me-1"></i>Одобрить
+                                </button>
+                                {% endif %}
+                                {% if not review.is_rejected %}
+                                <button class="btn btn-sm btn-danger"
+                                        data-review-id="{{ review.review_id }}"
+                                        onclick="moderateReview(this.dataset.reviewId, 'reject')">
+                                    <i class="fas fa-times me-1"></i>Отклонить
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-sm btn-outline-danger"
+                                        data-review-id="{{ review.review_id }}"
+                                        onclick="deleteReview(this.dataset.reviewId)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-star fa-4x text-muted mb-3"></i>
+        <h4>Отзывов нет</h4>
+        <p class="text-muted">
+            {% if filter_status == 'pending' %}Нет отзывов на модерации
+            {% elif filter_status == 'approved' %}Нет одобренных отзывов
+            {% elif filter_status == 'rejected' %}Нет отклонённых отзывов
+            {% else %}Отзывов пока не поступало{% endif %}
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function moderateReview(reviewId, action) {
+    const actionText = action === 'approve' ? 'одобрить' : 'отклонить';
+    if (!confirm(`Вы уверены, что хотите ${actionText} этот отзыв?`)) return;
+
+    fetch('/admin/reviews/moderate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({review_id: reviewId, action: action})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+        }
+    })
+    .catch(() => alert('Ошибка соединения'));
+}
+
+function deleteReview(reviewId) {
+    if (!confirm('Удалить этот отзыв? Это действие необратимо.')) return;
+
+    fetch('/admin/reviews/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({review_id: reviewId})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const card = document.getElementById('review-' + reviewId);
+            if (card) card.closest('.col-12').remove();
+        } else {
+            alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+        }
+    })
+    .catch(() => alert('Ошибка соединения'));
+}
+</script>
+{% endblock %}

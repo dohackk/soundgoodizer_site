@@ -33,6 +33,20 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
 app.config['INSTRUMENT_IMAGES_FOLDER'] = INSTRUMENT_IMAGES_FOLDER
 
+# Flask-Mail через Gmail SMTP
+app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT']     = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS']  = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
+app.config['MAIL_DEFAULT_SENDER'] = (
+    'SoundGoodizer',
+    os.environ.get('MAIL_USERNAME', 'noreply@soundgoodizer.ru')
+)
+
+from flask_mail import Mail, Message
+mail = Mail(app)
+
 resend.api_key = os.environ.get('RESEND_API_KEY', '')
 
 _db_pool = None
@@ -245,15 +259,104 @@ def get_instruments(where_clause="", params=()):
         release_conn(conn)
         return []
 
+def send_order_status_email(email, user_name, order_number, status_name, instrument_name):
+    """Отправляет email при смене статуса заказа через Flask-Mail."""
+    try:
+        status_labels = {
+            'confirmed':  ('Заказ подтверждён',   '#27ae60', 'Ваш заказ подтверждён и готовится к отправке.'),
+            'processing': ('Заказ в обработке',   '#3498db', 'Ваш заказ находится в обработке.'),
+            'shipped':    ('Заказ отправлен',      '#8e44ad', 'Ваш заказ отправлен и скоро будет доставлен.'),
+            'delivered':  ('Заказ доставлен',      '#27ae60', 'Ваш заказ успешно доставлен. Спасибо за покупку!'),
+            'cancelled':  ('Заказ отменён',        '#e74c3c', 'К сожалению, ваш заказ был отменён.'),
+        }
+        if status_name not in status_labels:
+            return
+
+        label, color, desc = status_labels[status_name]
+
+        msg = Message(
+            subject=f'{label} #{order_number} — SoundGoodizer',
+            recipients=[email]
+        )
+        msg.html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+body{{font-family:Arial,sans-serif;line-height:1.6;color:#333;background:#f8f9fa;}}
+.wrap{{max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.1);}}
+.header{{background:{color};color:#fff;padding:30px 20px;text-align:center;}}
+.body{{padding:30px;}}
+.order-box{{background:#f8f9fa;border-left:4px solid {color};border-radius:6px;padding:15px;margin:20px 0;}}
+.footer{{background:#f8f9fa;padding:15px;text-align:center;font-size:12px;color:#999;}}
+</style></head><body>
+<div class="wrap">
+  <div class="header"><h1>SoundGoodizer</h1><h2>{label}</h2></div>
+  <div class="body">
+    <p>Здравствуйте, <strong>{user_name}</strong>!</p>
+    <p>{desc}</p>
+    <div class="order-box">
+      <strong>Заказ:</strong> #{order_number}<br>
+      <strong>Инструмент:</strong> {instrument_name}
+    </div>
+  </div>
+  <div class="footer">© SoundGoodizer. Это автоматическое уведомление.</div>
+</div></body></html>"""
+
+        mail.send(msg)
+        print(f"[MAIL] ✓ Статус заказа {order_number} → {status_name} отправлен на {email}")
+    except Exception as e:
+        print(f"[MAIL] ✗ Ошибка отправки статуса заказа: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def send_overdue_rental_email(email, user_name, rental_number, instrument_name, end_date):
+    """Отправляет email при просрочке аренды через Flask-Mail."""
+    try:
+        end_str = end_date.strftime('%d.%m.%Y') if hasattr(end_date, 'strftime') else str(end_date)
+
+        msg = Message(
+            subject=f'Просрочена аренда #{rental_number} — SoundGoodizer',
+            recipients=[email]
+        )
+        msg.html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+body{{font-family:Arial,sans-serif;line-height:1.6;color:#333;background:#f8f9fa;}}
+.wrap{{max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.1);}}
+.header{{background:#e74c3c;color:#fff;padding:30px 20px;text-align:center;}}
+.body{{padding:30px;}}
+.alert-box{{background:#fdecea;border-left:4px solid #e74c3c;border-radius:6px;padding:15px;margin:20px 0;}}
+.footer{{background:#f8f9fa;padding:15px;text-align:center;font-size:12px;color:#999;}}
+</style></head><body>
+<div class="wrap">
+  <div class="header"><h1>SoundGoodizer</h1><h2>Просрочена аренда</h2></div>
+  <div class="body">
+    <p>Здравствуйте, <strong>{user_name}</strong>!</p>
+    <p>Срок аренды истёк, но инструмент ещё не возвращён. Пожалуйста, свяжитесь с нами для возврата.</p>
+    <div class="alert-box">
+      <strong>Аренда:</strong> #{rental_number}<br>
+      <strong>Инструмент:</strong> {instrument_name}<br>
+      <strong>Срок истёк:</strong> {end_str}
+    </div>
+    <p>Свяжитесь с нами: <strong>+7 (951) 587-89-41</strong></p>
+  </div>
+  <div class="footer">© SoundGoodizer. Это автоматическое уведомление.</div>
+</div></body></html>"""
+
+        mail.send(msg)
+        print(f"[MAIL] ✓ Просрочка аренды {rental_number} отправлена на {email}")
+    except Exception as e:
+        print(f"[MAIL] ✗ Ошибка отправки просрочки аренды: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def send_verification_email(email, verification_code):
     try:
-        from_email = os.environ.get('MAIL_FROM', 'SoundGoodizer <onboarding@resend.dev>')
-        print(f"[MAIL] Отправка на {email}, from: {from_email}")
-        params = resend.Emails.SendParams(
-            from_=from_email,
-            to=[email],
+        print(f"[MAIL] Отправка кода подтверждения на {email}")
+        msg = Message(
             subject='Подтверждение email - SoundGoodizer',
-            html=f"""<!DOCTYPE html>
+            recipients=[email]
+        )
+        msg.html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
@@ -267,9 +370,8 @@ body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
 <p>Код действителен 24 часа.</p>
 <hr><p style="color:#666;font-size:12px;">© SoundGoodizer</p>
 </div></body></html>"""
-        )
-        result = resend.Emails.send(params)
-        print(f"[MAIL] ✓ Email успешно отправлен на {email}, id: {result.get('id')}")
+        mail.send(msg)
+        print(f"[MAIL] ✓ Код подтверждения успешно отправлен на {email}")
         return True
     except Exception as e:
         print(f"[MAIL] ✗ Ошибка отправки email на {email}: {e}")
@@ -567,13 +669,41 @@ def instrument_detail(instrument_id):
         
         if 'rental_price_per_day' not in instrument or instrument['rental_price_per_day'] is None:
             instrument['rental_price_per_day'] = 0
-        
+
+        cursor.execute("""
+            SELECT
+                r.review_id, r.rating, r.title, r.comment, r.created_at,
+                u.login as user_login,
+                u.avatar_url as user_avatar
+            FROM reviews r
+            JOIN users u ON r.user_id = u.user_id
+            WHERE r.instrument_id = %s AND r.is_approved = TRUE
+            ORDER BY r.created_at DESC
+        """, (instrument_id,))
+        review_cols = [col[0] for col in cursor.description]
+        review_rows = cursor.fetchall()
+
+        reviews = []
+        for row in review_rows:
+            rev = dict(zip(review_cols, row))
+            cursor.execute("""
+                SELECT photo_url FROM review_photos WHERE review_id = %s ORDER BY photo_id
+            """, (rev['review_id'],))
+            rev['photos'] = [{'photo_url': p[0]} for p in cursor.fetchall()]
+            reviews.append(type('Review', (), rev)())
+
+        avg_rating = None
+        if reviews:
+            avg_rating = sum(r.rating for r in reviews) / len(reviews)
+
         release_conn(conn)
         
         return render_template('instrument.html', 
                              instrument=instrument, 
                              similar=similar,
-                             today=today)
+                             today=today,
+                             reviews=reviews,
+                             avg_rating=avg_rating)
         
     except Exception as e:
         print(f"Error in instrument_detail: {e}")
@@ -1576,13 +1706,19 @@ def orders():
         """
         cursor.execute(repair_sql, (session['user_id'],))
         repair_requests = cursor.fetchall()
-        
+
+        cursor.execute("""
+            SELECT order_id FROM reviews WHERE user_id = %s
+        """, (session['user_id'],))
+        reviewed_order_ids = {row[0] for row in cursor.fetchall()}
+
         release_conn(conn)
         
         return render_template('orders.html',
                              purchase_orders=purchase_orders,
                              rental_orders=rental_orders,
-                             repair_requests=repair_requests)
+                             repair_requests=repair_requests,
+                             reviewed_order_ids=reviewed_order_ids)
     except Exception as e:
         release_conn(conn)
         flash(f'Ошибка при загрузке заказов: {str(e)}', 'danger')
@@ -2470,6 +2606,14 @@ def admin_dashboard():
             )
         """)
         stats['in_repair'] = cursor.fetchone()[0] or 0
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM reviews WHERE is_approved = FALSE AND (is_rejected IS NULL OR is_rejected = FALSE)
+            """)
+            stats['pending_reviews'] = cursor.fetchone()[0] or 0
+        except Exception:
+            stats['pending_reviews'] = 0
         
         sql = """
         SELECT 
@@ -2874,6 +3018,24 @@ def admin_update_order_status():
             """, (status_id, order_id))
         
         conn.commit()
+        
+        try:
+            cursor.execute("""
+                SELECT u.email, u.first_name, u.last_name, po.order_number, i.name
+                FROM purchase_orders po
+                JOIN users u ON po.user_id = u.user_id
+                JOIN instruments i ON po.instrument_id = i.instrument_id
+                WHERE po.order_id = %s
+            """, (order_id,))
+            order_info = cursor.fetchone()
+            if order_info:
+                user_name = f"{order_info[1]} {order_info[2]}"
+                send_order_status_email(order_info[0], user_name, order_info[3], status_name, order_info[4])
+        except Exception as mail_err:
+            print(f"[MAIL] Не удалось отправить email о статусе: {mail_err}")
+            import traceback
+            traceback.print_exc()
+        
         release_conn(conn)
         
         return jsonify({'success': True})
@@ -2892,7 +3054,6 @@ def check_and_update_overdue_rentals():
             return
         cursor = conn.cursor()
 
-        # Найти status_id для 'overdue'
         cursor.execute("SELECT status_id FROM rental_statuses WHERE status_name = 'overdue'")
         overdue_row = cursor.fetchone()
         if not overdue_row:
@@ -2900,7 +3061,19 @@ def check_and_update_overdue_rentals():
             return
         overdue_status_id = overdue_row[0]
 
-        # Найти активные аренды (new, active), у которых rental_end_date < сегодня
+        cursor.execute("""
+            SELECT ro.rental_id, ro.rental_number, ro.rental_end_date,
+                   u.email, u.first_name, u.last_name, i.name
+            FROM rental_orders ro
+            JOIN users u ON ro.user_id = u.user_id
+            JOIN instruments i ON ro.instrument_id = i.instrument_id
+            WHERE ro.rental_end_date < CURRENT_DATE
+              AND ro.status_id IN (
+                  SELECT status_id FROM rental_statuses WHERE status_name IN ('new', 'active')
+              )
+        """)
+        newly_overdue = cursor.fetchall()
+
         cursor.execute("""
             UPDATE rental_orders
             SET status_id = %s
@@ -2912,6 +3085,14 @@ def check_and_update_overdue_rentals():
 
         conn.commit()
         release_conn(conn)
+
+        for row in newly_overdue:
+            try:
+                user_name = f"{row[4]} {row[5]}"
+                send_overdue_rental_email(row[3], user_name, row[1], row[6], row[2])
+            except Exception as e:
+                print(f"[MAIL] Ошибка отправки просрочки: {e}")
+
     except Exception as e:
         if 'conn' in locals():
             conn.rollback()
@@ -3923,6 +4104,361 @@ def api_categories():
     except:
         release_conn(conn)
         return jsonify([])
+
+@app.route('/submit_review', methods=['POST'])
+@login_required
+def submit_review():
+    """Пользователь отправляет отзыв на покупку."""
+    try:
+        order_id = request.form.get('order_id', type=int)
+        instrument_id = request.form.get('instrument_id', type=int)
+        rating = request.form.get('rating', type=int)
+        title = request.form.get('title', '').strip()
+        comment = request.form.get('comment', '').strip()
+
+        if not order_id or not instrument_id or not rating or not comment:
+            return jsonify({'success': False, 'message': 'Заполните все обязательные поля'})
+
+        if rating < 1 or rating > 5:
+            return jsonify({'success': False, 'message': 'Оценка должна быть от 1 до 5'})
+
+        if len(comment) < 10:
+            return jsonify({'success': False, 'message': 'Отзыв слишком короткий (минимум 10 символов)'})
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'success': False, 'message': 'Ошибка подключения к базе данных'})
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT po.order_id, po.instrument_id, os.status_name
+            FROM purchase_orders po
+            JOIN order_statuses os ON po.status_id = os.status_id
+            WHERE po.order_id = %s AND po.user_id = %s
+        """, (order_id, session['user_id']))
+        order = cursor.fetchone()
+
+        if not order:
+            release_conn(conn)
+            return jsonify({'success': False, 'message': 'Заказ не найден'})
+
+        if order[2] != 'delivered':
+            release_conn(conn)
+            return jsonify({'success': False, 'message': 'Отзыв можно оставить только после получения заказа'})
+
+        cursor.execute("""
+            SELECT review_id FROM reviews WHERE user_id = %s AND order_id = %s
+        """, (session['user_id'], order_id))
+        if cursor.fetchone():
+            release_conn(conn)
+            return jsonify({'success': False, 'message': 'Вы уже оставили отзыв на этот заказ'})
+
+        cursor.execute("""
+            INSERT INTO reviews (user_id, instrument_id, order_id, rating, title, comment, is_approved, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, FALSE, NOW())
+            RETURNING review_id
+        """, (session['user_id'], instrument_id, order_id, rating,
+              title if title else None, comment))
+        review_id = cursor.fetchone()[0]
+
+        photos = request.files.getlist('photos')
+        review_photos_folder = os.path.join('static', 'uploads', 'review_photos')
+        os.makedirs(review_photos_folder, exist_ok=True)
+
+        saved_count = 0
+        for photo in photos:
+            if saved_count >= 5:
+                break
+            if photo and photo.filename and allowed_file(photo.filename):
+                ext = photo.filename.rsplit('.', 1)[1].lower()
+                filename = f"review_{review_id}_{uuid.uuid4().hex[:8]}.{ext}"
+                filepath = os.path.join(review_photos_folder, filename)
+                photo.save(filepath)
+                cursor.execute("""
+                    INSERT INTO review_photos (review_id, photo_url, created_at)
+                    VALUES (%s, %s, NOW())
+                """, (review_id, f"uploads/review_photos/{filename}"))
+                saved_count += 1
+
+        conn.commit()
+        release_conn(conn)
+
+        return jsonify({'success': True, 'message': 'Отзыв отправлен на модерацию'})
+
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            release_conn(conn)
+        print(f"Error in submit_review: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/admin/reviews')
+@login_required
+@admin_required
+def admin_reviews():
+    """Страница модерации отзывов."""
+    filter_status = request.args.get('status')  # pending / approved / rejected
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM reviews WHERE is_approved = FALSE AND is_rejected = FALSE")
+        pending_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM reviews WHERE is_approved = TRUE")
+        approved_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM reviews WHERE is_rejected = TRUE")
+        rejected_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM reviews")
+        total_count = cursor.fetchone()[0]
+
+        stats = {
+            'pending': pending_count,
+            'approved': approved_count,
+            'rejected': rejected_count,
+            'total': total_count
+        }
+
+        if filter_status == 'pending':
+            where = "WHERE r.is_approved = FALSE AND r.is_rejected = FALSE"
+        elif filter_status == 'approved':
+            where = "WHERE r.is_approved = TRUE"
+        elif filter_status == 'rejected':
+            where = "WHERE r.is_rejected = TRUE"
+        else:
+            where = ""
+
+        cursor.execute(f"""
+            SELECT
+                r.review_id, r.rating, r.title, r.comment,
+                r.is_approved, r.is_rejected, r.created_at,
+                u.login as user_login,
+                i.instrument_id, i.name as instrument_name, i.main_image_url as instrument_image,
+                b.brand_name,
+                po.order_number
+            FROM reviews r
+            JOIN users u ON r.user_id = u.user_id
+            JOIN instruments i ON r.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            JOIN purchase_orders po ON r.order_id = po.order_id
+            {where}
+            ORDER BY r.created_at DESC
+        """)
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
+
+        reviews = []
+        for row in rows:
+            review = dict(zip(columns, row))
+            cursor.execute("""
+                SELECT photo_url FROM review_photos WHERE review_id = %s ORDER BY photo_id
+            """, (review['review_id'],))
+            photo_rows = cursor.fetchall()
+            review['photos'] = [{'photo_url': p[0]} for p in photo_rows]
+            reviews.append(type('Review', (), review)())
+
+        release_conn(conn)
+
+        return render_template('admin/reviews.html',
+                               reviews=reviews,
+                               stats=stats,
+                               filter_status=filter_status)
+
+    except Exception as e:
+        if conn:
+            release_conn(conn)
+        print(f"Error in admin_reviews: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Ошибка при загрузке отзывов: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/reviews/moderate', methods=['POST'])
+@login_required
+@admin_required
+def admin_moderate_review():
+    """Одобрить или отклонить отзыв."""
+    try:
+        data = request.get_json()
+        review_id = data.get('review_id')
+        action = data.get('action')  # 'approve' or 'reject'
+
+        if action not in ('approve', 'reject'):
+            return jsonify({'success': False, 'message': 'Неверное действие'})
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        if action == 'approve':
+            cursor.execute("""
+                UPDATE reviews
+                SET is_approved = TRUE, is_rejected = FALSE, moderated_by = %s
+                WHERE review_id = %s
+            """, (session['user_id'], review_id))
+        else:
+            cursor.execute("""
+                UPDATE reviews
+                SET is_approved = FALSE, is_rejected = TRUE, moderated_by = %s
+                WHERE review_id = %s
+            """, (session['user_id'], review_id))
+
+        conn.commit()
+        release_conn(conn)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            release_conn(conn)
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/admin/reviews/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_review():
+    """Удалить отзыв вместе с фотографиями."""
+    try:
+        data = request.get_json()
+        review_id = data.get('review_id')
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT photo_url FROM review_photos WHERE review_id = %s", (review_id,))
+        photos = cursor.fetchall()
+        for photo in photos:
+            filepath = os.path.join('static', photo[0])
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except Exception:
+                    pass
+
+        cursor.execute("DELETE FROM reviews WHERE review_id = %s", (review_id,))
+        conn.commit()
+        release_conn(conn)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            release_conn(conn)
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/my_reviews')
+@login_required
+def my_reviews():
+    """Страница с отзывами пользователя."""
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('profile'))
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                r.review_id, r.rating, r.title, r.comment, r.created_at,
+                r.is_approved, r.is_rejected,
+                i.instrument_id, i.name as instrument_name, i.main_image_url,
+                b.brand_name,
+                po.order_number
+            FROM reviews r
+            JOIN instruments i ON r.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            JOIN purchase_orders po ON r.order_id = po.order_id
+            WHERE r.user_id = %s
+            ORDER BY r.created_at DESC
+        """, (session['user_id'],))
+        
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
+        
+        reviews = []
+        for row in rows:
+            review = dict(zip(columns, row))
+            cursor.execute("""
+                SELECT photo_url FROM review_photos WHERE review_id = %s ORDER BY photo_id
+            """, (review['review_id'],))
+            review['photos'] = [{'photo_url': p[0]} for p in cursor.fetchall()]
+            reviews.append(type('Review', (), review)())
+        
+        release_conn(conn)
+        return render_template('my_reviews.html', reviews=reviews)
+        
+    except Exception as e:
+        if conn:
+            release_conn(conn)
+        flash(f'Ошибка при загрузке отзывов: {str(e)}', 'danger')
+        return redirect(url_for('profile'))
+
+
+@app.route('/export_orders')
+@login_required
+def export_orders():
+    """Экспорт заказов в Excel."""
+    try:
+        import io
+        from datetime import datetime
+        
+        conn = get_db_connection()
+        if not conn:
+            flash('Ошибка подключения к базе данных', 'danger')
+            return redirect(url_for('orders'))
+        
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                po.order_number,
+                po.order_date,
+                i.name as instrument_name,
+                b.brand_name,
+                po.quantity,
+                po.total_price,
+                os.status_name
+            FROM purchase_orders po
+            JOIN instruments i ON po.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            JOIN order_statuses os ON po.status_id = os.status_id
+            WHERE po.user_id = %s
+            ORDER BY po.order_date DESC
+        """, (session['user_id'],))
+        
+        orders = cursor.fetchall()
+        release_conn(conn)
+        
+        # Создаём CSV
+        output = io.StringIO()
+        output.write('№ Заказа,Дата,Инструмент,Бренд,Количество,Сумма,Статус\n')
+        
+        for order in orders:
+            date_str = order[1].strftime('%d.%m.%Y') if order[1] else ''
+            output.write(f'"{order[0]}","{date_str}","{order[2]}","{order[3] or ""}",{order[4]},{order[5]},"{order[6]}"\n')
+        
+        from flask import Response
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename=orders_{datetime.now().strftime("%Y%m%d")}.csv'}
+        )
+        
+    except Exception as e:
+        flash(f'Ошибка экспорта: {str(e)}', 'danger')
+        return redirect(url_for('orders'))
+
 
 @app.errorhandler(404)
 def page_not_found(e):

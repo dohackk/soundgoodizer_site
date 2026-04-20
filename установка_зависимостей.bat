@@ -37,6 +37,13 @@ pip install dnspython
 echo Устанавливаем psycopg2-binary
 pip install psycopg2-binary
 
+echo Устанавливаем resend
+pip install resend==2.10.0
+
+echo Устанавливаем python-dotenv
+pip install python-dotenv
+
+
 echo.
 echo Все зависимости успешно установлены!
 echo.

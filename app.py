@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 import psycopg2
 import psycopg2.extras
@@ -1329,6 +1332,19 @@ def profile():
         cursor.execute("SELECT COUNT(*) FROM repair_requests WHERE user_id = %s", (session['user_id'],))
         repair_count = cursor.fetchone()[0] or 0
 
+        check_and_update_overdue_rentals()
+
+        cursor.execute("""
+            SELECT ro.rental_number, ro.rental_end_date, i.name as instrument_name
+            FROM rental_orders ro
+            JOIN rental_statuses rs ON ro.status_id = rs.status_id
+            JOIN instruments i ON ro.instrument_id = i.instrument_id
+            WHERE ro.user_id = %s
+              AND rs.status_name = 'overdue'
+            ORDER BY ro.rental_end_date ASC
+        """, (session['user_id'],))
+        overdue_rentals = cursor.fetchall()
+
         cursor.execute("""
             SELECT 'purchase' as type, order_number as number, order_date as date, status_name as status
             FROM purchase_orders po
@@ -1366,7 +1382,8 @@ def profile():
                              rentals_count=rentals_count,
                              repair_count=repair_count,
                              recent_activities=recent_activities,
-                             has_password_code=has_password_code)
+                             has_password_code=has_password_code,
+                             overdue_rentals=overdue_rentals)
         
     except Exception as e:
         if conn:
@@ -2836,6 +2853,20 @@ def admin_update_order_status():
                 WHERE order_id = %s
             """, (status_id, order_id))
         else:
+            # Если заказ был отменён, а теперь статус меняется на активный — вернуть товар из наличия
+            cursor.execute("""
+                SELECT os.status_name, po.instrument_id, po.quantity
+                FROM purchase_orders po
+                JOIN order_statuses os ON po.status_id = os.status_id
+                WHERE po.order_id = %s
+            """, (order_id,))
+            current = cursor.fetchone()
+            if current and current[0] == 'cancelled':
+                cursor.execute("""
+                    UPDATE instruments
+                    SET quantity_in_stock = quantity_in_stock - %s
+                    WHERE instrument_id = %s
+                """, (current[2], current[1]))
             cursor.execute("""
                 UPDATE purchase_orders 
                 SET status_id = %s
@@ -2852,10 +2883,48 @@ def admin_update_order_status():
             release_conn(conn)
         return jsonify({'success': False, 'message': str(e)})
 
+
+def check_and_update_overdue_rentals():
+    """Автоматически меняет статус аренд на overdue если срок истёк."""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return
+        cursor = conn.cursor()
+
+        # Найти status_id для 'overdue'
+        cursor.execute("SELECT status_id FROM rental_statuses WHERE status_name = 'overdue'")
+        overdue_row = cursor.fetchone()
+        if not overdue_row:
+            release_conn(conn)
+            return
+        overdue_status_id = overdue_row[0]
+
+        # Найти активные аренды (new, active), у которых rental_end_date < сегодня
+        cursor.execute("""
+            UPDATE rental_orders
+            SET status_id = %s
+            WHERE rental_end_date < CURRENT_DATE
+              AND status_id IN (
+                  SELECT status_id FROM rental_statuses WHERE status_name IN ('new', 'active')
+              )
+        """, (overdue_status_id,))
+
+        conn.commit()
+        release_conn(conn)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            release_conn(conn)
+        print(f"Error checking overdue rentals: {e}")
+
+
 @app.route('/admin/rentals')
 @login_required
 @admin_required
 def admin_rentals():
+    check_and_update_overdue_rentals()
+
     conn = get_db_connection()
     if not conn:
         flash('Ошибка подключения к базе данных', 'danger')
@@ -2900,13 +2969,54 @@ def admin_update_rental_status():
         cursor = conn.cursor()
         
         cursor.execute("SELECT status_name FROM rental_statuses WHERE status_id = %s", (status_id,))
-        status_name = cursor.fetchone()[0]
+        new_status_name = cursor.fetchone()[0]
         
         cursor.execute("""
-            UPDATE rental_orders 
-            SET status_id = %s
-            WHERE rental_id = %s
-        """, (status_id, rental_id))
+            SELECT rs.status_name, ro.instrument_id
+            FROM rental_orders ro
+            JOIN rental_statuses rs ON ro.status_id = rs.status_id
+            WHERE ro.rental_id = %s
+        """, (rental_id,))
+        current = cursor.fetchone()
+        
+        if current:
+            current_status = current[0]
+            instrument_id = current[1]
+
+            active_statuses = {'new', 'active', 'overdue'}
+            returned_statuses = {'completed', 'cancelled'}
+
+            was_active = current_status in active_statuses
+            will_be_active = new_status_name in active_statuses
+            was_returned = current_status in returned_statuses
+            will_be_returned = new_status_name in returned_statuses
+
+            if was_active and will_be_returned:
+                cursor.execute("""
+                    UPDATE instruments
+                    SET quantity_in_stock = quantity_in_stock + 1
+                    WHERE instrument_id = %s
+                """, (instrument_id,))
+            elif was_returned and will_be_active:
+                cursor.execute("""
+                    UPDATE instruments
+                    SET quantity_in_stock = quantity_in_stock - 1
+                    WHERE instrument_id = %s
+                """, (instrument_id,))
+
+        if new_status_name == 'completed':
+            cursor.execute("""
+                UPDATE rental_orders 
+                SET status_id = %s,
+                    actual_return_date = COALESCE(actual_return_date, CURRENT_DATE)
+                WHERE rental_id = %s
+            """, (status_id, rental_id))
+        else:
+            cursor.execute("""
+                UPDATE rental_orders 
+                SET status_id = %s
+                WHERE rental_id = %s
+            """, (status_id, rental_id))
         
         conn.commit()
         release_conn(conn)
@@ -2917,6 +3027,62 @@ def admin_update_rental_status():
             conn.rollback()
             release_conn(conn)
         print(f"Error updating rental status: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/admin/rental/<int:rental_id>/mark_returned', methods=['POST'])
+@login_required
+@admin_required
+def admin_mark_rental_returned(rental_id):
+    """Отметить инструмент как возвращённый и завершить аренду."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT rs.status_name, ro.instrument_id
+            FROM rental_orders ro
+            JOIN rental_statuses rs ON ro.status_id = rs.status_id
+            WHERE ro.rental_id = %s
+        """, (rental_id,))
+        current = cursor.fetchone()
+
+        if not current:
+            release_conn(conn)
+            return jsonify({'success': False, 'message': 'Аренда не найдена'})
+
+        current_status = current[0]
+        instrument_id = current[1]
+
+        cursor.execute("SELECT status_id FROM rental_statuses WHERE status_name = 'completed'")
+        completed_row = cursor.fetchone()
+        if not completed_row:
+            release_conn(conn)
+            return jsonify({'success': False, 'message': 'Статус completed не найден'})
+        completed_status_id = completed_row[0]
+
+        active_statuses = {'new', 'active', 'overdue'}
+        if current_status in active_statuses:
+            cursor.execute("""
+                UPDATE instruments
+                SET quantity_in_stock = quantity_in_stock + 1
+                WHERE instrument_id = %s
+            """, (instrument_id,))
+
+        cursor.execute("""
+            UPDATE rental_orders
+            SET status_id = %s, actual_return_date = CURRENT_DATE
+            WHERE rental_id = %s
+        """, (completed_status_id, rental_id))
+
+        conn.commit()
+        release_conn(conn)
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            release_conn(conn)
+        print(f"Error marking rental returned: {e}")
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/rental/<int:rental_id>')
@@ -3698,6 +3864,47 @@ def api_cart_count():
     except:
         release_conn(conn)
         return jsonify({'count': 0})
+
+
+@app.route('/api/overdue_rentals')
+def api_overdue_rentals():
+    """Возвращает список просроченных аренд текущего пользователя."""
+    if 'user_id' not in session:
+        return jsonify({'rentals': []})
+
+    # Обновить статусы просрочек перед запросом
+    check_and_update_overdue_rentals()
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'rentals': []})
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ro.rental_number, ro.rental_end_date, i.name
+            FROM rental_orders ro
+            JOIN rental_statuses rs ON ro.status_id = rs.status_id
+            JOIN instruments i ON ro.instrument_id = i.instrument_id
+            WHERE ro.user_id = %s AND rs.status_name = 'overdue'
+            ORDER BY ro.rental_end_date ASC
+        """, (session['user_id'],))
+        rows = cursor.fetchall()
+        release_conn(conn)
+
+        rentals = [
+            {
+                'number': r[0],
+                'end_date': r[1].strftime('%d.%m.%Y') if r[1] else '',
+                'instrument': r[2]
+            }
+            for r in rows
+        ]
+        return jsonify({'rentals': rentals})
+    except Exception as e:
+        release_conn(conn)
+        print(f"Error in api_overdue_rentals: {e}")
+        return jsonify({'rentals': []})
 
 @app.route('/api/categories')
 def api_categories():

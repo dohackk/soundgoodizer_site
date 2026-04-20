@@ -573,6 +573,23 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
+
+        {% if session.get('username') %}
+        <div id="overdue-rental-banner" style="display:none;">
+            <div class="alert alert-danger border-0 shadow-sm alert-dismissible fade show mb-3" role="alert">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-exclamation-triangle-fill fs-5 me-2 mt-1 flex-shrink-0"></i>
+                    <div>
+                        <strong>Просроченная аренда!</strong>
+                        Срок аренды истёк, но инструмент не возвращён:
+                        <span id="overdue-rental-list"></span>
+                        Пожалуйста, свяжитесь с нами для возврата.
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+        {% endif %}
         
         {% block content %}{% endblock %}
     </main>
@@ -851,6 +868,18 @@ document.addEventListener('DOMContentLoaded', function() {
             var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
             });
+
+            if (document.getElementById('overdue-rental-banner')) {
+                $.get('/api/overdue_rentals', function(data) {
+                    if (data.rentals && data.rentals.length > 0) {
+                        var items = data.rentals.map(function(r) {
+                            return '<strong>' + r.instrument + '</strong> (до ' + r.end_date + ')';
+                        }).join(', ');
+                        $('#overdue-rental-list').html(' ' + items + '. ');
+                        $('#overdue-rental-banner').show();
+                    }
+                });
+            }
         });
     </script>
     

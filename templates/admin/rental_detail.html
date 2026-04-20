@@ -71,6 +71,11 @@
                                 </option>
                                 {% endfor %}
                             </select>
+                            {% if rental.status_name in ['new', 'active', 'overdue'] %}
+                            <button class="btn btn-success btn-sm ms-2" id="markReturnedBtn" data-rental-id="{{ rental.rental_id }}">
+                                <i class="fas fa-check-circle me-1"></i>Отметить возврат
+                            </button>
+                            {% endif %}
                         </div>
                     </div>
                     <div class="col-md-6 mb-3">
@@ -80,6 +85,22 @@
                             {{ rental.rental_end_date.strftime('%d.%m.%Y') if rental.rental_end_date else 'Н/Д' }}
                         </div>
                     </div>
+                    {% if rental.actual_return_date %}
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Фактическая дата возврата</div>
+                        <div class="detail-value text-success">
+                            <i class="fas fa-check-circle me-1"></i>
+                            {{ rental.actual_return_date.strftime('%d.%m.%Y') }}
+                        </div>
+                    </div>
+                    {% elif rental.status_name == 'overdue' %}
+                    <div class="col-md-6 mb-3">
+                        <div class="detail-label">Фактическая дата возврата</div>
+                        <div class="detail-value text-danger">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Просрочено — инструмент не возвращён
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
                 
                 <hr>
@@ -199,8 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     alert('Статус обновлен');
-                    this.querySelectorAll('option').forEach(opt => opt.removeAttribute('selected'));
-                    this.querySelector(`option[value="${statusId}"]`).setAttribute('selected', 'selected');
+                    location.reload();
                 } else {
                     alert('Ошибка: ' + data.message);
                 }
@@ -208,6 +228,29 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 alert('Ошибка соединения');
             });
+        });
+    }
+
+    const markReturnedBtn = document.getElementById('markReturnedBtn');
+    if (markReturnedBtn) {
+        markReturnedBtn.addEventListener('click', function() {
+            const rentalId = this.dataset.rentalId;
+            if (!confirm('Отметить инструмент как возвращённый? Статус изменится на "completed", инструмент вернётся в наличие.')) return;
+
+            fetch(`/admin/rental/${rentalId}/mark_returned`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Возврат зафиксирован');
+                    location.reload();
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .catch(() => alert('Ошибка соединения'));
         });
     }
 });

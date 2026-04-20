@@ -1048,35 +1048,36 @@ def register():
                 release_conn(conn)
                 return render_template('register.html', **form_data)
             
+            release_conn(conn)
+            
             verification_code = secrets.randbelow(900000) + 100000
             verification_code_str = str(verification_code)
-            expires_at = datetime.now() + timedelta(hours=24)
+            expires_at = (datetime.now() + timedelta(hours=24)).timestamp()
             
             password_hash = hash_password(password)
             
-            sql = """
-            INSERT INTO users (login, email, password_hash, first_name, last_name, 
-                             phone, role_id, is_active, is_email_verified,
-                             email_verification_code, email_verification_expires)
-            VALUES (%s, %s, %s, %s, %s, %s, 4, true, false, %s, %s)
-            """
-            cursor.execute(sql + " RETURNING user_id", (login, email, password_hash, first_name, last_name, phone,
-                               verification_code_str, expires_at))
-            user_id = cursor.fetchone()[0]
-            conn.commit()
-            
-            release_conn(conn)
+            session['pending_verification_email'] = email
+            session['pending_registration_data'] = {
+                'login': login,
+                'email': email,
+                'password_hash': password_hash,
+                'first_name': first_name,
+                'last_name': last_name,
+                'phone': phone,
+                'verification_code': verification_code_str,
+                'expires_at': expires_at
+            }
             
             email_sent = send_verification_email(email, verification_code_str)
             
             if email_sent:
-                flash(f'Регистрация успешна! Код подтверждения отправлен на {email}', 'success')
-                session['pending_verification_email'] = email
-                session['pending_user_id'] = user_id
+                flash(f'Код подтверждения отправлен на {email}', 'success')
                 return redirect(url_for('verify_email'))
             else:
-                flash('Регистрация успешна, но не удалось отправить email. Обратитесь к администратору.', 'warning')
-                return redirect(url_for('verify_email'))
+                session.pop('pending_verification_email', None)
+                session.pop('pending_registration_data', None)
+                flash('Не удалось отправить письмо с кодом подтверждения. Попробуйте ещё раз.', 'danger')
+                return render_template('register.html', **form_data)
             
         except Exception as e:
             release_conn(conn)
@@ -1089,9 +1090,10 @@ def register():
 @limiter.limit("10 per minute")
 def verify_email():
     email = session.get('pending_verification_email')
-    user_id = session.get('pending_user_id')
+    reg_data = session.get('pending_registration_data')
+    existing_user_id = session.get('pending_user_id')  # для уже существующих пользователей (вход без подтверждения)
     
-    if not email or not user_id:
+    if not email or (not reg_data and not existing_user_id):
         flash('Сначала зарегистрируйтесь', 'warning')
         return redirect(url_for('register'))
     
@@ -1102,71 +1104,149 @@ def verify_email():
             flash('Введите 6-значный код подтверждения', 'danger')
             return render_template('verify_email.html', email=email)
         
-        conn = get_db_connection()
-        if not conn:
-            flash('Ошибка подключения к базе данных', 'danger')
-            return render_template('verify_email.html', email=email)
-        
-        try:
-            cursor = conn.cursor()
+        if reg_data:
+            stored_code = reg_data.get('verification_code')
+            expires_at = reg_data.get('expires_at')
             
-            sql = """
-            SELECT email_verification_code, email_verification_expires 
-            FROM users 
-            WHERE user_id = %s AND email = %s AND is_email_verified = false
-            """
-            cursor.execute(sql, (user_id, email))
-            result = cursor.fetchone()
+            if not stored_code:
+                flash('Код подтверждения не найден. Зарегистрируйтесь заново.', 'danger')
+                return render_template('verify_email.html', email=email)
             
-            if result:
-                stored_code, expires_at = result
+            if expires_at and datetime.now().timestamp() > expires_at:
+                flash('Срок действия кода истек. Запросите новый код.', 'danger')
+                return render_template('verify_email.html', email=email)
+            
+            if stored_code != code:
+                flash('Неверный код подтверждения', 'danger')
+                return render_template('verify_email.html', email=email)
+            
+            conn = get_db_connection()
+            if not conn:
+                flash('Ошибка подключения к базе данных', 'danger')
+                return render_template('verify_email.html', email=email)
+            
+            try:
+                cursor = conn.cursor()
                 
-                if not stored_code:
-                    flash('Код подтверждения не найден', 'danger')
-                elif expires_at and expires_at < datetime.now():
-                    flash('Срок действия кода истек. Запросите новый код.', 'danger')
-                elif stored_code == code:
-                    cursor.execute("""
-                    UPDATE users 
-                    SET is_email_verified = true, 
-                        email_verification_code = NULL,
-                        email_verification_expires = NULL
-                    WHERE user_id = %s
-                    """, (user_id,))
-                    conn.commit()
-                    
-                    cursor.execute("""
-                    SELECT u.*, r.role_name, u.avatar_url
-                    FROM users u
-                    JOIN roles r ON u.role_id = r.role_id
-                    WHERE u.user_id = %s
-                    """, (user_id,))
-                    user = cursor.fetchone()
-                    
-                    session.pop('pending_verification_email', None)
-                    session.pop('pending_user_id', None)
-                    
-                    session['user_id'] = user[0]
-                    session['username'] = user[1]
-                    session['user_name'] = f"{user[4]} {user[5]}"
-                    session['user_role'] = user[18]
-                    session['user_email'] = user[2]
-                    session['user_avatar'] = user[11]
-                    session['is_email_verified'] = True
-                    
+                cursor.execute(
+                    "SELECT login, email FROM users WHERE login = %s OR email = %s",
+                    (reg_data['login'], reg_data['email'])
+                )
+                existing = cursor.fetchone()
+                if existing:
                     release_conn(conn)
-                    
-                    flash('Email успешно подтвержден! Добро пожаловать в SoundGoodizer!', 'success')
-                    return redirect(url_for('index'))
-                else:
-                    flash('Неверный код подтверждения', 'danger')
-            else:
-                flash('Пользователь не найден или email уже подтвержден', 'danger')
+                    session.pop('pending_verification_email', None)
+                    session.pop('pending_registration_data', None)
+                    flash('Логин или email уже заняты. Пожалуйста, зарегистрируйтесь заново.', 'danger')
+                    return redirect(url_for('register'))
+                
+                sql = """
+                INSERT INTO users (login, email, password_hash, first_name, last_name,
+                                 phone, role_id, is_active, is_email_verified,
+                                 email_verification_code, email_verification_expires)
+                VALUES (%s, %s, %s, %s, %s, %s, 4, true, true, NULL, NULL)
+                RETURNING user_id
+                """
+                cursor.execute(sql, (
+                    reg_data['login'], reg_data['email'], reg_data['password_hash'],
+                    reg_data['first_name'], reg_data['last_name'], reg_data['phone']
+                ))
+                user_id = cursor.fetchone()[0]
+                conn.commit()
+                
+                cursor.execute("""
+                SELECT u.*, r.role_name, u.avatar_url
+                FROM users u
+                JOIN roles r ON u.role_id = r.role_id
+                WHERE u.user_id = %s
+                """, (user_id,))
+                user = cursor.fetchone()
+                
+                session.pop('pending_verification_email', None)
+                session.pop('pending_registration_data', None)
+                
+                session['user_id'] = user[0]
+                session['username'] = user[1]
+                session['user_name'] = f"{user[4]} {user[5]}"
+                session['user_role'] = user[18]
+                session['user_email'] = user[2]
+                session['user_avatar'] = user[11]
+                session['is_email_verified'] = True
+                
+                release_conn(conn)
+                
+                flash('Email успешно подтвержден! Добро пожаловать в SoundGoodizer!', 'success')
+                return redirect(url_for('index'))
+                
+            except Exception as e:
+                release_conn(conn)
+                flash(f'Ошибка при создании аккаунта: {str(e)}', 'danger')
+        
+        elif existing_user_id:
+            conn = get_db_connection()
+            if not conn:
+                flash('Ошибка подключения к базе данных', 'danger')
+                return render_template('verify_email.html', email=email)
             
-            release_conn(conn)
-        except Exception as e:
-            release_conn(conn)
-            flash(f'Ошибка при подтверждении email: {str(e)}', 'danger')
+            try:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                SELECT email_verification_code, email_verification_expires 
+                FROM users 
+                WHERE user_id = %s AND email = %s AND is_email_verified = false
+                """, (existing_user_id, email))
+                result = cursor.fetchone()
+                
+                if result:
+                    stored_code, expires_at = result
+                    
+                    if not stored_code:
+                        flash('Код подтверждения не найден', 'danger')
+                    elif expires_at and expires_at < datetime.now():
+                        flash('Срок действия кода истек. Запросите новый код.', 'danger')
+                    elif stored_code == code:
+                        cursor.execute("""
+                        UPDATE users 
+                        SET is_email_verified = true, 
+                            email_verification_code = NULL,
+                            email_verification_expires = NULL
+                        WHERE user_id = %s
+                        """, (existing_user_id,))
+                        conn.commit()
+                        
+                        cursor.execute("""
+                        SELECT u.*, r.role_name, u.avatar_url
+                        FROM users u
+                        JOIN roles r ON u.role_id = r.role_id
+                        WHERE u.user_id = %s
+                        """, (existing_user_id,))
+                        user = cursor.fetchone()
+                        
+                        session.pop('pending_verification_email', None)
+                        session.pop('pending_user_id', None)
+                        
+                        session['user_id'] = user[0]
+                        session['username'] = user[1]
+                        session['user_name'] = f"{user[4]} {user[5]}"
+                        session['user_role'] = user[18]
+                        session['user_email'] = user[2]
+                        session['user_avatar'] = user[11]
+                        session['is_email_verified'] = True
+                        
+                        release_conn(conn)
+                        
+                        flash('Email успешно подтвержден! Добро пожаловать в SoundGoodizer!', 'success')
+                        return redirect(url_for('index'))
+                    else:
+                        flash('Неверный код подтверждения', 'danger')
+                else:
+                    flash('Пользователь не найден или email уже подтвержден', 'danger')
+                
+                release_conn(conn)
+            except Exception as e:
+                release_conn(conn)
+                flash(f'Ошибка при подтверждении email: {str(e)}', 'danger')
     
     return render_template('verify_email.html', email=email)
 
@@ -1174,10 +1254,26 @@ def verify_email():
 @limiter.limit("3 per 10 minutes")
 def resend_verification():
     email = session.get('pending_verification_email')
-    user_id = session.get('pending_user_id')
+    reg_data = session.get('pending_registration_data')
+    existing_user_id = session.get('pending_user_id')
     
-    if not email or not user_id:
+    if not email or (not reg_data and not existing_user_id):
         return jsonify({'success': False, 'message': 'Сессия истекла. Зарегистрируйтесь заново.'})
+    
+    new_code = secrets.randbelow(900000) + 100000
+    new_code_str = str(new_code)
+    
+    if reg_data:
+        new_expires = (datetime.now() + timedelta(hours=24)).timestamp()
+        reg_data['verification_code'] = new_code_str
+        reg_data['expires_at'] = new_expires
+        session['pending_registration_data'] = reg_data
+        
+        email_sent = send_verification_email(email, new_code_str)
+        if email_sent:
+            return jsonify({'success': True, 'message': 'Новый код отправлен на email'})
+        else:
+            return jsonify({'success': False, 'message': 'Ошибка отправки email'})
     
     conn = get_db_connection()
     if not conn:
@@ -1185,27 +1281,22 @@ def resend_verification():
     
     try:
         cursor = conn.cursor()
-        
-        new_code = secrets.randbelow(900000) + 100000
-        new_code_str = str(new_code)
         new_expires = datetime.now() + timedelta(hours=24)
         
         cursor.execute("""
         UPDATE users 
         SET email_verification_code = %s, email_verification_expires = %s
         WHERE user_id = %s AND email = %s AND is_email_verified = false
-        """, (new_code_str, new_expires, user_id, email))
+        """, (new_code_str, new_expires, existing_user_id, email))
         
         if cursor.rowcount == 0:
             release_conn(conn)
             return jsonify({'success': False, 'message': 'Пользователь не найден или email уже подтвержден'})
         
         conn.commit()
-        
-        email_sent = send_verification_email(email, new_code_str)
-        
         release_conn(conn)
         
+        email_sent = send_verification_email(email, new_code_str)
         if email_sent:
             return jsonify({'success': True, 'message': 'Новый код отправлен на email'})
         else:

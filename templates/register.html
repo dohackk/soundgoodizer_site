@@ -9,13 +9,6 @@
 
 {% block extra_css %}
 <style>
-    .password-toggle {
-        cursor: pointer;
-        transition: color 0.2s;
-    }
-    .password-toggle:hover {
-        color: var(--secondary-color) !important;
-    }
     .email-domain-warning {
         font-size: 0.85rem;
         margin-top: 4px;
@@ -129,9 +122,6 @@
                                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
                                 <input type="password" class="form-control" name="password" id="password-input"
                                        placeholder="Пароль" required minlength="6">
-                                <span class="input-group-text password-toggle" id="toggle-password">
-                                    <i class="bi bi-eye"></i>
-                                </span>
                             </div>
                             <div class="form-text">Минимум 6 символов. Только латинские буквы и цифры</div>
                         </div>
@@ -141,9 +131,6 @@
                                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
                                 <input type="password" class="form-control" name="confirm_password" id="confirm-password-input"
                                        placeholder="Повторите пароль" required>
-                                <span class="input-group-text password-toggle" id="toggle-confirm-password">
-                                    <i class="bi bi-eye"></i>
-                                </span>
                             </div>
                             <div id="password-error" class="invalid-feedback" style="display: none;"></div>
                             <div id="password-success" class="valid-feedback" style="display: none;">✓ Пароли совпадают</div>
@@ -589,11 +576,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const confirmPasswordInput = document.getElementById('confirm-password-input');
     const form = document.getElementById('register-form');
     
-    document.getElementById('toggle-password').addEventListener('click', function() {
+    document.getElementById('toggle-password') && document.getElementById('toggle-password').addEventListener('click', function() {
         togglePasswordVisibility('password-input', 'toggle-password');
     });
     
-    document.getElementById('toggle-confirm-password').addEventListener('click', function() {
+    document.getElementById('toggle-confirm-password') && document.getElementById('toggle-confirm-password').addEventListener('click', function() {
         togglePasswordVisibility('confirm-password-input', 'toggle-confirm-password');
     });
     
@@ -853,6 +840,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     firstError.focus();
                 }
+            } else {
+                const submitBtn = document.getElementById('submit-btn');
+                submitBtn.disabled = true;
+                submitBtn.classList.remove('btn-primary');
+                submitBtn.classList.add('btn-secondary');
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Отправка письма...';
             }
         });
     }

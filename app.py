@@ -4713,6 +4713,530 @@ def my_reviews():
         return redirect(url_for('profile'))
 
 
+@app.route('/admin/reports')
+@login_required
+@admin_required
+def admin_reports():
+    """Страница отчётов в админке."""
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    try:
+        cursor = conn.cursor()
+        from datetime import date
+
+        cursor.execute("SELECT COUNT(*), COALESCE(SUM(total_price),0) FROM purchase_orders")
+        r = cursor.fetchone()
+        total_orders, orders_revenue = r[0], float(r[1])
+
+        cursor.execute("SELECT COUNT(*), COALESCE(SUM(total_amount),0) FROM rental_orders")
+        r = cursor.fetchone()
+        total_rentals, rentals_revenue = r[0], float(r[1])
+
+        cursor.execute("SELECT COUNT(*), COALESCE(SUM(actual_cost),0) FROM repair_requests WHERE actual_cost IS NOT NULL")
+        r = cursor.fetchone()
+        total_repairs, repairs_revenue = r[0], float(r[1])
+
+        summary = {
+            'total_orders': total_orders,
+            'orders_revenue': orders_revenue,
+            'total_rentals': total_rentals,
+            'rentals_revenue': rentals_revenue,
+            'total_repairs': total_repairs,
+            'repairs_revenue': repairs_revenue,
+            'total_revenue': orders_revenue + rentals_revenue + repairs_revenue,
+        }
+
+        cursor.execute("""
+            SELECT i.name, b.brand_name, SUM(po.quantity), SUM(po.total_price)
+            FROM purchase_orders po
+            JOIN instruments i ON po.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            GROUP BY i.instrument_id, i.name, b.brand_name
+            ORDER BY SUM(po.quantity) DESC
+            LIMIT 7
+        """)
+        top_sold = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT i.name, b.brand_name, COUNT(*), SUM(ro.total_amount)
+            FROM rental_orders ro
+            JOIN instruments i ON ro.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            GROUP BY i.instrument_id, i.name, b.brand_name
+            ORDER BY COUNT(*) DESC
+            LIMIT 7
+        """)
+        top_rented = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT TO_CHAR(month, 'MM.YYYY') as label,
+                   orders_cnt, rentals_cnt, repairs_cnt,
+                   orders_rev + rentals_rev + repairs_rev as total_rev
+            FROM (
+                SELECT gs.month,
+                    COALESCE((SELECT COUNT(*) FROM purchase_orders po
+                               WHERE DATE_TRUNC('month', po.order_date) = gs.month), 0) AS orders_cnt,
+                    COALESCE((SELECT COALESCE(SUM(po2.total_price),0) FROM purchase_orders po2
+                               WHERE DATE_TRUNC('month', po2.order_date) = gs.month), 0) AS orders_rev,
+                    COALESCE((SELECT COUNT(*) FROM rental_orders ro
+                               WHERE DATE_TRUNC('month', ro.created_at) = gs.month), 0) AS rentals_cnt,
+                    COALESCE((SELECT COALESCE(SUM(ro2.total_amount),0) FROM rental_orders ro2
+                               WHERE DATE_TRUNC('month', ro2.created_at) = gs.month), 0) AS rentals_rev,
+                    COALESCE((SELECT COUNT(*) FROM repair_requests rr
+                               WHERE DATE_TRUNC('month', rr.created_at) = gs.month), 0) AS repairs_cnt,
+                    COALESCE((SELECT COALESCE(SUM(rr2.actual_cost),0) FROM repair_requests rr2
+                               WHERE DATE_TRUNC('month', rr2.created_at) = gs.month AND rr2.actual_cost IS NOT NULL), 0) AS repairs_rev
+                FROM (
+                    SELECT DATE_TRUNC('month', NOW()) - INTERVAL '1 month' * s AS month
+                    FROM generate_series(0, 5) AS s
+                ) gs
+            ) sub
+            ORDER BY month DESC
+        """)
+        monthly = cursor.fetchall()
+
+        release_conn(conn)
+
+        today = date.today()
+        first_of_month = today.replace(day=1).isoformat()
+
+        return render_template('admin/reports.html',
+                               summary=summary,
+                               top_sold=top_sold,
+                               top_rented=top_rented,
+                               monthly=monthly,
+                               default_from=first_of_month,
+                               default_to=today.isoformat())
+    except Exception as e:
+        release_conn(conn)
+        flash(f'Ошибка: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/reports/export')
+@login_required
+@admin_required
+def admin_reports_export():
+    """Экспорт отчётов в красивый Excel (openpyxl)."""
+    import io
+    from datetime import datetime
+    from openpyxl import Workbook
+    from openpyxl.styles import (Font, PatternFill, Alignment, Border, Side,
+                                  GradientFill)
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles.numbers import FORMAT_NUMBER_COMMA_SEPARATED1
+
+    report_type = request.args.get('type', 'orders')
+    date_from   = request.args.get('date_from', '')
+    date_to     = request.args.get('date_to', '')
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('admin_reports'))
+
+    PALETTE = {
+        'orders':  {'header_bg': '3A5AF9', 'header_fg': 'FFFFFF',
+                    'title_bg':  '1E3A8A', 'row_alt':   'EEF0FF',
+                    'accent':    '4A6CF7'},
+        'rentals': {'header_bg': '0891B2', 'header_fg': 'FFFFFF',
+                    'title_bg':  '164E63', 'row_alt':   'E0F9FF',
+                    'accent':    '11CDEF'},
+        'repairs': {'header_bg': 'EA6A1A', 'header_fg': 'FFFFFF',
+                    'title_bg':  '7C2D12', 'row_alt':   'FFF4ED',
+                    'accent':    'FB923C'},
+    }
+    STATUS_COLORS = {
+        'доставлен': 'C6EFCE', 'завершен': 'C6EFCE', 'завершена': 'C6EFCE',
+        'активная':  'C6EFCE', 'согласовано': 'C6EFCE',
+        'отправлен': 'DDEBF7', 'в обработке': 'DDEBF7', 'в работе': 'DDEBF7',
+        'диагностика': 'DDEBF7', 'подтвержден': 'DDEBF7',
+        'забронирован': 'DDEBF7', 'ожидает': 'FFEB9C', 'новая': 'FFEB9C',
+        'готов к выдаче': 'FFEB9C',
+        'отменен': 'FFC7CE', 'отменена': 'FFC7CE', 'просрочена': 'FFC7CE',
+    }
+
+    def _border():
+        from openpyxl.styles import Side
+        s = Side(border_style='thin', color='D0D0D0')
+        return Border(left=s, right=s, top=s, bottom=s)
+
+    def _hdr_row(ws, headers, row_num, pal):
+        bg  = PatternFill('solid', fgColor=pal['header_bg'])
+        fnt = Font(name='Calibri', bold=True, color=pal['header_fg'], size=10)
+        aln = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        for col, h in enumerate(headers, 1):
+            c = ws.cell(row=row_num, column=col, value=h)
+            c.fill, c.font, c.alignment, c.border = bg, fnt, aln, _border()
+
+    def _title_block(ws, title, subtitle, pal, ncols):
+        ws.row_dimensions[1].height = 36
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+        c = ws.cell(row=1, column=1, value=title)
+        c.fill = PatternFill('solid', fgColor=pal['title_bg'])
+        c.font = Font(name='Calibri', bold=True, color='FFFFFF', size=16)
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[2].height = 18
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
+        c2 = ws.cell(row=2, column=1, value=subtitle)
+        c2.fill = PatternFill('solid', fgColor=pal['accent'])
+        c2.font = Font(name='Calibri', color='FFFFFF', size=10)
+        c2.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[3].height = 6
+
+    def _set_widths(ws, widths):
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+    def _status_fill(status_text):
+        color = STATUS_COLORS.get(status_text.strip().lower(), 'FFFFFF')
+        return PatternFill('solid', fgColor=color)
+
+    def _sum_row(ws, row_num, label, value, ncols, pal):
+        ws.merge_cells(start_row=row_num, start_column=1,
+                       end_row=row_num, end_column=ncols - 2)
+        lc = ws.cell(row=row_num, column=1, value=label)
+        lc.font = Font(name='Calibri', bold=True, size=10, color=pal['header_bg'])
+        lc.alignment = Alignment(horizontal='right', vertical='center')
+        vc = ws.cell(row=row_num, column=ncols - 1, value=value)
+        vc.font = Font(name='Calibri', bold=True, size=11, color=pal['header_bg'])
+        vc.number_format = '#,##0.00 \u20bd'
+        vc.alignment = Alignment(horizontal='right', vertical='center')
+        bg = PatternFill('solid', fgColor=pal['row_alt'])
+        for col in range(1, ncols + 1):
+            ws.cell(row=row_num, column=col).fill = bg
+
+    def _add_date_filter(sql, params, col, df, dt):
+        if df:
+            sql += f" AND {col} >= %s"
+            params.append(df)
+        if dt:
+            sql += f" AND {col} <= %s"
+            params.append(dt + ' 23:59:59')
+        return sql, params
+
+    try:
+        cursor = conn.cursor()
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border
+        from openpyxl.utils import get_column_letter
+        wb = Workbook()
+        wb.remove(wb.active)
+
+        period_str = (
+            f'Период: {date_from or "—"}  →  {date_to or "—"}'
+            if (date_from or date_to) else
+            f'Все время  •  Сформирован: {datetime.now().strftime("%d.%m.%Y %H:%M")}'
+        )
+
+        if report_type in ('orders', 'full'):
+            pal = PALETTE['orders']
+            sql = """
+                SELECT po.order_number, po.order_date,
+                       u.login, u.first_name || ' ' || u.last_name,
+                       i.name, b.brand_name,
+                       po.quantity, po.total_price, os.status_name
+                FROM purchase_orders po
+                JOIN users u ON po.user_id = u.user_id
+                JOIN instruments i ON po.instrument_id = i.instrument_id
+                LEFT JOIN brands b ON i.brand_id = b.brand_id
+                JOIN order_statuses os ON po.status_id = os.status_id
+                WHERE 1=1
+            """
+            params = []
+            sql, params = _add_date_filter(sql, params, 'po.order_date',
+                                           date_from, date_to)
+            sql += " ORDER BY po.order_date DESC"
+            cursor.execute(sql, params)
+            ord_rows = cursor.fetchall()
+
+            ws = wb.create_sheet('Заказы (покупки)')
+            ws.sheet_view.showGridLines = False
+            ws.freeze_panes = 'A5'
+            hdrs = ['№ Заказа', 'Дата', 'Логин', 'Клиент',
+                    'Инструмент', 'Бренд', 'Кол-во', 'Сумма, \u20bd', 'Статус']
+            _set_widths(ws, [18, 13, 18, 24, 30, 20, 8, 14, 16])
+            _title_block(ws, '\U0001f6d2  Отчёт по заказам (покупки)',
+                         period_str, pal, len(hdrs))
+            _hdr_row(ws, hdrs, 4, pal)
+            ws.row_dimensions[4].height = 22
+            total = 0.0
+            for i, r in enumerate(ord_rows, 5):
+                ws.row_dimensions[i].height = 18
+                alt_bg = PatternFill('solid', fgColor=pal['row_alt']) if i % 2 else None
+                brd = _border()
+                vals = [r[0], r[1].strftime('%d.%m.%Y') if r[1] else '',
+                        r[2], r[3], r[4], r[5] or '',
+                        r[6], float(r[7]), r[8]]
+                for col, val in enumerate(vals, 1):
+                    c = ws.cell(row=i, column=col, value=val)
+                    c.font  = Font(name='Calibri', size=10)
+                    c.border = brd
+                    c.alignment = Alignment(
+                        horizontal='center' if col in (1,2,7) else 'left',
+                        vertical='center')
+                    if alt_bg:
+                        c.fill = alt_bg
+                ws.cell(row=i, column=8).number_format = '#,##0.00 \u20bd'
+                ws.cell(row=i, column=8).font = Font(
+                    name='Calibri', size=10, color=pal['header_bg'], bold=True)
+                ws.cell(row=i, column=9).fill = _status_fill(r[8])
+                ws.cell(row=i, column=9).alignment = Alignment(
+                    horizontal='center', vertical='center')
+                total += float(r[7])
+            _sum_row(ws, len(ord_rows) + 5, 'ИТОГО:', total, len(hdrs), pal)
+
+        if report_type in ('rentals', 'full'):
+            pal = PALETTE['rentals']
+            sql = """
+                SELECT ro.rental_number, ro.created_at,
+                       u.login, u.first_name || ' ' || u.last_name,
+                       i.name, b.brand_name,
+                       ro.rental_start_date, ro.rental_end_date,
+                       ro.total_days, ro.total_amount, rs.status_name
+                FROM rental_orders ro
+                JOIN users u ON ro.user_id = u.user_id
+                JOIN instruments i ON ro.instrument_id = i.instrument_id
+                LEFT JOIN brands b ON i.brand_id = b.brand_id
+                JOIN rental_statuses rs ON ro.status_id = rs.status_id
+                WHERE 1=1
+            """
+            params = []
+            sql, params = _add_date_filter(sql, params, 'ro.created_at',
+                                           date_from, date_to)
+            sql += " ORDER BY ro.created_at DESC"
+            cursor.execute(sql, params)
+            rent_rows = cursor.fetchall()
+
+            ws = wb.create_sheet('Аренда')
+            ws.sheet_view.showGridLines = False
+            ws.freeze_panes = 'A5'
+            hdrs = ['№ Аренды', 'Дата', 'Логин', 'Клиент',
+                    'Инструмент', 'Бренд', 'Начало', 'Конец',
+                    'Дней', 'Сумма, \u20bd', 'Статус']
+            _set_widths(ws, [18, 13, 18, 24, 30, 20, 13, 13, 7, 14, 16])
+            _title_block(ws, '\U0001f3b9  Отчёт по аренде',
+                         period_str, pal, len(hdrs))
+            _hdr_row(ws, hdrs, 4, pal)
+            ws.row_dimensions[4].height = 22
+            total = 0.0
+            for i, r in enumerate(rent_rows, 5):
+                ws.row_dimensions[i].height = 18
+                alt_bg = PatternFill('solid', fgColor=pal['row_alt']) if i % 2 else None
+                brd = _border()
+                vals = [r[0], r[1].strftime('%d.%m.%Y') if r[1] else '',
+                        r[2], r[3], r[4], r[5] or '',
+                        r[6].strftime('%d.%m.%Y') if r[6] else '',
+                        r[7].strftime('%d.%m.%Y') if r[7] else '',
+                        r[8], float(r[9]), r[10]]
+                for col, val in enumerate(vals, 1):
+                    c = ws.cell(row=i, column=col, value=val)
+                    c.font  = Font(name='Calibri', size=10)
+                    c.border = brd
+                    c.alignment = Alignment(
+                        horizontal='center' if col in (1,2,7,8,9) else 'left',
+                        vertical='center')
+                    if alt_bg:
+                        c.fill = alt_bg
+                ws.cell(row=i, column=10).number_format = '#,##0.00 \u20bd'
+                ws.cell(row=i, column=10).font = Font(
+                    name='Calibri', size=10, color=pal['header_bg'], bold=True)
+                ws.cell(row=i, column=11).fill = _status_fill(r[10])
+                ws.cell(row=i, column=11).alignment = Alignment(
+                    horizontal='center', vertical='center')
+                total += float(r[9])
+            _sum_row(ws, len(rent_rows) + 5, 'ИТОГО:', total, len(hdrs), pal)
+
+        if report_type in ('repairs', 'full'):
+            pal = PALETTE['repairs']
+            sql = """
+                SELECT rr.request_number, rr.created_at,
+                       u.login, u.first_name || ' ' || u.last_name,
+                       rr.customer_instrument_name, rr.brand, rr.model,
+                       rr.problem_description, rr.actual_cost, rs.status_name
+                FROM repair_requests rr
+                JOIN users u ON rr.user_id = u.user_id
+                JOIN repair_statuses rs ON rr.status_id = rs.status_id
+                WHERE 1=1
+            """
+            params = []
+            sql, params = _add_date_filter(sql, params, 'rr.created_at',
+                                           date_from, date_to)
+            sql += " ORDER BY rr.created_at DESC"
+            cursor.execute(sql, params)
+            rep_rows = cursor.fetchall()
+
+            ws = wb.create_sheet('Ремонты')
+            ws.sheet_view.showGridLines = False
+            ws.freeze_panes = 'A5'
+            hdrs = ['№ Заявки', 'Дата', 'Логин', 'Клиент',
+                    'Инструмент', 'Бренд', 'Модель',
+                    'Описание проблемы', 'Стоимость, \u20bd', 'Статус']
+            _set_widths(ws, [18, 13, 18, 24, 24, 18, 18, 40, 14, 16])
+            _title_block(ws, '\U0001f527  Отчёт по ремонтам',
+                         period_str, pal, len(hdrs))
+            _hdr_row(ws, hdrs, 4, pal)
+            ws.row_dimensions[4].height = 22
+            total = 0.0
+            for i, r in enumerate(rep_rows, 5):
+                ws.row_dimensions[i].height = 18
+                alt_bg = PatternFill('solid', fgColor=pal['row_alt']) if i % 2 else None
+                brd = _border()
+                cost = float(r[8]) if r[8] else 0.0
+                vals = [r[0], r[1].strftime('%d.%m.%Y') if r[1] else '',
+                        r[2], r[3], r[4], r[5] or '', r[6] or '',
+                        r[7] or '', cost, r[9]]
+                for col, val in enumerate(vals, 1):
+                    c = ws.cell(row=i, column=col, value=val)
+                    c.font  = Font(name='Calibri', size=10)
+                    c.border = brd
+                    c.alignment = Alignment(
+                        horizontal='center' if col in (1,2) else 'left',
+                        vertical='center',
+                        wrap_text=(col == 8))
+                    if alt_bg:
+                        c.fill = alt_bg
+                cost_c = ws.cell(row=i, column=9)
+                if cost > 0:
+                    cost_c.number_format = '#,##0.00 \u20bd'
+                    cost_c.font = Font(name='Calibri', size=10,
+                                       color=pal['header_bg'], bold=True)
+                else:
+                    cost_c.value = '\u2014'
+                    cost_c.alignment = Alignment(horizontal='center',
+                                                  vertical='center')
+                ws.cell(row=i, column=10).fill = _status_fill(r[9])
+                ws.cell(row=i, column=10).alignment = Alignment(
+                    horizontal='center', vertical='center')
+                total += cost
+            _sum_row(ws, len(rep_rows) + 5, 'ИТОГО:', total, len(hdrs), pal)
+
+        if report_type == 'full':
+            # Считаем с тем же фильтром по датам, что и основные листы
+            ord_sql = ("SELECT COUNT(*), COALESCE(SUM(total_price),0) "
+                       "FROM purchase_orders WHERE 1=1")
+            ord_params = []
+            ord_sql, ord_params = _add_date_filter(
+                ord_sql, ord_params, 'order_date', date_from, date_to)
+            cursor.execute(ord_sql, ord_params)
+            rc = cursor.fetchone(); o_cnt, o_rev = rc[0], float(rc[1])
+
+            rnt_sql = ("SELECT COUNT(*), COALESCE(SUM(total_amount),0) "
+                       "FROM rental_orders WHERE 1=1")
+            rnt_params = []
+            rnt_sql, rnt_params = _add_date_filter(
+                rnt_sql, rnt_params, 'created_at', date_from, date_to)
+            cursor.execute(rnt_sql, rnt_params)
+            rc = cursor.fetchone(); rn_cnt, rn_rev = rc[0], float(rc[1])
+
+            rep_sql = ("SELECT COUNT(*), COALESCE(SUM(actual_cost),0) "
+                       "FROM repair_requests WHERE actual_cost IS NOT NULL")
+            rep_params = []
+            rep_sql, rep_params = _add_date_filter(
+                rep_sql, rep_params, 'created_at', date_from, date_to)
+            cursor.execute(rep_sql, rep_params)
+            rc = cursor.fetchone(); rp_cnt, rp_rev = rc[0], float(rc[1])
+
+            ws = wb.create_sheet('Сводка', 0)
+            ws.sheet_view.showGridLines = False
+            ws.column_dimensions['A'].width = 32
+            ws.column_dimensions['B'].width = 12
+            ws.column_dimensions['C'].width = 20
+
+            ws.row_dimensions[1].height = 42
+            ws.merge_cells('A1:C1')
+            c = ws['A1']
+            c.value = 'SoundGoodizer — Полный отчёт'
+            c.fill  = PatternFill('solid', fgColor='1E3A8A')
+            c.font  = Font(name='Calibri', bold=True, color='FFFFFF', size=18)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+
+            ws.row_dimensions[2].height = 16
+            ws.merge_cells('A2:C2')
+            c2 = ws['A2']
+            c2.value = period_str
+            c2.fill  = PatternFill('solid', fgColor='3A5AF9')
+            c2.font  = Font(name='Calibri', color='FFFFFF', size=10)
+            c2.alignment = Alignment(horizontal='center', vertical='center')
+            ws.row_dimensions[3].height = 8
+
+            for col, hdr in enumerate(['Категория', 'Кол-во', 'Выручка, \u20bd'], 1):
+                hc = ws.cell(row=4, column=col, value=hdr)
+                hc.fill = PatternFill('solid', fgColor='374151')
+                hc.font = Font(name='Calibri', bold=True, color='FFFFFF', size=10)
+                hc.alignment = Alignment(horizontal='center', vertical='center')
+                hc.border = _border()
+            ws.row_dimensions[4].height = 20
+
+            rows_data = [
+                ('Заказы (покупки)', o_cnt, o_rev,  'EEF0FF', '1E3A8A', '4A6CF7'),
+                ('Аренда',           rn_cnt, rn_rev, 'E0F9FF', '164E63', '0891B2'),
+                ('Ремонты',          rp_cnt, rp_rev, 'FFF4ED', '7C2D12', 'EA6A1A'),
+            ]
+            for row_i, (lbl, cnt, rev, bg, fg, acc) in enumerate(rows_data, 5):
+                ws.row_dimensions[row_i].height = 28
+                lc = ws.cell(row=row_i, column=1, value=lbl)
+                lc.fill = PatternFill('solid', fgColor=bg)
+                lc.font = Font(name='Calibri', bold=True, color=fg, size=12)
+                lc.alignment = Alignment(vertical='center')
+                lc.border = _border()
+                cc = ws.cell(row=row_i, column=2, value=cnt)
+                cc.fill = PatternFill('solid', fgColor=bg)
+                cc.font = Font(name='Calibri', color=fg, size=12)
+                cc.alignment = Alignment(horizontal='center', vertical='center')
+                cc.border = _border()
+                rc2 = ws.cell(row=row_i, column=3, value=rev)
+                rc2.fill = PatternFill('solid', fgColor=bg)
+                rc2.font = Font(name='Calibri', bold=True, color=acc, size=12)
+                rc2.number_format = '#,##0.00 \u20bd'
+                rc2.alignment = Alignment(horizontal='right', vertical='center')
+                rc2.border = _border()
+
+            ws.row_dimensions[8].height = 32
+            ws.merge_cells('A8:B8')
+            tc = ws['A8']
+            tc.value = 'ИТОГО'
+            tc.fill  = PatternFill('solid', fgColor='1E3A8A')
+            tc.font  = Font(name='Calibri', bold=True, color='FFFFFF', size=13)
+            tc.alignment = Alignment(horizontal='center', vertical='center')
+            tc.border = _border()
+            ws['B8'].fill = PatternFill('solid', fgColor='1E3A8A')
+            ws['B8'].border = _border()
+            rv = ws.cell(row=8, column=3,
+                         value=o_rev + rn_rev + rp_rev)
+            rv.fill  = PatternFill('solid', fgColor='22C55E')
+            rv.font  = Font(name='Calibri', bold=True, color='FFFFFF', size=14)
+            rv.number_format = '#,##0.00 \u20bd'
+            rv.alignment = Alignment(horizontal='right', vertical='center')
+            rv.border = _border()
+
+        release_conn(conn)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        from flask import Response
+        type_names = {'orders': 'orders', 'rentals': 'rentals',
+                      'repairs': 'repairs', 'full': 'full_report'}
+        fname = (f'report_{type_names.get(report_type, "report")}'
+                 f'_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
+
+        return Response(
+            buf.getvalue(),
+            mimetype=('application/vnd.openxmlformats-officedocument'
+                      '.spreadsheetml.sheet'),
+            headers={'Content-Disposition': f'attachment; filename={fname}'}
+        )
+
+    except Exception as e:
+        release_conn(conn)
+        flash(f'Ошибка экспорта: {str(e)}', 'danger')
+        return redirect(url_for('admin_reports'))
+
+
 @app.route('/export_orders')
 @login_required
 def export_orders():
@@ -4747,7 +5271,6 @@ def export_orders():
         orders = cursor.fetchall()
         release_conn(conn)
         
-        # Создаём CSV
         output = io.StringIO()
         output.write('№ Заказа,Дата,Инструмент,Бренд,Количество,Сумма,Статус\n')
         

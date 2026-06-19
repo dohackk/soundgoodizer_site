@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёты - SoundGoodizer{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Сводные карточки ── */
+.kpi-card {
+    border: none;
+    border-radius: 18px;
+    overflow: hidden;
+    position: relative;
+    color: #fff;
+    min-height: 140px;
+    transition: transform .25s, box-shadow .25s;
+}
+.kpi-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 16px 40px rgba(0,0,0,.18) !important;
+}
+.kpi-card .kpi-bg-icon {
+    position: absolute;
+    right: -10px;
+    bottom: -10px;
+    font-size: 6rem;
+    opacity: .15;
+    line-height: 1;
+    pointer-events: none;
+}
+.kpi-card .kpi-label {
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    opacity: .85;
+}
+.kpi-card .kpi-value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.kpi-card .kpi-sub {
+    font-size: .85rem;
+    opacity: .9;
+    margin-top: 2px;
+}
+
+.bg-grad-blue   { background: linear-gradient(135deg, #4a6cf7 0%, #2c4fe3 100%); }
+.bg-grad-cyan   { background: linear-gradient(135deg, #11cdef 0%, #1a8abf 100%); }
+.bg-grad-orange { background: linear-gradient(135deg, #fb923c 0%, #e25a1c 100%); }
+.bg-grad-green  { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+
+/* ── Секция скачивания ── */
+.download-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%);
+    border: 1px solid #e9ecef;
+    border-radius: 18px;
+    padding: 24px;
+}
+[data-bs-theme="dark"] .download-section {
+    background: linear-gradient(135deg, #252930 0%, #1e2228 100%);
+    border-color: #3d4248;
+}
+
+.dl-card {
+    border-radius: 14px;
+    border: 2px solid transparent;
+    transition: all .2s;
+    cursor: pointer;
+    background: #fff;
+}
+.dl-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.1);
+}
+.dl-card.orders   { border-color: #4a6cf7; }
+.dl-card.rentals  { border-color: #11cdef; }
+.dl-card.repairs  { border-color: #fb923c; }
+.dl-card.full     { border-color: #22c55e; background: linear-gradient(135deg,#f0fdf4,#dcfce7); }
+.dl-card .dl-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+[data-bs-theme="dark"] .dl-card { background: #252930; }
+[data-bs-theme="dark"] .dl-card.full { background: linear-gradient(135deg,#1a2e1e,#1e3322); }
+
+/* ── Период ── */
+.period-bar {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 14px;
+    padding: 16px 20px;
+}
+[data-bs-theme="dark"] .period-bar { background: #2d3238; border-color: #3d4248; }
+
+/* ── Таблицы ── */
+.report-table th {
+    font-weight: 600;
+    font-size: .82rem;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #6c757d;
+    border-top: none;
+    background: #f8f9fa;
+}
+[data-bs-theme="dark"] .report-table th { background: #1e2228 !important; color: #adb5bd !important; }
+
+.medal-1 { color: #f59e0b; }
+.medal-2 { color: #9ca3af; }
+.medal-3 { color: #b45309; }
+
+/* ── Месячная сетка ── */
+.month-bar-wrap {
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 99px;
+    overflow: hidden;
+    min-width: 60px;
+}
+.month-bar { height: 100%; border-radius: 99px; }
+
+/* ── Карточки с таблицами ── */
+.panel-card {
+    border: none;
+    border-radius: 18px;
+    overflow: hidden;
+}
+.panel-card .card-header {
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+}
+[data-bs-theme="dark"] .panel-card .card-header { background: #252930; border-color: #3d4248; }
+[data-bs-theme="dark"] .panel-card { background: #252930; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Заголовок ── #}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-0 fw-bold">
+            <i class="fas fa-chart-line text-primary me-2"></i>Отчёты
+        </h1>
+        <p class="text-muted mb-0 small">Аналитика и выгрузка данных магазина</p>
+    </div>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary rounded-pill px-4">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</div>
+
+{# ── KPI карточки ── #}
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card kpi-card bg-grad-blue shadow">
+            <div class="card-body p-4 position-relative">
+                <div class="kpi-label">Заказы (покупки)</div>
+                <div class="kpi-value mt-1">{{ summary.total_orders }}</div>
+                <div class="kpi-sub">
+                    <i class="fas fa-ruble-sign me-1"></i>{{ "{:,.0f}".format(summary.orders_revenue).replace(",", " ") }} ₽ выручка
+                </div>
+                <div class="kpi-bg-icon"><i class="fas fa-shopping-cart"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card kpi-card bg-grad-cyan shadow">
+            <div class="card-body p-4 position-relative">
+                <div class="kpi-label">Аренда</div>
+                <div class="kpi-value mt-1">{{ summary.total_rentals }}</div>
+                <div class="kpi-sub">
+                    <i class="fas fa-ruble-sign me-1"></i>{{ "{:,.0f}".format(summary.rentals_revenue).replace(",", " ") }} ₽ выручка
+                </div>
+                <div class="kpi-bg-icon"><i class="fas fa-calendar-check"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card kpi-card bg-grad-orange shadow">
+            <div class="card-body p-4 position-relative">
+                <div class="kpi-label">Ремонты</div>
+                <div class="kpi-value mt-1">{{ summary.total_repairs }}</div>
+                <div class="kpi-sub">
+                    <i class="fas fa-ruble-sign me-1"></i>{{ "{:,.0f}".format(summary.repairs_revenue).replace(",", " ") }} ₽ выручка
+                </div>
+                <div class="kpi-bg-icon"><i class="fas fa-tools"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card kpi-card bg-grad-green shadow">
+            <div class="card-body p-4 position-relative">
+                <div class="kpi-label">Общая выручка</div>
+                <div class="kpi-value mt-1">{{ "{:,.0f}".format(summary.total_revenue).replace(",", " ") }}</div>
+                <div class="kpi-sub">
+                    все источники, ₽
+                </div>
+                <div class="kpi-bg-icon"><i class="fas fa-coins"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Скачать отчёты ── #}
+<div class="download-section shadow-sm mb-4">
+    <h5 class="fw-bold mb-3"><i class="fas fa-download text-primary me-2"></i>Скачать отчёты</h5>
+
+    {# Фильтр периода #}
+    <div class="period-bar mb-4 d-flex flex-wrap gap-3 align-items-end">
+        <div>
+            <label class="form-label small fw-semibold mb-1">Период с</label>
+            <input type="date" class="form-control form-control-sm" id="dateFrom" value="{{ default_from }}" style="width:160px">
+        </div>
+        <div>
+            <label class="form-label small fw-semibold mb-1">по</label>
+            <input type="date" class="form-control form-control-sm" id="dateTo" value="{{ default_to }}" style="width:160px">
+        </div>
+        <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="resetPeriod()">
+            <i class="fas fa-undo me-1"></i>Сброс
+        </button>
+    </div>
+
+    {# Карточки выгрузки #}
+    <div class="row g-3">
+        <div class="col-lg-3 col-md-6">
+            <div class="dl-card orders p-3 h-100 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="dl-icon" style="background:#eef0ff">
+                        <i class="fas fa-shopping-cart" style="color:#4a6cf7"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">Заказы</div>
+                        <div class="text-muted small">покупки инструментов</div>
+                    </div>
+                </div>
+                <p class="small text-muted flex-grow-1 mb-3">
+                    Номер, дата, клиент, инструмент, количество, сумма, статус.
+                </p>
+                <button class="btn btn-sm rounded-pill fw-semibold w-100"
+                        style="background:#4a6cf7;color:#fff"
+                        onclick="downloadReport('orders')">
+                    <i class="fas fa-file-excel me-2"></i>Скачать Excel
+                </button>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="dl-card rentals p-3 h-100 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="dl-icon" style="background:#e0f9ff">
+                        <i class="fas fa-calendar-check" style="color:#11cdef"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">Аренда</div>
+                        <div class="text-muted small">аренда инструментов</div>
+                    </div>
+                </div>
+                <p class="small text-muted flex-grow-1 mb-3">
+                    Номер, клиент, инструмент, период, дней, сумма, статус.
+                </p>
+                <button class="btn btn-sm rounded-pill fw-semibold w-100"
+                        style="background:#11cdef;color:#fff"
+                        onclick="downloadReport('rentals')">
+                    <i class="fas fa-file-excel me-2"></i>Скачать Excel
+                </button>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="dl-card repairs p-3 h-100 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="dl-icon" style="background:#fff4ed">
+                        <i class="fas fa-tools" style="color:#fb923c"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">Ремонты</div>
+                        <div class="text-muted small">заявки на ремонт</div>
+                    </div>
+                </div>
+                <p class="small text-muted flex-grow-1 mb-3">
+                    Дата, клиент, инструмент, описание проблемы, стоимость, статус.
+                </p>
+                <button class="btn btn-sm rounded-pill fw-semibold w-100"
+                        style="background:#fb923c;color:#fff"
+                        onclick="downloadReport('repairs')">
+                    <i class="fas fa-file-excel me-2"></i>Скачать Excel
+                </button>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="dl-card full p-3 h-100 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="dl-icon" style="background:#dcfce7">
+                        <i class="fas fa-layer-group" style="color:#22c55e"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">Полный отчёт</div>
+                        <div class="text-muted small">все данные вместе</div>
+                    </div>
+                </div>
+                <p class="small text-muted flex-grow-1 mb-3">
+                    Заказы + Аренда + Ремонты в одном файле, удобно для Excel.
+                </p>
+                <button class="btn btn-sm rounded-pill fw-semibold w-100"
+                        style="background:#22c55e;color:#fff"
+                        onclick="downloadReport('full')">
+                    <i class="fas fa-file-excel me-2"></i>Полный Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Топы ── #}
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="card panel-card shadow-sm h-100">
+            <div class="card-header py-3 d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:10px;background:#fff4d6;display:flex;align-items:center;justify-content:center;">
+                    <i class="fas fa-trophy" style="color:#f59e0b;font-size:1.1rem;"></i>
+                </div>
+                <h6 class="mb-0 fw-bold">Топ продаж</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table report-table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-3" style="width:40px">#</th>
+                                <th class="py-3">Инструмент</th>
+                                <th class="py-3 text-center">Продано</th>
+                                <th class="py-3 text-end px-4">Выручка</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in top_sold %}
+                            <tr>
+                                <td class="px-4">
+                                    {% if loop.index == 1 %}<i class="fas fa-medal medal-1 fs-5"></i>
+                                    {% elif loop.index == 2 %}<i class="fas fa-medal medal-2 fs-5"></i>
+                                    {% elif loop.index == 3 %}<i class="fas fa-medal medal-3 fs-5"></i>
+                                    {% else %}<span class="text-muted fw-bold">{{ loop.index }}</span>{% endif %}
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">{{ item[0] }}</div>
+                                    {% if item[1] %}<div class="text-muted small">{{ item[1] }}</div>{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge rounded-pill" style="background:#eef0ff;color:#4a6cf7">{{ item[2] }} шт.</span>
+                                </td>
+                                <td class="text-end px-4 fw-bold" style="color:#4a6cf7">
+                                    {{ "{:,.0f}".format(item[3]).replace(",", " ") }} ₽
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center py-4 text-muted">Нет данных</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card panel-card shadow-sm h-100">
+            <div class="card-header py-3 d-flex align-items-center gap-2">
+                <div style="width:36px;height:36px;border-radius:10px;background:#e0f9ff;display:flex;align-items:center;justify-content:center;">
+                    <i class="fas fa-key" style="color:#11cdef;font-size:1.1rem;"></i>
+                </div>
+                <h6 class="mb-0 fw-bold">Топ аренды</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table report-table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-3" style="width:40px">#</th>
+                                <th class="py-3">Инструмент</th>
+                                <th class="py-3 text-center">Аренд</th>
+                                <th class="py-3 text-end px-4">Выручка</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in top_rented %}
+                            <tr>
+                                <td class="px-4">
+                                    {% if loop.index == 1 %}<i class="fas fa-medal medal-1 fs-5"></i>
+                                    {% elif loop.index == 2 %}<i class="fas fa-medal medal-2 fs-5"></i>
+                                    {% elif loop.index == 3 %}<i class="fas fa-medal medal-3 fs-5"></i>
+                                    {% else %}<span class="text-muted fw-bold">{{ loop.index }}</span>{% endif %}
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">{{ item[0] }}</div>
+                                    {% if item[1] %}<div class="text-muted small">{{ item[1] }}</div>{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge rounded-pill" style="background:#e0f9ff;color:#0ea5e9">{{ item[2] }}</span>
+                                </td>
+                                <td class="text-end px-4 fw-bold" style="color:#11cdef">
+                                    {{ "{:,.0f}".format(item[3]).replace(",", " ") }} ₽
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center py-4 text-muted">Нет данных</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Активность по месяцам ── #}
+<div class="card panel-card shadow-sm">
+    <div class="card-header py-3 d-flex align-items-center gap-2">
+        <div style="width:36px;height:36px;border-radius:10px;background:#f0fdf4;display:flex;align-items:center;justify-content:center;">
+            <i class="fas fa-chart-bar" style="color:#22c55e;font-size:1.1rem;"></i>
+        </div>
+        <h6 class="mb-0 fw-bold">Активность по месяцам</h6>
+        <span class="badge bg-secondary ms-1">последние 6</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table report-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-3">Месяц</th>
+                        <th class="py-3 text-center">
+                            <i class="fas fa-shopping-cart me-1" style="color:#4a6cf7"></i>Заказы
+                        </th>
+                        <th class="py-3 text-center">
+                            <i class="fas fa-calendar-check me-1" style="color:#11cdef"></i>Аренды
+                        </th>
+                        <th class="py-3 text-center">
+                            <i class="fas fa-tools me-1" style="color:#fb923c"></i>Ремонты
+                        </th>
+                        <th class="py-3 text-end px-4">
+                            <i class="fas fa-coins me-1" style="color:#22c55e"></i>Выручка
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(max_rev=1) %}
+                    {% for row in monthly %}
+                        {% if row[4] > ns.max_rev %}{% set ns.max_rev = row[4] %}{% endif %}
+                    {% endfor %}
+                    {% for row in monthly %}
+                    <tr>
+                        <td class="px-4 fw-semibold">{{ row[0] }}</td>
+                        <td class="text-center">
+                            <span class="badge rounded-pill" style="background:#eef0ff;color:#4a6cf7;min-width:36px">{{ row[1] }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge rounded-pill" style="background:#e0f9ff;color:#0ea5e9;min-width:36px">{{ row[2] }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge rounded-pill" style="background:#fff4ed;color:#fb923c;min-width:36px">{{ row[3] }}</span>
+                        </td>
+                        <td class="text-end px-4">
+                            <div class="d-flex align-items-center justify-content-end gap-2">
+                                <div class="month-bar-wrap flex-grow-1" style="max-width:80px">
+                                    <div class="month-bar"
+                                         style="width:{{ ((row[4] / ns.max_rev) * 100)|int }}%;background:linear-gradient(90deg,#22c55e,#4a6cf7)"></div>
+                                </div>
+                                <span class="fw-bold" style="color:#22c55e;min-width:90px;text-align:right">
+                                    {{ "{:,.0f}".format(row[4]).replace(",", " ") }} ₽
+                                </span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-4 text-muted">Нет данных</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function downloadReport(type) {
+    const from = document.getElementById('dateFrom').value;
+    const to   = document.getElementById('dateTo').value;
+    let url = `/admin/reports/export?type=${type}`;
+    if (from) url += `&date_from=${from}`;
+    if (to)   url += `&date_to=${to}`;
+    window.location.href = url;
+}
+
+function resetPeriod() {
+    const today = new Date();
+    const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('dateTo').value   = today.toISOString().split('T')[0];
+    document.getElementById('dateFrom').value = firstOfMonth.toISOString().split('T')[0];
+}
+</script>
+{% endblock %}

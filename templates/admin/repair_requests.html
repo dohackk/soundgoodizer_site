@@ -84,10 +84,10 @@
 <div class="filter-section">
     <div class="row g-3">
         <div class="col-md-3">
-            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по номеру или инструменту...">
+            <input type="text" class="form-control" id="adminSearchInput" placeholder="Поиск по номеру или инструменту...">
         </div>
         <div class="col-md-3">
-            <select class="form-select" id="statusFilter">
+            <select class="form-select" id="adminStatusFilter">
                 <option value="">Все статусы</option>
                 {% for status in statuses %}
                 <option value="{{ status[1] }}">{{ status[1] }}</option>
@@ -104,7 +104,7 @@
             </select>
         </div>
         <div class="col-md-3">
-            <input type="date" class="form-control" id="dateFrom" placeholder="С даты">
+            <input type="date" class="form-control" id="adminDateFrom" placeholder="С даты">
         </div>
     </div>
 </div>
@@ -330,16 +330,17 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     function filterTable() {
-        const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
-        const statusFilter = document.getElementById('statusFilter')?.value || '';
+        const search = document.getElementById('adminSearchInput')?.value.toLowerCase() || '';
+        const statusFilter = document.getElementById('adminStatusFilter')?.value || '';
         const technicianFilter = document.getElementById('technicianFilter')?.value || '';
-        const dateFrom = document.getElementById('dateFrom')?.value || '';
+        const dateFrom = document.getElementById('adminDateFrom')?.value || '';
         const rows = document.querySelectorAll('#repairTable tbody tr');
         let visibleCount = 0;
         
         rows.forEach(row => {
             const requestNumber = row.cells[0].textContent.toLowerCase();
-            const instrument = row.cells[3].textContent.toLowerCase();
+            const client        = row.cells[2].textContent.toLowerCase();
+            const instrument    = row.cells[3].textContent.toLowerCase();
             
             const statusSelect = row.cells[7].querySelector('select');
             const selectedOption = statusSelect.options[statusSelect.selectedIndex];
@@ -352,7 +353,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             let show = true;
             
-            if (search && !requestNumber.includes(search) && !instrument.includes(search)) {
+            if (search && !requestNumber.includes(search) && !client.includes(search) && !instrument.includes(search)) {
                 show = false;
             }
             
@@ -402,15 +403,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    document.getElementById('searchInput')?.addEventListener('input', filterTable);
-    document.getElementById('statusFilter')?.addEventListener('change', filterTable);
+    document.getElementById('adminSearchInput')?.addEventListener('input', filterTable);
+    document.getElementById('adminStatusFilter')?.addEventListener('change', filterTable);
     document.getElementById('technicianFilter')?.addEventListener('change', filterTable);
-    document.getElementById('dateFrom')?.addEventListener('change', filterTable);
+    document.getElementById('adminDateFrom')?.addEventListener('change', filterTable);
     
     console.log('Repair filter initialized');
-    document.getElementById('statusFilter')?.addEventListener('change', function() {
-        console.log('Status filter changed to:', this.value);
-    });
+
 });
 </script>
 {% endblock %}

@@ -2913,7 +2913,6 @@ def admin_users():
             FROM users u
             JOIN roles r ON u.role_id = r.role_id
             ORDER BY u.created_at DESC
-        LIMIT 5
         """)
         users = cursor.fetchall()
         release_conn(conn)
@@ -3119,7 +3118,6 @@ def admin_orders():
             JOIN users u ON po.user_id = u.user_id
             JOIN instruments i ON po.instrument_id = i.instrument_id
             ORDER BY po.order_date DESC
-        LIMIT 10
         """)
         orders = cursor.fetchall()
         
@@ -3675,7 +3673,7 @@ def admin_repair_detail(request_id):
 
 @app.route('/admin/update_repair_status', methods=['POST'])
 @login_required
-@admin_required
+@technician_required
 def admin_update_repair_status():
     try:
         data = request.get_json()
@@ -3743,7 +3741,7 @@ def admin_assign_repair_technician():
 
 @app.route('/admin/set_repair_cost', methods=['POST'])
 @login_required
-@admin_required
+@technician_required
 def admin_set_repair_cost():
     try:
         data = request.get_json()
@@ -3958,8 +3956,8 @@ def admin_add_instrument():
         condition_id = request.form.get('condition_id') or None
         description = request.form.get('description')
         characteristics = request.form.get('characteristics')
-        is_available_for_sale = true if request.form.get('is_available_for_sale') else 0
-        is_available_for_rent = true if request.form.get('is_available_for_rent') else 0
+        is_available_for_sale = True if request.form.get('is_available_for_sale') else False
+        is_available_for_rent = True if request.form.get('is_available_for_rent') else False
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -4022,8 +4020,8 @@ def admin_update_instrument():
         condition_id = request.form.get('condition_id') or None
         description = request.form.get('description')
         characteristics = request.form.get('characteristics')
-        is_available_for_sale = true if request.form.get('is_available_for_sale') else 0
-        is_available_for_rent = true if request.form.get('is_available_for_rent') else 0
+        is_available_for_sale = True if request.form.get('is_available_for_sale') else False
+        is_available_for_rent = True if request.form.get('is_available_for_rent') else False
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -4121,7 +4119,7 @@ def technician_repair_requests():
     try:
         cursor = conn.cursor()
         
-        if session['user_role'] == 'technician':
+        if session.get('user_role') == 'technician':
             cursor.execute("""
                 SELECT 
                     rr.request_id,
@@ -4190,7 +4188,7 @@ def technician_repair_requests():
         return render_template('technician/repair_requests.html', 
                              requests=requests, 
                              statuses=statuses,
-                             is_technician=(session['user_role'] == 'technician'))
+                             is_technician=(session.get('user_role') == 'technician'))
         
     except Exception as e:
         print(f"Error in technician_repair_requests: {e}")

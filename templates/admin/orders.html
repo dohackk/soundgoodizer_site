@@ -52,10 +52,10 @@
 <div class="filter-section">
     <div class="row g-3">
         <div class="col-md-3">
-            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по номеру или пользователю...">
+            <input type="text" class="form-control" id="adminSearchInput" placeholder="Поиск по номеру или пользователю...">
         </div>
         <div class="col-md-3">
-            <select class="form-select" id="statusFilter">
+            <select class="form-select" id="adminStatusFilter">
                 <option value="">Все статусы</option>
                 {% for status in statuses %}
                 <option value="{{ status[1] }}">{{ status[1] }}</option>
@@ -63,10 +63,10 @@
             </select>
         </div>
         <div class="col-md-3">
-            <input type="date" class="form-control" id="dateFrom" placeholder="С даты">
+            <input type="date" class="form-control" id="adminDateFrom" placeholder="С даты">
         </div>
         <div class="col-md-3">
-            <input type="date" class="form-control" id="dateTo" placeholder="По дату">
+            <input type="date" class="form-control" id="adminDateTo" placeholder="По дату">
         </div>
     </div>
 </div>
@@ -97,20 +97,20 @@
                         <td>{{ order[6] }}</td>
                         <td>
                             {% if order[8] and order[8] != '' and order[8] != 'NULL' %}
-                            <img src="{{ url_for('static', filename=order[8]) }}" 
+                            <img src="{{ url_for('static', filename=order[8]) }}"
                                  class="instrument-thumb" alt="{{ order[6] }}">
                             {% else %}
-                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}"
                                  class="instrument-thumb" alt="No image">
                             {% endif %}
                         </td>
                         <td>{{ order[7] }} шт.</td>
                         <td class="fw-bold text-primary">{{ "%.2f"|format(order[3]) }} ₽</td>
                         <td>
-                            <select class="form-select form-select-sm status-select" 
+                            <select class="form-select form-select-sm status-select"
                                     data-order-id="{{ order[0] }}">
                                 {% for status in statuses %}
-                                <option value="{{ status[0] }}" 
+                                <option value="{{ status[0] }}"
                                         {% if status[1] == order[4] %}selected{% endif %}>
                                     {{ status[1] }}
                                 </option>
@@ -118,7 +118,7 @@
                             </select>
                         </td>
                         <td class="text-end px-4">
-                            <a href="{{ url_for('admin_order_detail', order_id=order[0]) }}" 
+                            <a href="{{ url_for('admin_order_detail', order_id=order[0]) }}"
                                class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-eye"></i>
                             </a>
@@ -137,125 +137,78 @@ document.addEventListener('DOMContentLoaded', function() {
         select.addEventListener('change', function() {
             const orderId = this.dataset.orderId;
             const statusId = this.value;
-            
+
             if (!confirm('Изменить статус заказа?')) {
                 const previousValue = this.querySelector('option[selected]')?.value;
                 if (previousValue) this.value = previousValue;
                 return;
             }
-            
+
             fetch('/admin/update_order_status', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    order_id: orderId,
-                    status_id: statusId
-                })
+                body: JSON.stringify({ order_id: orderId, status_id: statusId })
             })
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
-                if (data.success) {
-                    alert('Статус обновлен');
-                    location.reload();
-                } else {
-                    alert('Ошибка: ' + data.message);
-                }
+                if (data.success) { alert('Статус обновлен'); location.reload(); }
+                else { alert('Ошибка: ' + data.message); }
             })
-            .catch(error => {
-                alert('Ошибка соединения');
-            });
+            .catch(() => alert('Ошибка соединения'));
         });
     });
-    
+
     function filterTable() {
-        const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
-        const statusFilter = document.getElementById('statusFilter')?.value || '';
-        const dateFrom = document.getElementById('dateFrom')?.value || '';
-        const dateTo = document.getElementById('dateTo')?.value || '';
-        const rows = document.querySelectorAll('#ordersTable tbody tr');
+        const search     = document.getElementById('adminSearchInput').value.toLowerCase();
+        const statusVal  = document.getElementById('adminStatusFilter').value;
+        const dateFrom   = document.getElementById('adminDateFrom').value;
+        const dateTo     = document.getElementById('adminDateTo').value;
+        const rows       = document.querySelectorAll('#ordersTable tbody tr');
         let visibleCount = 0;
-        
+
         rows.forEach(row => {
-            const orderNumber = row.cells[0].textContent.toLowerCase();
-            const user = row.cells[2].textContent.toLowerCase();
-            
-            const statusSelect = row.cells[7].querySelector('select');
-            const selectedOption = statusSelect.options[statusSelect.selectedIndex];
-            const orderStatusText = selectedOption ? selectedOption.textContent.trim() : '';
-            
-            const dateStr = row.cells[1].textContent;
-            
+            const orderNumber  = row.cells[0].textContent.toLowerCase();
+            const user         = row.cells[2].textContent.toLowerCase();
+            const instrument   = row.cells[3].textContent.toLowerCase();
+            const sel         = row.cells[7].querySelector('select');
+            const statusText  = sel ? sel.options[sel.selectedIndex].textContent.trim() : '';
+            const dateStr     = row.cells[1].textContent.trim();
+
             let show = true;
-            
-            if (search && !orderNumber.includes(search) && !user.includes(search)) {
-                show = false;
-            }
-            
-            if (statusFilter && orderStatusText !== statusFilter) {
-                show = false;
-            }
-            
+            if (search && !orderNumber.includes(search) && !user.includes(search) && !instrument.includes(search)) show = false;
+            if (statusVal && statusText !== statusVal) show = false;
+
             if (show && (dateFrom || dateTo)) {
                 try {
                     const [day, month, year] = dateStr.split('.');
-                    const orderDate = new Date(year, month-1, day);
-                    orderDate.setHours(0, 0, 0, 0);
-                    
-                    if (dateFrom) {
-                        const fromDate = new Date(dateFrom);
-                        fromDate.setHours(0, 0, 0, 0);
-                        if (orderDate < fromDate) show = false;
-                    }
-                    
-                    if (dateTo) {
-                        const toDate = new Date(dateTo);
-                        toDate.setHours(23, 59, 59, 999);
-                        if (orderDate > toDate) show = false;
-                    }
-                } catch (e) {
-                    console.log('Date parsing error', e);
-                }
+                    const d = new Date(year, month - 1, day);
+                    if (dateFrom && d < new Date(dateFrom)) show = false;
+                    if (dateTo  && d > new Date(dateTo + 'T23:59:59')) show = false;
+                } catch(e) {}
             }
-            
+
             row.style.display = show ? '' : 'none';
             if (show) visibleCount++;
         });
-        
-        const counterEl = document.querySelector('.text-muted.mb-0');
-        if (counterEl) {
-            const totalCount = rows.length;
-            counterEl.innerHTML = `Всего заказов: ${totalCount} | Отображено: ${visibleCount}`;
-        }
-        
+
         const tableBody = document.querySelector('#ordersTable tbody');
-        let noResultsRow = document.getElementById('noResultsRow');
-        
+        let noRow = document.getElementById('noResultsRow');
         if (visibleCount === 0) {
-            if (!noResultsRow) {
-                noResultsRow = document.createElement('tr');
-                noResultsRow.id = 'noResultsRow';
-                noResultsRow.innerHTML = '<td colspan="9" class="text-center py-4">Заказы не найдены</td>';
-                tableBody.appendChild(noResultsRow);
+            if (!noRow) {
+                noRow = document.createElement('tr');
+                noRow.id = 'noResultsRow';
+                noRow.innerHTML = '<td colspan="9" class="text-center py-4">Заказы не найдены</td>';
+                tableBody.appendChild(noRow);
             }
-        } else if (noResultsRow) {
-            noResultsRow.remove();
+        } else if (noRow) {
+            noRow.remove();
         }
     }
-    
-    const searchInput = document.getElementById('searchInput');
-    const statusFilter = document.getElementById('statusFilter');
-    const dateFrom = document.getElementById('dateFrom');
-    const dateTo = document.getElementById('dateTo');
-    
-    if (searchInput) searchInput.addEventListener('input', filterTable);
-    if (statusFilter) statusFilter.addEventListener('change', filterTable);
-    if (dateFrom) dateFrom.addEventListener('change', filterTable);
-    if (dateTo) dateTo.addEventListener('change', filterTable);
-    
-    console.log('Filter initialized');
-    document.getElementById('statusFilter')?.addEventListener('change', function() {
-        console.log('Status filter changed to:', this.value);
-    });
+
+    document.getElementById('adminSearchInput').addEventListener('input', filterTable);
+    document.getElementById('adminStatusFilter').addEventListener('change', filterTable);
+    document.getElementById('adminDateFrom').addEventListener('change', filterTable);
+    document.getElementById('adminDateTo').addEventListener('change', filterTable);
 });
 </script>
 {% endblock %}

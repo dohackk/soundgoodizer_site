@@ -66,7 +66,7 @@
 <div class="filter-section">
     <div class="row g-3">
         <div class="col-md-3">
-            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по названию или модели...">
+            <input type="text" class="form-control" id="adminSearchInput" placeholder="Поиск по названию или модели...">
         </div>
         <div class="col-md-2">
             <select class="form-select" id="brandFilter">
@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     function filterTable() {
-        const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
+        const search = document.getElementById('adminSearchInput')?.value.toLowerCase() || '';
         const brand = document.getElementById('brandFilter')?.value || '';
         const category = document.getElementById('categoryFilter')?.value || '';
         const condition = document.getElementById('conditionFilter')?.value || '';
@@ -527,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    document.getElementById('searchInput')?.addEventListener('input', filterTable);
+    document.getElementById('adminSearchInput')?.addEventListener('input', filterTable);
     document.getElementById('brandFilter')?.addEventListener('change', filterTable);
     document.getElementById('categoryFilter')?.addEventListener('change', filterTable);
     document.getElementById('conditionFilter')?.addEventListener('change', filterTable);

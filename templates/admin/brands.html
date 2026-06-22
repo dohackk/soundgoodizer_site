@@ -54,7 +54,7 @@
 <div class="filter-section">
     <div class="row g-3">
         <div class="col-md-6">
-            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по названию или стране...">
+            <input type="text" class="form-control" id="adminSearchInput" placeholder="Поиск по названию или стране...">
         </div>
         <div class="col-md-3">
             <select class="form-select" id="countryFilter">
@@ -228,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     function filterTable() {
-        const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
+        const search = document.getElementById('adminSearchInput')?.value.toLowerCase() || '';
         const country = document.getElementById('countryFilter')?.value || '';
         const rows = document.querySelectorAll('#brandsTable tbody tr');
         
@@ -245,12 +245,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function resetFilters() {
-        document.getElementById('searchInput').value = '';
+        document.getElementById('adminSearchInput').value = '';
         document.getElementById('countryFilter').value = '';
         filterTable();
     }
     
-    document.getElementById('searchInput')?.addEventListener('input', filterTable);
+    document.getElementById('adminSearchInput')?.addEventListener('input', filterTable);
     document.getElementById('countryFilter')?.addEventListener('change', filterTable);
     
     document.querySelectorAll('.delete-brand-btn').forEach(btn => {

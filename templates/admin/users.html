@@ -69,7 +69,7 @@
 <div class="filter-section">
     <div class="row g-3">
         <div class="col-md-4">
-            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по имени или email...">
+            <input type="text" class="form-control" id="adminSearchInput" placeholder="Поиск по имени или email...">
         </div>
         <div class="col-md-3">
             <select class="form-select" id="roleFilter">
@@ -350,20 +350,21 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     function resetFilters() {
-        document.getElementById('searchInput').value = '';
+        document.getElementById('adminSearchInput').value = '';
         document.getElementById('roleFilter').value = '';
         document.getElementById('statusFilter').value = '';
         filterTable();
     }
     
     function filterTable() {
-        const search = document.getElementById('searchInput').value.toLowerCase();
+        const search = document.getElementById('adminSearchInput').value.toLowerCase();
         const role = document.getElementById('roleFilter').value;
         const status = document.getElementById('statusFilter').value;
         const rows = document.querySelectorAll('#usersTable tbody tr');
         
         rows.forEach(row => {
             const name = row.querySelector('td:first-child .fw-bold').textContent.toLowerCase();
+            const login = (row.querySelector('td:first-child .text-muted')?.textContent || '').toLowerCase();
             const email = row.querySelector('td:nth-child(2) .bi-envelope').parentElement.textContent.toLowerCase();
             
             const roleBadge = row.querySelector('td:nth-child(3) .badge');
@@ -380,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const userStatus = row.querySelector('td:nth-child(4) .badge').textContent === 'Активен' ? '1' : '0';
             
             let show = true;
-            if (search && !name.includes(search) && !email.includes(search)) show = false;
+            if (search && !name.includes(search) && !email.includes(search) && !login.includes(search)) show = false;
             if (role && userRole !== role) show = false;
             if (status && userStatus !== status) show = false;
             
@@ -388,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    document.getElementById('searchInput').addEventListener('input', filterTable);
+    document.getElementById('adminSearchInput').addEventListener('input', filterTable);
     document.getElementById('roleFilter').addEventListener('change', filterTable);
     document.getElementById('statusFilter').addEventListener('change', filterTable);
     

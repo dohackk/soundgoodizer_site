@@ -865,17 +865,17 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('index') }}">
+                        <a class="nav-link text-nowrap d-flex align-items-center" href="{{ url_for('index') }}">
                             <i class="bi bi-house-door me-1"></i>Главная
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('catalog') }}">
+                        <a class="nav-link text-nowrap d-flex align-items-center" href="{{ url_for('catalog') }}">
                             <i class="bi bi-grid me-1"></i>Каталог
                         </a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle text-nowrap d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-tools me-1"></i>Услуги
                         </a>
                         <ul class="dropdown-menu">
@@ -886,16 +886,16 @@
                     </li>
                     {% if session.get('user_role') == 'admin' %}
                     <li class="nav-item">
-                        <a class="nav-link text-danger" href="{{ url_for('admin_dashboard') }}">
+                        <a class="nav-link text-danger text-nowrap d-flex align-items-center" href="{{ url_for('admin_dashboard') }}">
                             <i class="bi bi-speedometer2 me-1"></i>Админ-панель
                         </a>
                     </li>
                     {% elif session.get('user_role') == 'technician' %}
-<li class="nav-item">
-    <a class="nav-link text-info" href="{{ url_for('technician_repair_requests') }}">
-        <i class="fas fa-wrench me-1"></i>Панель мастера
-    </a>
-</li>
+                    <li class="nav-item">
+                        <a class="nav-link text-info text-nowrap d-flex align-items-center" href="{{ url_for('technician_repair_requests') }}">
+                            <i class="bi bi-wrench me-1"></i>Панель мастера
+                        </a>
+                    </li>
                     {% endif %}
                 </ul>
                 
@@ -971,11 +971,11 @@
             <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bi bi-person me-2"></i>Профиль</a></li>
             <li><a class="dropdown-item" href="{{ url_for('orders') }}"><i class="bi bi-bag me-2"></i>Мои заказы</a></li>
             <li><a class="dropdown-item" href="{{ url_for('my_reviews') }}"><i class="bi bi-star me-2"></i>Мои отзывы</a></li>
-            {% if session.user_role == 'admin' %}
+            {% if session.get('user_role') == 'admin' %}
             <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}">
                 <i class="bi bi-speedometer2 me-2"></i>Админ-панель
             </a></li>
-            {% elif session.user_role == 'technician' %}
+            {% elif session.get('user_role') == 'technician' %}
             <li><a class="dropdown-item text-info" href="{{ url_for('technician_repair_requests') }}">
                 <i class="fas fa-wrench me-2"></i>Панель мастера
             </a></li>

@@ -56,10 +56,14 @@
         justify-content: space-around;
         text-align: center;
         margin-top: 2rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
     }
     
     .stat-item {
-        padding: 1rem;
+        padding: 0.75rem 0.5rem;
+        min-width: 70px;
+        flex: 1 1 70px;
     }
     
     .stat-number {
@@ -129,16 +133,23 @@
         margin-bottom: 1rem;
         padding-bottom: 1rem;
         border-bottom: 1px solid #eee;
+        flex-wrap: wrap;
+        gap: 4px;
     }
     
     .info-label {
         font-weight: 600;
         color: var(--primary-color);
-        min-width: 150px;
+        min-width: 120px;
+        flex-shrink: 0;
     }
     
     .info-value {
         color: #666;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        min-width: 0;
+        flex: 1;
     }
     
     .activity-timeline {
@@ -355,6 +366,28 @@
     height: 100%;
     object-fit: cover;
 }
+
+    @media (max-width: 767px) {
+        .profile-header .col-md-9 {
+            margin-top: 1rem;
+            text-align: center;
+        }
+        .profile-header .col-md-9 p {
+            justify-content: center;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .profile-header h1 {
+            font-size: 1.6rem;
+        }
+        .stat-number {
+            font-size: 1.2rem;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -405,7 +438,15 @@
             
             <div class="col-md-9">
                 <h1 class="display-5">{{ user.first_name }} {{ user.last_name }}</h1>
-                <p class="lead mb-0">{{ user.role_name }}</p>
+                <p class="lead mb-0">
+                    {% if user.role_name == 'admin' %}
+                    <i class="bi bi-shield-check text-danger me-2"></i><span class="badge bg-danger">Администратор</span>
+                    {% elif user.role_name == 'technician' %}
+                    <i class="bi bi-tools text-warning me-2"></i><span class="badge bg-warning text-dark">Специалист по ремонту</span>
+                    {% else %}
+                    <i class="bi bi-person text-info me-2"></i><span class="badge bg-info">Покупатель</span>
+                    {% endif %}
+                </p>
                 <p class="mb-0"><i class="bi bi-envelope me-2"></i>{{ user.email }}</p>
                 {% if user.phone %}
                 <p class="mb-0"><i class="bi bi-telephone me-2"></i>{{ user.phone }}</p>
@@ -437,8 +478,11 @@
     <div class="row">
         <div class="col-md-6 mb-4">
             <div class="card h-100">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Личная информация</h5>
+                    <a href="{{ url_for('edit_profile') }}" class="btn btn-light btn-sm" title="Редактировать профиль">
+                        <i class="bi bi-pencil"></i>
+                    </a>
                 </div>
                 <div class="card-body user-info-card">
                     <div class="info-row">
@@ -505,7 +549,7 @@
                                         {% elif activity[0] == 'rental' %}bg-info
                                         {% elif activity[0] == 'repair' %}bg-warning
                                         {% endif %}">
-                                        {{ activity[3] }}
+                                        {{ activity[3]|status_ru }}
                                     </span>
                                 </div>
                             </div>

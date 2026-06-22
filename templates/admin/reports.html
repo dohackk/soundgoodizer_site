@@ -160,7 +160,7 @@
     <div class="col-xl-3 col-md-6">
         <div class="card kpi-card bg-grad-blue shadow">
             <div class="card-body p-4 position-relative">
-                <div class="kpi-label">Заказы (покупки)</div>
+                <div class="kpi-label">Заказы (покупки) <small class="opacity-75">/ тек. месяц</small></div>
                 <div class="kpi-value mt-1">{{ summary.total_orders }}</div>
                 <div class="kpi-sub">
                     <i class="fas fa-ruble-sign me-1"></i>{{ "{:,.0f}".format(summary.orders_revenue).replace(",", " ") }} ₽ выручка
@@ -172,7 +172,7 @@
     <div class="col-xl-3 col-md-6">
         <div class="card kpi-card bg-grad-cyan shadow">
             <div class="card-body p-4 position-relative">
-                <div class="kpi-label">Аренда</div>
+                <div class="kpi-label">Аренда <small class="opacity-75">/ тек. месяц</small></div>
                 <div class="kpi-value mt-1">{{ summary.total_rentals }}</div>
                 <div class="kpi-sub">
                     <i class="fas fa-ruble-sign me-1"></i>{{ "{:,.0f}".format(summary.rentals_revenue).replace(",", " ") }} ₽ выручка
@@ -184,7 +184,7 @@
     <div class="col-xl-3 col-md-6">
         <div class="card kpi-card bg-grad-orange shadow">
             <div class="card-body p-4 position-relative">
-                <div class="kpi-label">Ремонты</div>
+                <div class="kpi-label">Ремонты <small class="opacity-75">/ тек. месяц</small></div>
                 <div class="kpi-value mt-1">{{ summary.total_repairs }}</div>
                 <div class="kpi-sub">
                     <i class="fas fa-ruble-sign me-1"></i>{{ "{:,.0f}".format(summary.repairs_revenue).replace(",", " ") }} ₽ выручка
@@ -196,7 +196,7 @@
     <div class="col-xl-3 col-md-6">
         <div class="card kpi-card bg-grad-green shadow">
             <div class="card-body p-4 position-relative">
-                <div class="kpi-label">Общая выручка</div>
+                <div class="kpi-label">Общая выручка <small class="opacity-75">/ тек. месяц</small></div>
                 <div class="kpi-value mt-1">{{ "{:,.0f}".format(summary.total_revenue).replace(",", " ") }}</div>
                 <div class="kpi-sub">
                     все источники, ₽

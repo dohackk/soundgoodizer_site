@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Редактирование профиля - SoundGoodizer{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+
+            <div class="d-flex align-items-center mb-4 gap-3">
+                <a href="{{ url_for('profile') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <h3 class="mb-0">Редактирование профиля</h3>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form method="POST" action="{{ url_for('edit_profile') }}">
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="firstName">Имя <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="firstName" name="first_name"
+                                   value="{{ user.first_name or '' }}" maxlength="50" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="lastName">Фамилия <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="lastName" name="last_name"
+                                   value="{{ user.last_name or '' }}" maxlength="50" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold" for="phone">Телефон</label>
+                            <input type="tel" class="form-control" id="phone" name="phone"
+                                   value="{{ user.phone or '' }}" maxlength="30"
+                                   placeholder="+7 (999) 123-45-67">
+                            <div class="form-text">Используется для связи при доставке</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Email</label>
+                            <input type="email" class="form-control" value="{{ user.email }}" disabled>
+                            <div class="form-text">Email изменить нельзя</div>
+                        </div>
+
+                        <div class="d-flex gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="bi bi-check-circle me-1"></i>Сохранить
+                            </button>
+                            <a href="{{ url_for('profile') }}" class="btn btn-outline-secondary px-4">
+                                Отмена
+                            </a>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

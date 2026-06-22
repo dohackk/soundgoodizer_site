@@ -17,19 +17,34 @@
                 <div class="card-body">
                     {% for item in cart_items %}
                     <div class="row align-items-center mb-4 pb-4 border-bottom cart-item" data-price="{{ item.price }}">
+                        {% if item.stock == 0 %}
+                        <div class="alert alert-warning mb-3 w-100" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>Товар больше не в наличии</strong><br>
+                            <small>К сожалению, "{{ item.name }}" закончился. Вы можете удалить его из корзины или проверить наличие позже.</small>
+                        </div>
+                        {% endif %}
                         <div class="col-md-2 col-3">
-                            {% if item.image %}
-                            <img src="{{ url_for('static', filename=item.image) }}" 
-                                 class="img-fluid rounded" alt="{{ item.name }}"
-                                 loading="lazy" style="height: 80px; object-fit: cover;">
-                            {% else %}
-                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
-                                 class="img-fluid rounded" alt="No image"
-                                 loading="lazy" style="height: 80px; object-fit: cover;">
-                            {% endif %}
+                            <a href="{{ url_for('instrument_detail', instrument_id=item.instrument_id) }}" 
+                               class="text-decoration-none">
+                                {% if item.image %}
+                                <img src="{{ url_for('static', filename=item.image) }}" 
+                                     class="img-fluid rounded" alt="{{ item.name }}"
+                                     loading="lazy" style="height: 80px; object-fit: cover; cursor: pointer;">
+                                {% else %}
+                                <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                     class="img-fluid rounded" alt="No image"
+                                     loading="lazy" style="height: 80px; object-fit: cover; cursor: pointer;">
+                                {% endif %}
+                            </a>
                         </div>
                         <div class="col-md-5 col-9">
-                            <h6 class="mb-1">{{ item.name }}</h6>
+                            <h6 class="mb-1">
+                                <a href="{{ url_for('instrument_detail', instrument_id=item.instrument_id) }}" 
+                                   class="text-decoration-none text-dark">
+                                    {{ item.name }}
+                                </a>
+                            </h6>
                             <p class="text-muted small mb-2">
                                 Артикул: {{ item.instrument_id }}
                             </p>
@@ -39,9 +54,14 @@
                             <div class="input-group input-group-sm">
                                 <input type="number" class="form-control text-center qty-input" 
                                        value="{{ item.quantity }}" min="1" max="{{ item.stock }}"
-                                       data-item-id="{{ item['id'] }}">
+                                       data-item-id="{{ item['id'] }}"
+                                       {% if item.stock == 0 %}disabled{% endif %}>
                             </div>
+                            {% if item.stock == 0 %}
+                            <small class="text-danger fw-bold">Нет в наличии</small>
+                            {% else %}
                             <small class="text-muted">В наличии: {{ item.stock }}</small>
+                            {% endif %}
                         </div>
                         <div class="col-md-2 col-6 mt-3 mt-md-0 text-end">
                             <div class="h6 mb-2 item-total">{{ "%.2f"|format(item.total) }} ₽</div>
@@ -64,19 +84,34 @@
                 <div class="card-body">
                     {% for item in rental_items %}
                     <div class="row align-items-center mb-4 pb-4 border-bottom">
+                        {% if item.stock == 0 %}
+                        <div class="alert alert-warning mb-3 w-100" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>Товар больше не в наличии</strong><br>
+                            <small>К сожалению, "{{ item.name }}" закончился. Вы можете удалить его из корзины или проверить наличие позже.</small>
+                        </div>
+                        {% endif %}
                         <div class="col-md-2 col-3">
-                            {% if item.image %}
-                            <img src="{{ url_for('static', filename=item.image) }}" 
-                                 class="img-fluid rounded" alt="{{ item.name }}"
-                                 loading="lazy" style="height: 80px; object-fit: cover;">
-                            {% else %}
-                            <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
-                                 class="img-fluid rounded" alt="No image"
-                                 loading="lazy" style="height: 80px; object-fit: cover;">
-                            {% endif %}
+                            <a href="{{ url_for('instrument_detail', instrument_id=item.instrument_id) }}" 
+                               class="text-decoration-none">
+                                {% if item.image %}
+                                <img src="{{ url_for('static', filename=item.image) }}" 
+                                     class="img-fluid rounded" alt="{{ item.name }}"
+                                     loading="lazy" style="height: 80px; object-fit: cover; cursor: pointer;">
+                                {% else %}
+                                <img src="{{ url_for('static', filename='img/default-instrument.jpg') }}" 
+                                     class="img-fluid rounded" alt="No image"
+                                     loading="lazy" style="height: 80px; object-fit: cover; cursor: pointer;">
+                                {% endif %}
+                            </a>
                         </div>
                         <div class="col-md-5 col-9">
-                            <h6 class="mb-1">{{ item.name }}</h6>
+                            <h6 class="mb-1">
+                                <a href="{{ url_for('instrument_detail', instrument_id=item.instrument_id) }}" 
+                                   class="text-decoration-none text-dark">
+                                    {{ item.name }}
+                                </a>
+                            </h6>
                             <p class="text-muted small mb-1">
                                 <i class="bi bi-calendar me-1"></i> {{ item.rental_start }} — {{ item.rental_end }}
                             </p>
@@ -89,8 +124,12 @@
                             <div class="input-group input-group-sm">
                                 <input type="number" class="form-control text-center rental-qty-input" 
                                        value="{{ item.quantity }}" min="1" max="10"
-                                       data-item-id="{{ item['id'] }}">
+                                       data-item-id="{{ item['id'] }}"
+                                       {% if item.stock == 0 %}disabled{% endif %}>
                             </div>
+                            {% if item.stock == 0 %}
+                            <small class="text-danger fw-bold">Нет в наличии</small>
+                            {% endif %}
                         </div>
                         <div class="col-md-2 col-6 mt-3 mt-md-0 text-end">
                             <div class="h6 mb-2">{{ "%.2f"|format(item.total) }} ₽</div>
@@ -158,15 +197,29 @@
                     
                     <div class="d-grid gap-2">
                         {% if cart_items %}
-                        <button class="btn btn-primary w-100 btn-lg" id="checkoutPurchaseBtn">
+                        {% set has_out_of_stock = cart_items | selectattr('stock', 'equalto', 0) | list | length > 0 %}
+                        <button class="btn btn-primary w-100 btn-lg" id="checkoutPurchaseBtn" 
+                                {% if has_out_of_stock %}disabled{% endif %}>
                             <i class="bi bi-truck me-2"></i>Оформить покупку
                         </button>
+                        {% if has_out_of_stock %}
+                        <small class="text-danger text-center">
+                            <i class="bi bi-info-circle me-1"></i>Удалите товары, которых нет в наличии
+                        </small>
+                        {% endif %}
                         {% endif %}
                         
                         {% if rental_items %}
-                        <button class="btn btn-info text-white w-100 btn-lg" id="checkoutRentalBtn">
+                        {% set has_rental_out_of_stock = rental_items | selectattr('stock', 'equalto', 0) | list | length > 0 %}
+                        <button class="btn btn-info text-white w-100 btn-lg" id="checkoutRentalBtn"
+                                {% if has_rental_out_of_stock %}disabled{% endif %}>
                             <i class="bi bi-calendar-check me-2"></i>Оформить аренду
                         </button>
+                        {% if has_rental_out_of_stock %}
+                        <small class="text-danger text-center">
+                            <i class="bi bi-info-circle me-1"></i>Удалите товары, которых нет в наличии
+                        </small>
+                        {% endif %}
                         {% endif %}
                     </div>
                     
@@ -188,7 +241,16 @@
                                 <i class="bi bi-truck fs-5 text-primary me-3"></i>
                                 <div>
                                     <small class="fw-bold">Доставка</small>
-                                    <p class="mb-0 text-muted small">Рассчитывается при оформлении</p>
+                                    <p class="mb-0 text-muted small">5% от суммы заказа, мин. 300 ₽. Итоговая стоимость рассчитывается при оформлении по адресу.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="list-group-item px-0 border-0">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-exclamation-triangle fs-5 text-warning me-3 mt-1"></i>
+                                <div>
+                                    <small class="fw-bold">Крупногабаритные товары</small>
+                                    <p class="mb-0 text-muted small">Для роялей, барабанных установок и других тяжёлых инструментов мы уточним стоимость доставки по телефону.</p>
                                 </div>
                             </div>
                         </div>

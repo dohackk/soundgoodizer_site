@@ -58,7 +58,7 @@
             <select class="form-select" id="adminStatusFilter">
                 <option value="">Все статусы</option>
                 {% for status in statuses %}
-                <option value="{{ status[1] }}">{{ status[1] }}</option>
+                <option value="{{ status[1] }}">{{ status[1]|status_ru }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -115,8 +115,9 @@
                                     data-rental-id="{{ rental[0] }}">
                                 {% for status in statuses %}
                                 <option value="{{ status[0] }}" 
+                                        data-status-name="{{ status[1] }}"
                                         {% if status[1] == rental[5] %}selected{% endif %}>
-                                    {{ status[1] }}
+                                    {{ status[1]|status_ru }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -186,7 +187,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const statusSelect = row.cells[7].querySelector('select');
             const selectedOption = statusSelect.options[statusSelect.selectedIndex];
-            const rentalStatusText = selectedOption ? selectedOption.textContent.trim() : '';
+            const rentalStatusName = selectedOption ? selectedOption.dataset.statusName : '';
             
             const dateStr = row.cells[1].textContent;
             
@@ -196,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 show = false;
             }
             
-            if (statusFilter && rentalStatusText !== statusFilter) {
+            if (statusFilter && rentalStatusName !== statusFilter) {
                 show = false;
             }
             

@@ -77,7 +77,7 @@
             <select class="form-select" id="statusFilter">
                 <option value="">Все статусы</option>
                 {% for status in statuses %}
-                <option value="{{ status[1] }}">{{ status[1] }}</option>
+                <option value="{{ status[1] }}">{{ status[1]|status_ru }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -137,8 +137,9 @@
                                     data-request-id="{{ req[0] }}">
                                 {% for status in statuses %}
                                 <option value="{{ status[0] }}" 
+                                        data-status-name="{{ status[1] }}"
                                         {% if status[1] == req[8] %}selected{% endif %}>
-                                    {{ status[1] }}
+                                    {{ status[1]|status_ru }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -249,7 +250,8 @@ document.addEventListener('DOMContentLoaded', function() {
         rows.forEach(row => {
             const requestNumber = row.cells[0].textContent.toLowerCase();
             const instrument = row.cells[3].textContent.toLowerCase();
-            const requestStatus = row.cells[6].querySelector('select').value;
+            const statusSelect = row.cells[6].querySelector('select');
+            const requestStatus = statusSelect?.options[statusSelect.selectedIndex]?.dataset.statusName || '';
             const dateStr = row.cells[1].textContent;
             
             let show = true;

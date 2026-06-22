@@ -899,14 +899,14 @@
                     {% endif %}
                 </ul>
                 
-<div class="position-relative me-2" style="min-width: 260px;">
+<div class="position-relative me-2" style="min-width: 340px;">
     <form class="d-flex" action="{{ url_for('catalog') }}" method="get" id="searchForm">
         <div class="input-group">
             <span class="input-group-text bg-white border-end-0">
                 <i class="bi bi-search text-primary"></i>
             </span>
             <input type="text" class="form-control border-start-0 ps-0" name="search" id="searchInput" 
-                   placeholder="Поиск..." autocomplete="off"
+                   placeholder="Поиск инструментов, брендов..." autocomplete="off"
                    value="{{ request.args.get('search', '') }}"
                    style="box-shadow: none; border-left: none;">
             <button class="btn btn-primary" type="submit">
@@ -915,8 +915,8 @@
         </div>
     </form>
     
-    <div id="searchSuggestions" class="position-absolute bg-white shadow-lg rounded-4 mt-2 w-100" 
-         style="z-index: 1000; display: none; max-height: 450px; overflow-y: auto; border: 1px solid rgba(0,0,0,0.05);">
+    <div id="searchSuggestions" class="position-absolute bg-white shadow-lg rounded-4 mt-2" 
+         style="z-index: 1000; display: none; max-height: 560px; overflow-y: auto; border: 1px solid rgba(0,0,0,0.05); width: max(100%, 400px); left: 0;">
     </div>
 </div>
 
@@ -1137,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             clearTimeout(debounceTimer);
             
-            if (query.length < 2) {
+            if (query.length < 1) {
                 suggestionsContainer.style.display = 'none';
                 return;
             }
@@ -1171,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
                 
                 currentRequest.send();
-            }, 300);
+            }, 250);
         });
         
         const RU_TO_EN = {
@@ -1203,8 +1203,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             <i class="bi bi-emoji-frown"></i>
                         </div>
                         <h6>Ничего не найдено</h6>
-                        <p class="small">Попробуйте изменить запрос</p>
+                        <p class="small">Попробуйте другой запрос или <a href="/catalog" class="text-primary">откройте каталог</a></p>
                     </div>
+                `;
+                suggestionsContainer.innerHTML += `
+                    <a href="/catalog?search=${encodeURIComponent(query)}" class="view-all-results">
+                        <span><i class="bi bi-grid me-2"></i>Искать в каталоге</span>
+                        <i class="bi bi-arrow-right"></i>
+                    </a>
                 `;
                 return;
             }
@@ -1222,7 +1228,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const detailParts = [];
                 if (brand) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-tag"></i> ${highlightedBrand}</span>`);
                 if (model) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-upc-scan"></i> ${model}</span>`);
-                if (category) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-music-note"></i> ${category}</span>`);
+                if (category) detailParts.push(`<span class="suggestion-detail-item"><i class="bi bi-music-note"></i> ${highlightMatch(category, query)}</span>`);
+
+                const stockBadge = item.in_stock 
+                    ? `<span class="suggestion-badge"><i class="bi bi-check-circle"></i> в наличии</span>`
+                    : `<span class="suggestion-badge" style="background:linear-gradient(135deg,#fce8e8,#f8d7d7);color:#c0392b;"><i class="bi bi-x-circle"></i> нет в наличии</span>`;
 
                 html += `
                     <div class="search-suggestion-item" onclick="window.location.href='${item.url}'">
@@ -1238,12 +1248,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             <div class="suggestion-details">
                                 ${detailParts.join(' ')}
                             </div>
+                            ${stockBadge}
                         </div>
                         <div class="suggestion-price-container">
-                            <div class="suggestion-price">${item.price.toLocaleString()} <small>₽</small></div>
-                            <span class="suggestion-badge">
-                                <i class="bi bi-eye"></i> в наличии
-                            </span>
+                            <div class="suggestion-price">${Number(item.price).toLocaleString('ru-RU')} <small>₽</small></div>
                         </div>
                     </div>
                 `;
@@ -1251,7 +1259,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             html += `
                 <a href="/catalog?search=${encodeURIComponent(query)}" class="view-all-results">
-                    <span><i class="bi bi-grid me-2"></i>Все результаты</span>
+                    <span><i class="bi bi-grid me-2"></i>Все результаты для «${query}»</span>
                     <i class="bi bi-arrow-right"></i>
                 </a>
             `;
@@ -1261,10 +1269,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function highlightMatch(text, query) {
             if (!text) return '';
-            const variants = getSearchVariants(query);
+            const words = query.trim().split(/\s+/).filter(w => w.length > 0);
             let result = text;
-            for (const variant of variants) {
-                if (!variant) continue;
+            const allVariants = [...words];
+            const variants = getSearchVariants(query);
+            if (variants.length > 1) allVariants.push(...variants.slice(1));
+            
+            for (const variant of allVariants) {
+                if (!variant || variant.length < 1) continue;
                 try {
                     const regex = new RegExp('(' + escapeRegExp(variant) + ')', 'gi');
                     if (regex.test(result)) {
@@ -1287,7 +1299,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         searchInput.addEventListener('focus', function() {
-            if (this.value.trim().length >= 2 && suggestionsContainer.children.length > 0) {
+            if (this.value.trim().length >= 1 && suggestionsContainer.children.length > 0) {
                 suggestionsContainer.style.display = 'block';
             }
         });

@@ -67,7 +67,7 @@
                             <select class="form-select status-select" style="width: auto; display: inline-block;" data-rental-id="{{ rental.rental_id }}">
                                 {% for status in statuses %}
                                 <option value="{{ status[0] }}" {% if status[1] == rental.status_name %}selected{% endif %}>
-                                    {{ status[1] }}
+                                    {{ status[1]|status_ru }}
                                 </option>
                                 {% endfor %}
                             </select>

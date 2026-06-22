@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Редактировать отзыв - SoundGoodizer{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="{{ url_for('my_reviews') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Назад
+        </a>
+        <h1 class="h2 mb-0"><i class="bi bi-pencil-square me-2"></i>Редактировать отзыв</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <div class="d-flex gap-3 mb-4 pb-4 border-bottom">
+                        {% if review.main_image_url %}
+                        <img src="{{ url_for('static', filename=review.main_image_url) }}"
+                             style="width:100px;height:100px;object-fit:cover;border-radius:8px;"
+                             alt="{{ review.instrument_name }}">
+                        {% else %}
+                        <div class="bg-light d-flex align-items-center justify-content-center rounded"
+                             style="width:100px;height:100px;">
+                            <i class="bi bi-music-note-beamed text-muted" style="font-size:2rem;"></i>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <h5 class="mb-1">{{ review.instrument_name }}</h5>
+                            <p class="text-muted mb-1">{{ review.brand_name or 'Без бренда' }}</p>
+                            <a href="{{ url_for('instrument_detail', instrument_id=review.instrument_id) }}"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye me-1"></i>Открыть карточку
+                            </a>
+                        </div>
+                    </div>
+
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Оценка *</label>
+                            <div class="d-flex gap-2">
+                                {% for i in range(1, 6) %}
+                                <input type="radio" class="btn-check" name="rating" value="{{ i }}"
+                                       id="rating{{ i }}" {% if review.rating == i %}checked{% endif %}>
+                                <label class="btn btn-outline-warning" for="rating{{ i }}" style="font-size:1.5rem;">
+                                    <i class="bi bi-star-fill"></i>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Заголовок</label>
+                            <input type="text" class="form-control" name="title" maxlength="100"
+                                   value="{{ review.title or '' }}"
+                                   placeholder="Например: Отличный инструмент!">
+                            <small class="text-muted">Необязательно, до 100 символов</small>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Ваш отзыв *</label>
+                            <textarea class="form-control" name="comment" rows="6" required
+                                      placeholder="Поделитесь впечатлениями об инструменте..."
+                                      maxlength="1000">{{ review.comment }}</textarea>
+                            <small class="text-muted">До 1000 символов</small>
+                        </div>
+
+                        <div class="alert alert-info mb-4">
+                            <i class="bi bi-info-circle me-2"></i>
+                            После сохранения отзыв будет отправлен на новую модерацию.
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex">
+                            <a href="{{ url_for('my_reviews') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x me-1"></i>Отмена
+                            </a>
+                            <button type="submit" class="btn btn-primary ms-md-auto">
+                                <i class="bi bi-check me-1"></i>Сохранить отзыв
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card bg-light mb-3">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-2"><i class="bi bi-question-circle me-2"></i>Подсказка</h6>
+                    <ul class="small mb-0">
+                        <li>Опишите, что вам понравилось или не понравилось</li>
+                        <li>Будьте честны и объективны</li>
+                        <li>Избегайте оскорблений и спама</li>
+                        <li>Отзыв должен быть полезен другим покупателям</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

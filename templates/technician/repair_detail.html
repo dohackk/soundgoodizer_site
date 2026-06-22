@@ -82,7 +82,7 @@
                             <select class="form-select status-select" style="width: auto; display: inline-block;" data-request-id="{{ repair.request_id }}">
                                 {% for status in statuses %}
                                 <option value="{{ status[0] }}" {% if status[1] == repair.status_name %}selected{% endif %}>
-                                    {{ status[1] }}
+                                    {{ status[1]|status_ru }}
                                 </option>
                                 {% endfor %}
                             </select>

@@ -85,14 +85,6 @@
                             <td>{{ order[3] }} шт.</td>
                             <td class="fw-bold text-primary">{{ "%.2f"|format(order[4]) }} ₽</td>
                             <td>
-                                {% set status_translate = {
-                                    'pending': 'Ожидает',
-                                    'confirmed': 'Подтвержден',
-                                    'processing': 'В обработке',
-                                    'shipped': 'Отправлен',
-                                    'delivered': 'Доставлен',
-                                    'cancelled': 'Отменен'
-                                } %}
                                 <span class="badge 
                                     {% if order[5] == 'pending' %}bg-warning text-dark
                                     {% elif order[5] == 'confirmed' %}bg-info
@@ -102,27 +94,29 @@
                                     {% elif order[5] == 'cancelled' %}bg-danger
                                     {% else %}bg-secondary{% endif %} 
                                     px-3 py-2">
-                                    {{ status_translate.get(order[5], order[5]) }}
+                                    {{ order[5]|status_ru }}
                                 </span>
                             </td>
                             <td>
+                                <div class="d-flex gap-1 flex-nowrap align-items-center">
                                 <a href="{{ url_for('instrument_detail', instrument_id=order[8]) }}" 
-                                   class="btn btn-sm btn-outline-primary me-1">
+                                   class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-eye"></i>
                                 </a>
                                 {% if order[5] == 'delivered' %}
                                 {% if order[0] in reviewed_order_ids %}
                                 <button class="btn btn-sm btn-secondary" disabled title="Отзыв уже написан">
-                                    <i class="bi bi-star-fill"></i> Отзыв написан
+                                    <i class="bi bi-star-fill"></i> Написан
                                 </button>
                                 {% else %}
                                 <button class="btn btn-sm btn-success" 
                                         data-bs-toggle="modal" 
                                         data-bs-target="#reviewModal{{ order[0] }}">
-                                    <i class="bi bi-star"></i> Написать отзыв
+                                    <i class="bi bi-star"></i> Отзыв
                                 </button>
                                 {% endif %}
                                 {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -152,6 +146,7 @@
                             <th>Период</th>
                             <th>Сумма</th>
                             <th>Статус</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -180,23 +175,22 @@
                             </td>
                             <td class="fw-bold text-primary">{{ "%.2f"|format(rental[5]) }} ₽</td>
                             <td>
-                                {% set rental_status_translate = {
-                                    'reserved': 'Забронирован',
-                                    'active': 'Активная',
-                                    'completed': 'Завершена',
-                                    'cancelled': 'Отменена',
-                                    'overdue': 'Просрочена'
-                                } %}
                                 <span class="badge 
-                                    {% if rental[7] == 'reserved' %}bg-info
+                                    {% if rental[7] == 'reserved' or rental[7] == 'new' %}bg-info
                                     {% elif rental[7] == 'active' %}bg-success
                                     {% elif rental[7] == 'completed' %}bg-secondary
                                     {% elif rental[7] == 'cancelled' %}bg-danger
                                     {% elif rental[7] == 'overdue' %}bg-warning text-dark
                                     {% else %}bg-secondary{% endif %}
                                     px-3 py-2">
-                                    {{ rental_status_translate.get(rental[7], rental[7]) }}
+                                    {{ rental[7]|status_ru }}
                                 </span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('instrument_detail', instrument_id=rental[10]) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i>
+                                </a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -250,16 +244,6 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% set repair_status_translate = {
-                                    'new': 'Новая',
-                                    'diagnosed': 'Диагностика',
-                                    'waiting_approval': 'Ожидает',
-                                    'approved': 'Согласовано',
-                                    'in_progress': 'В работе',
-                                    'completed': 'Завершен',
-                                    'ready_for_pickup': 'Готов к выдаче',
-                                    'cancelled': 'Отменен'
-                                } %}
                                 <span class="badge 
                                     {% if repair[8] == 'new' %}bg-info
                                     {% elif repair[8] == 'diagnosed' %}bg-primary
@@ -271,7 +255,7 @@
                                     {% elif repair[8] == 'cancelled' %}bg-danger
                                     {% else %}bg-secondary{% endif %}
                                     px-3 py-2">
-                                    {{ repair_status_translate.get(repair[8], repair[8]) }}
+                                    {{ repair[8]|status_ru }}
                                 </span>
                             </td>
                             <td>
@@ -336,16 +320,6 @@
                     <div class="col-md-6">
                         <label class="fw-bold text-muted small">Статус</label>
                         <p class="mb-0">
-                            {% set repair_status_translate = {
-                                'new': 'Новая',
-                                'diagnosed': 'Диагностика',
-                                'waiting_approval': 'Ожидает',
-                                'approved': 'Согласовано',
-                                'in_progress': 'В работе',
-                                'completed': 'Завершен',
-                                'ready_for_pickup': 'Готов к выдаче',
-                                'cancelled': 'Отменен'
-                            } %}
                             <span class="badge 
                                 {% if repair[8] == 'new' %}bg-info
                                 {% elif repair[8] == 'diagnosed' %}bg-primary
@@ -357,7 +331,7 @@
                                 {% elif repair[8] == 'cancelled' %}bg-danger
                                 {% else %}bg-secondary{% endif %}
                                 px-3 py-2">
-                                {{ repair_status_translate.get(repair[8], repair[8]) }}
+                                {{ repair[8]|status_ru }}
                             </span>
                         </p>
                     </div>

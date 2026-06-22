@@ -90,7 +90,7 @@
             <select class="form-select" id="adminStatusFilter">
                 <option value="">Все статусы</option>
                 {% for status in statuses %}
-                <option value="{{ status[1] }}">{{ status[1] }}</option>
+                <option value="{{ status[1] }}">{{ status[1]|status_ru }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -167,8 +167,9 @@
                                     data-request-id="{{ req[0] }}">
                                 {% for status in statuses %}
                                 <option value="{{ status[0] }}" 
+                                        data-status-name="{{ status[1] }}"
                                         {% if status[1] == req[8] %}selected{% endif %}>
-                                    {{ status[1] }}
+                                    {{ status[1]|status_ru }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -344,7 +345,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const statusSelect = row.cells[7].querySelector('select');
             const selectedOption = statusSelect.options[statusSelect.selectedIndex];
-            const requestStatusText = selectedOption ? selectedOption.textContent.trim() : '';
+            const requestStatusName = selectedOption ? selectedOption.dataset.statusName : '';
             
             const technicianSelect = row.cells[8].querySelector('select');
             const technicianValue = technicianSelect.value;
@@ -357,7 +358,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 show = false;
             }
             
-            if (statusFilter && requestStatusText !== statusFilter) {
+            if (statusFilter && requestStatusName !== statusFilter) {
                 show = false;
             }
             

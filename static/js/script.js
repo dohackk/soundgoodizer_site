@@ -3,13 +3,17 @@ $(document).ready(function() {
     $('[data-bs-toggle="popover"]').popover();
 
     $(document).on('click', '.add-to-cart-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const instrumentId = $(this).data('instrument-id');
+        const instrumentName = $(this).data('instrument-name') || '';
 
-        if ($(this).closest('.instrument-col').length === 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            const instrumentId = $(this).data('instrument-id');
+        if (instrumentName !== '') {
+            showAddTypeModal(instrumentId, instrumentName);
+        } else {
             addToCartAjax(instrumentId, $(this));
         }
+        return false;
     });
 
     $('#searchInput').on('input', debounce(function() {
@@ -77,6 +81,201 @@ function addToCartAjax(instrumentId, $btn) {
             $btn.prop('disabled', false).html(originalHtml);
         }
     });
+}
+
+function showAddTypeModal(instrumentId, instrumentName) {
+    const existing = document.getElementById('addTypeModal');
+    if (existing) existing.remove();
+
+    const modalHtml = `
+    <div class="modal fade" id="addTypeModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+
+                <!-- Шаг 1: выбор типа -->
+                <div id="stepChoose">
+                    <div class="modal-header border-0 pb-0 pt-4 px-4">
+                        <div>
+                            <h5 class="modal-title fw-bold mb-1">Добавить в корзину</h5>
+                            <p class="text-muted small mb-0" id="modalInstrumentNameStep1" style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></p>
+                        </div>
+                        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body px-4 py-4">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <button id="addTypeBuyBtn"
+                                    class="btn w-100 h-100 d-flex flex-column align-items-center justify-content-center gap-2 py-4 rounded-3"
+                                    style="background:#f0f6ff;border:2px solid #c6deff;color:#1a4fa0;transition:all .2s;">
+                                    <i class="bi bi-cart-plus" style="font-size:2rem;"></i>
+                                    <span class="fw-semibold">Купить</span>
+                                    <span class="small text-muted fw-normal">Добавить в корзину</span>
+                                </button>
+                            </div>
+                            <div class="col-6">
+                                <button id="addTypeRentBtn"
+                                    class="btn w-100 h-100 d-flex flex-column align-items-center justify-content-center gap-2 py-4 rounded-3"
+                                    style="background:#f0fbff;border:2px solid #b8e8ff;color:#0a6e9e;transition:all .2s;">
+                                    <i class="bi bi-calendar-check" style="font-size:2rem;"></i>
+                                    <span class="fw-semibold">Аренда</span>
+                                    <span class="small text-muted fw-normal">Выбрать даты</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Шаг 2: выбор дат аренды -->
+                <div id="stepRental" style="display:none;">
+                    <div class="modal-header border-0 pb-0 pt-4 px-4">
+                        <div>
+                            <button class="btn btn-sm btn-link text-muted p-0 mb-1" id="backToChoose">
+                                <i class="bi bi-arrow-left me-1"></i>Назад
+                            </button>
+                            <h5 class="modal-title fw-bold mb-1">Аренда</h5>
+                            <p class="text-muted small mb-0" id="modalInstrumentNameStep2" style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></p>
+                        </div>
+                        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold small">Дата начала</label>
+                                <input type="date" class="form-control" id="catalogRentalStart">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold small">Дата окончания</label>
+                                <input type="date" class="form-control" id="catalogRentalEnd">
+                            </div>
+                        </div>
+                        <div class="bg-light rounded-3 p-3">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span class="text-muted">Цена за день:</span>
+                                <span class="fw-semibold" id="catalogDailyPrice">—</span>
+                            </div>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span class="text-muted">Количество дней:</span>
+                                <span class="fw-semibold" id="catalogRentalDays">—</span>
+                            </div>
+                            <hr class="my-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="fw-semibold">Итого:</span>
+                                <span class="fw-bold text-primary" id="catalogRentalTotal">—</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 px-4 pb-4 pt-0">
+                        <button type="button" class="btn btn-primary w-100 py-2 rounded-3 fw-semibold" id="catalogAddRentalBtn">
+                            <i class="bi bi-calendar-plus me-2"></i>Добавить в корзину
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modalEl = document.getElementById('addTypeModal');
+    const modal = new bootstrap.Modal(modalEl);
+
+    document.getElementById('modalInstrumentNameStep1').textContent = instrumentName;
+    document.getElementById('modalInstrumentNameStep2').textContent = instrumentName;
+
+    document.getElementById('addTypeBuyBtn').addEventListener('click', function() {
+        modal.hide();
+        const $btn = $('[data-instrument-id="' + instrumentId + '"].add-to-cart-btn').first();
+        addToCartAjax(instrumentId, $btn.length ? $btn : $('<button>'));
+    });
+
+    document.getElementById('addTypeRentBtn').addEventListener('click', function() {
+        document.getElementById('stepChoose').style.display = 'none';
+        document.getElementById('stepRental').style.display = '';
+
+        const today = new Date();
+        const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+        const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7);
+        const fmt = d => d.toISOString().split('T')[0];
+
+        const startInput = document.getElementById('catalogRentalStart');
+        const endInput = document.getElementById('catalogRentalEnd');
+        startInput.min = fmt(tomorrow);
+        endInput.min = fmt(tomorrow);
+        startInput.value = fmt(tomorrow);
+        endInput.value = fmt(nextWeek);
+
+        fetch('/api/instrument_rental_price/' + instrumentId)
+            .then(r => r.json())
+            .then(data => {
+                window._catalogRentalPrice = data.price || 0;
+                document.getElementById('catalogDailyPrice').textContent =
+                    parseFloat(data.price).toLocaleString('ru-RU') + ' ₽/день';
+                updateRentalCalc();
+            })
+            .catch(() => {
+                window._catalogRentalPrice = 0;
+            });
+    });
+
+    document.getElementById('backToChoose').addEventListener('click', function() {
+        document.getElementById('stepRental').style.display = 'none';
+        document.getElementById('stepChoose').style.display = '';
+    });
+
+    function updateRentalCalc() {
+        const start = document.getElementById('catalogRentalStart').value;
+        const end = document.getElementById('catalogRentalEnd').value;
+        const price = window._catalogRentalPrice || 0;
+        if (!start || !end) return;
+        const days = Math.ceil((new Date(end) - new Date(start)) / 86400000);
+        if (days <= 0) return;
+        document.getElementById('catalogRentalDays').textContent = days + ' дн.';
+        document.getElementById('catalogRentalTotal').textContent =
+            (price * days).toLocaleString('ru-RU') + ' ₽';
+    }
+
+    document.getElementById('catalogRentalStart').addEventListener('change', updateRentalCalc);
+    document.getElementById('catalogRentalEnd').addEventListener('change', updateRentalCalc);
+
+    document.getElementById('catalogAddRentalBtn').addEventListener('click', function() {
+        const start = document.getElementById('catalogRentalStart').value;
+        const end = document.getElementById('catalogRentalEnd').value;
+
+        if (!start || !end) {
+            showNotification('Выберите даты аренды', 'warning');
+            return;
+        }
+        if (new Date(end) <= new Date(start)) {
+            showNotification('Дата окончания должна быть позже даты начала', 'warning');
+            return;
+        }
+
+        fetch('/add_to_rental_cart', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({instrument_id: instrumentId, rental_start: start, rental_end: end, quantity: 1})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                modal.hide();
+                if (typeof updateCartCount === 'function') updateCartCount();
+                showNotification('Добавлено в корзину для аренды', 'success');
+            } else if (data.redirect) {
+                window.location.href = data.redirect;
+            } else {
+                showNotification(data.message || 'Ошибка', 'danger');
+            }
+        })
+        .catch(() => showNotification('Ошибка соединения', 'danger'));
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function() {
+        modalEl.remove();
+    });
+
+    modal.show();
 }
 
 function updateCartBadge(count) {

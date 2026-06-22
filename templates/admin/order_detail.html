@@ -73,7 +73,7 @@
                             <select class="form-select status-select" style="width: auto; display: inline-block;" data-order-id="{{ order.order_id }}">
                                 {% for status in statuses %}
                                 <option value="{{ status[0] }}" {% if status[1] == order.status_name %}selected{% endif %}>
-                                    {{ status[1] }}
+                                    {{ status[1]|status_ru }}
                                 </option>
                                 {% endfor %}
                             </select>

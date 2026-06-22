@@ -10,16 +10,33 @@ from functools import wraps
 from collections import namedtuple
 import resend
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from werkzeug.utils import secure_filename
 import dns.resolver
 import random
 import uuid
+import re
 from urllib.parse import urlparse
 import magic
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+
+
+def to_moscow_time(dt):
+    """Конвертирует UTC datetime в московское время (UTC+3)"""
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+        except:
+            return dt
+    if dt.tzinfo is None:
+        # Если нет tzinfo, предполагаем UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    moscow_tz = timezone(timedelta(hours=3))
+    return dt.astimezone(moscow_tz).replace(tzinfo=None)
 
 
 UPLOAD_FOLDER = 'static/uploads/avatars'
@@ -48,6 +65,61 @@ app.config['MAIL_DEFAULT_SENDER'] = (
 
 from flask_mail import Mail, Message
 mail = Mail(app)
+
+STATUS_TRANSLATIONS = {
+    'pending': 'Ожидает',
+    'confirmed': 'Подтверждён',
+    'processing': 'В обработке',
+    'shipped': 'Отправлен',
+    'delivered': 'Доставлен',
+    'cancelled': 'Отменён',
+    'new': 'Новая',
+    'reserved': 'Забронирована',
+    'active': 'Активная',
+    'completed': 'Завершена',
+    'overdue': 'Просрочена',
+    'diagnosed': 'Диагностика',
+    'waiting_approval': 'Ожидает согласования',
+    'approved': 'Согласовано',
+    'in_progress': 'В работе',
+    'ready_for_pickup': 'Готов к выдаче',
+}
+
+
+def translate_status(status_name):
+    if not status_name:
+        return ''
+    return STATUS_TRANSLATIONS.get(status_name, status_name)
+
+
+app.jinja_env.filters['status_ru'] = translate_status
+
+ROLE_TRANSLATIONS = {
+    'admin': 'Администратор',
+    'technician': 'Мастер',
+    'customer': 'Клиент',
+}
+
+REVIEW_SOURCE_TRANSLATIONS = {
+    'purchase': 'Покупка',
+    'rental': 'Аренда',
+}
+
+
+def translate_role(role_name):
+    if not role_name:
+        return ''
+    return ROLE_TRANSLATIONS.get(role_name, role_name)
+
+
+def translate_review_source(source):
+    if not source:
+        return ''
+    return REVIEW_SOURCE_TRANSLATIONS.get(source, source)
+
+
+app.jinja_env.filters['role_ru'] = translate_role
+app.jinja_env.filters['review_source_ru'] = translate_review_source
 
 resend.api_key = os.environ.get('RESEND_API_KEY', '')
 
@@ -109,6 +181,46 @@ def get_db_pool():
         _db_pool = None
 
     return _db_pool
+
+def ensure_review_schema():
+    """Добавляет поддержку отзывов из аренды (миграция при первом запуске)."""
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'reviews' AND column_name = 'rental_id'
+        """)
+        if cursor.fetchone():
+            release_conn(conn)
+            return
+
+        cursor.execute("ALTER TABLE reviews ALTER COLUMN order_id DROP NOT NULL")
+        cursor.execute("""
+            ALTER TABLE reviews
+            ADD COLUMN rental_id INT REFERENCES rental_orders(rental_id)
+        """)
+        cursor.execute("""
+            ALTER TABLE reviews
+            ADD CONSTRAINT chk_review_source CHECK (
+                (order_id IS NOT NULL AND rental_id IS NULL) OR
+                (order_id IS NULL AND rental_id IS NOT NULL)
+            )
+        """)
+        cursor.execute("""
+            CREATE UNIQUE INDEX uq_user_rental_review
+            ON reviews(user_id, rental_id)
+            WHERE rental_id IS NOT NULL
+        """)
+        conn.commit()
+        print("[DB] Миграция reviews: добавлена поддержка отзывов из аренды")
+    except Exception as e:
+        conn.rollback()
+        print(f"[DB] Миграция reviews пропущена или уже выполнена: {e}")
+    finally:
+        release_conn(conn)
 
 def get_db_connection():
     pool = get_db_pool()
@@ -514,9 +626,24 @@ def catalog():
     params = []
     
     if search:
-        where_conditions.append("(i.name ILIKE %s OR i.description ILIKE %s OR i.model ILIKE %s)")
-        search_term = f"%{search}%"
-        params.extend([search_term, search_term, search_term])
+        search_conditions = []
+        search_params = []
+        search_variants = get_search_variants(search)
+        for word in search.split():
+            if len(word) >= 4:
+                search_variants.append(word[:max(3, len(word)-2)])
+        search_variants = list(dict.fromkeys(search_variants))
+
+        for variant in search_variants:
+            term = f"%{variant}%"
+            search_conditions.append(
+                "(i.name ILIKE %s OR i.description ILIKE %s OR i.model ILIKE %s "
+                "OR b.brand_name ILIKE %s OR c.category_name ILIKE %s)"
+            )
+            search_params.extend([term, term, term, term, term])
+
+        where_conditions.append("(" + " OR ".join(search_conditions) + ")")
+        params.extend(search_params)
     
     if category_id and category_id.isdigit():
         where_conditions.append("i.category_id = %s")
@@ -560,7 +687,12 @@ def catalog():
     
     cursor = conn.cursor()
     
-    count_sql = f"SELECT COUNT(*) FROM instruments i {where_clause}"
+    count_sql = f"""
+    SELECT COUNT(*) FROM instruments i
+    LEFT JOIN brands b ON i.brand_id = b.brand_id
+    LEFT JOIN categories c ON i.category_id = c.category_id
+    {where_clause}
+    """
     cursor.execute(count_sql, params)
     total_count = cursor.fetchone()[0]
     
@@ -733,7 +865,8 @@ def instrument_detail(instrument_id):
             SELECT
                 r.review_id, r.rating, r.title, r.comment, r.created_at,
                 u.login as user_login,
-                u.avatar_url as user_avatar
+                u.avatar_url as user_avatar,
+                CASE WHEN r.order_id IS NOT NULL THEN 'purchase' ELSE 'rental' END as review_source
             FROM reviews r
             JOIN users u ON r.user_id = u.user_id
             WHERE r.instrument_id = %s AND r.is_approved = TRUE
@@ -745,6 +878,7 @@ def instrument_detail(instrument_id):
         reviews = []
         for row in review_rows:
             rev = dict(zip(review_cols, row))
+            rev['created_at'] = to_moscow_time(rev['created_at'])
             cursor.execute("""
                 SELECT photo_url FROM review_photos WHERE review_id = %s ORDER BY photo_id
             """, (rev['review_id'],))
@@ -1681,6 +1815,95 @@ def profile():
         flash(f'Ошибка при загрузке профиля: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
+
+@app.route('/edit-profile', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    """Редактирование личной информации пользователя"""
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('profile'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        if request.method == 'POST':
+            first_name = request.form.get('first_name', '').strip()
+            last_name = request.form.get('last_name', '').strip()
+            phone = request.form.get('phone', '').strip()
+            
+            errors = []
+            if not first_name:
+                errors.append('Заполните поле "Имя"')
+            if not last_name:
+                errors.append('Заполните поле "Фамилия"')
+            if len(first_name) > 50:
+                errors.append('Имя слишком длинное (максимум 50 символов)')
+            if len(last_name) > 50:
+                errors.append('Фамилия слишком длинная (максимум 50 символов)')
+            if phone and len(phone) > 30:
+                errors.append('Телефон слишком длинный')
+            
+            if errors:
+                for error in errors:
+                    flash(error, 'danger')
+                user_data = {
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'phone': phone,
+                    'email': session.get('user_email', '')
+                }
+                release_conn(conn)
+                return render_template('edit_profile.html', user=user_data)
+            
+            cursor.execute("""
+                UPDATE users 
+                SET first_name = %s, 
+                    last_name = %s,
+                    phone = %s
+                WHERE user_id = %s
+            """, (first_name, last_name, phone or None, session['user_id']))
+            
+            conn.commit()
+            session['user_name'] = f"{first_name} {last_name}"
+            
+            flash('Информация успешно обновлена', 'success')
+            release_conn(conn)
+            return redirect(url_for('profile'))
+        
+        cursor.execute("""
+            SELECT first_name, last_name, phone, email
+            FROM users
+            WHERE user_id = %s
+        """, (session['user_id'],))
+        
+        result = cursor.fetchone()
+        release_conn(conn)
+        
+        if not result:
+            flash('Пользователь не найден', 'danger')
+            return redirect(url_for('profile'))
+        
+        user_data = {
+            'first_name': result[0],
+            'last_name': result[1],
+            'phone': result[2],
+            'email': result[3]
+        }
+        
+        return render_template('edit_profile.html', user=user_data)
+        
+    except Exception as e:
+        if conn:
+            release_conn(conn)
+        print(f"Error in edit_profile: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Ошибка при редактировании профиля: {str(e)}', 'danger')
+        return redirect(url_for('profile'))
+
+
 @app.route('/check-current-password', methods=['POST'])
 @login_required
 def check_current_password():
@@ -1751,15 +1974,42 @@ def transliterate_en_to_ru(text):
     return mapping.get(lower, text)
 
 
+def normalize_ru_word(word):
+    """Упрощённая нормализация русских слов — убираем типичные окончания"""
+    word = word.lower()
+    endings = [
+        'ами', 'ями', 'ого', 'его', 'ому', 'ему', 'ой', 'ей',
+        'ах', 'ях', 'ов', 'ев', 'ью', 'ую', 'юю', 'ие', 'ые',
+        'ий', 'ый', 'ая', 'яя', 'ам', 'ям', 'ом', 'ем', 'ым',
+        'им', 'ах', 'ях', 'ой', 'ей', 'ей', 'ю', 'у', 'е',
+        'а', 'я', 'и', 'ы', 'о',
+    ]
+    if len(word) <= 4:
+        return word
+    for e in endings:
+        if word.endswith(e) and len(word) - len(e) >= 3:
+            return word[:-len(e)]
+    return word
+
+
 def get_search_variants(query):
     """Возвращает список вариантов запроса для поиска"""
     variants = [query]
     
     has_cyrillic = any('\u0400' <= c <= '\u04ff' for c in query)
     if has_cyrillic:
+        # Транслитерация
         translit = transliterate_ru_to_en(query)
         if translit != query:
             variants.append(translit)
+        normalized_words = [normalize_ru_word(w) for w in query.split()]
+        normalized = ' '.join(normalized_words)
+        if normalized != query.lower() and normalized not in variants:
+            variants.append(normalized)
+        if len(query.split()) == 1:
+            norm = normalize_ru_word(query)
+            if norm not in variants:
+                variants.append(norm)
     else:
         ru_equiv = transliterate_en_to_ru(query)
         if ru_equiv != query:
@@ -1771,10 +2021,10 @@ def get_search_variants(query):
 @app.route('/api/search_suggestions')
 @limiter.limit("60 per minute")
 def api_search_suggestions():
-    """API для автодополнения поиска с поддержкой транслитерации"""
+    """API для автодополнения поиска с поддержкой транслитерации и нормализации"""
     query = request.args.get('q', '').strip()
     
-    if len(query) < 2:
+    if len(query) < 1:
         return jsonify([])
     
     conn = get_db_connection()
@@ -1786,20 +2036,26 @@ def api_search_suggestions():
         
         variants = get_search_variants(query)
         
+        extra_variants = []
+        for word in query.split():
+            if len(word) >= 4:
+                extra_variants.append(word[:max(3, len(word)-2)])
+        
+        all_variants = list(dict.fromkeys(variants + extra_variants))
+        
         like_conditions = []
         params = []
-        for v in variants:
+        for v in all_variants:
             term = f"%{v}%"
-            like_conditions.append("(i.name ILIKE %s OR i.model ILIKE %s OR b.brand_name ILIKE %s OR c.category_name ILIKE %s)")
-            params.extend([term, term, term, term])
+            like_conditions.append(
+                "(i.name ILIKE %s OR i.model ILIKE %s OR b.brand_name ILIKE %s "
+                "OR c.category_name ILIKE %s OR i.description ILIKE %s)"
+            )
+            params.extend([term, term, term, term, term])
         
         where_clause = " OR ".join(like_conditions)
         
-        order_params = []
-        for v in variants:
-            order_params.append(f"{v}%")
-        
-        primary = f"{variants[0]}%"
+        primary = f"{all_variants[0]}%"
         
         sql = f"""
         SELECT 
@@ -1809,7 +2065,8 @@ def api_search_suggestions():
             b.brand_name,
             i.main_image_url,
             i.purchase_price,
-            c.category_name
+            c.category_name,
+            i.quantity_in_stock
         FROM instruments i
         LEFT JOIN brands b ON i.brand_id = b.brand_id
         LEFT JOIN categories c ON i.category_id = c.category_id
@@ -1818,15 +2075,19 @@ def api_search_suggestions():
         ORDER BY 
             CASE 
                 WHEN i.name ILIKE %s THEN 1
-                WHEN b.brand_name ILIKE %s THEN 2
-                WHEN i.model ILIKE %s THEN 3
-                ELSE 4
+                WHEN i.name ILIKE %s THEN 2
+                WHEN b.brand_name ILIKE %s THEN 3
+                WHEN i.model ILIKE %s THEN 4
+                WHEN c.category_name ILIKE %s THEN 5
+                ELSE 6
             END,
             i.views_count DESC
-        LIMIT 8
+        LIMIT 10
         """
         
-        params.extend([primary, primary, primary])
+        start_term = f"{all_variants[0]}%"
+        full_term = f"%{all_variants[0]}%"
+        params.extend([start_term, full_term, full_term, full_term, full_term])
         cursor.execute(sql, params)
         
         suggestions = []
@@ -1839,6 +2100,7 @@ def api_search_suggestions():
                 'image': row[4] if row[4] else 'img/default-instrument.jpg',
                 'price': row[5],
                 'category': row[6],
+                'in_stock': (row[7] or 0) > 0,
                 'url': url_for('instrument_detail', instrument_id=row[0])
             })
         
@@ -1847,6 +2109,7 @@ def api_search_suggestions():
         
     except Exception as e:
         print(f"Error in search suggestions: {e}")
+        import traceback; traceback.print_exc()
         release_conn(conn)
         return jsonify([])
 
@@ -1861,6 +2124,8 @@ def orders():
     try:
         cursor = conn.cursor()
         
+        print(f"[DEBUG] Loading orders for user: {session['user_id']}")
+        
         purchase_sql = """
         SELECT 
             po.order_id,
@@ -1868,14 +2133,14 @@ def orders():
             po.order_date,
             po.quantity,
             po.total_price,
-            os.status_name,
+            COALESCE(os.status_name, 'unknown') as status_name,
             os.color_code as status_color,
             i.name as instrument_name,
             i.instrument_id,
-            b.brand_name,
+            COALESCE(b.brand_name, '') as brand_name,
             i.main_image_url
         FROM purchase_orders po
-        JOIN order_statuses os ON po.status_id = os.status_id
+        LEFT JOIN order_statuses os ON po.status_id = os.status_id
         JOIN instruments i ON po.instrument_id = i.instrument_id
         LEFT JOIN brands b ON i.brand_id = b.brand_id
         WHERE po.user_id = %s
@@ -1884,6 +2149,7 @@ def orders():
         """
         cursor.execute(purchase_sql, (session['user_id'],))
         purchase_orders = cursor.fetchall()
+        print(f"[DEBUG] Purchase orders loaded: {len(purchase_orders)}")
         
         rental_sql = """
         SELECT 
@@ -1894,14 +2160,14 @@ def orders():
             ro.rental_end_date,
             ro.total_amount,
             ro.total_days,
-            rs.status_name,
+            COALESCE(rs.status_name, 'unknown') as status_name,
             rs.color_code as status_color,
             i.name as instrument_name,
             i.instrument_id,
-            b.brand_name,
+            COALESCE(b.brand_name, '') as brand_name,
             i.main_image_url
         FROM rental_orders ro
-        JOIN rental_statuses rs ON ro.status_id = rs.status_id
+        LEFT JOIN rental_statuses rs ON ro.status_id = rs.status_id
         JOIN instruments i ON ro.instrument_id = i.instrument_id
         LEFT JOIN brands b ON i.brand_id = b.brand_id
         WHERE ro.user_id = %s
@@ -1909,6 +2175,7 @@ def orders():
         """
         cursor.execute(rental_sql, (session['user_id'],))
         rental_orders = cursor.fetchall()
+        print(f"[DEBUG] Rental orders loaded: {len(rental_orders)}")
 
         repair_sql = """
         SELECT 
@@ -1920,20 +2187,27 @@ def orders():
             rr.model,
             rr.problem_description,
             rr.actual_cost,
-            rs.status_name,
+            COALESCE(rs.status_name, 'unknown') as status_name,
             rr.problem_photos_urls
         FROM repair_requests rr
-        JOIN repair_statuses rs ON rr.status_id = rs.status_id
+        LEFT JOIN repair_statuses rs ON rr.status_id = rs.status_id
         WHERE rr.user_id = %s
         ORDER BY rr.created_at DESC
         """
         cursor.execute(repair_sql, (session['user_id'],))
         repair_requests = cursor.fetchall()
+        print(f"[DEBUG] Repair requests loaded: {len(repair_requests)}")
 
         cursor.execute("""
-            SELECT order_id FROM reviews WHERE user_id = %s
+            SELECT DISTINCT r.order_id FROM reviews r
+            WHERE r.user_id = %s AND r.order_id IS NOT NULL
         """, (session['user_id'],))
-        reviewed_order_ids = {row[0] for row in cursor.fetchall()}
+        reviewed_order_ids = set()
+        for row in cursor.fetchall():
+            try:
+                reviewed_order_ids.add(int(row[0]))
+            except (TypeError, ValueError):
+                pass
 
         release_conn(conn)
         
@@ -1943,8 +2217,12 @@ def orders():
                              repair_requests=repair_requests,
                              reviewed_order_ids=reviewed_order_ids)
     except Exception as e:
-        release_conn(conn)
-        flash(f'Ошибка при загрузке заказов: {str(e)}', 'danger')
+        if conn:
+            release_conn(conn)
+        print(f"[ERROR] Error in orders(): {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Ошибка при загрузке заказов. Пожалуйста, попробуйте позже.', 'danger')
         return redirect(url_for('profile'))
 
 @app.route('/add_to_rental_cart', methods=['POST'])
@@ -2289,6 +2567,14 @@ def checkout():
     try:
         cursor = conn.cursor()
         
+        cursor.execute("SELECT phone, first_name, last_name, city, address FROM users WHERE user_id = %s", (session['user_id'],))
+        user_row = cursor.fetchone()
+        user_phone = user_row[0] if user_row and user_row[0] else ''
+        user_first_name = user_row[1] if user_row and user_row[1] else ''
+        user_last_name = user_row[2] if user_row and user_row[2] else ''
+        user_city = user_row[3] if user_row and user_row[3] else 'Новокузнецк'
+        user_address = user_row[4] if user_row and user_row[4] else ''
+        
         sql = """
         SELECT ci.cart_item_id, ci.instrument_id, ci.quantity,
                i.name, i.purchase_price, i.main_image_url, i.quantity_in_stock
@@ -2323,7 +2609,10 @@ def checkout():
         
         release_conn(conn)
         
-        return render_template('checkout.html', cart_items=items_list, total=total)
+        return render_template('checkout.html', cart_items=items_list, total=total, 
+                             user_phone=user_phone, user_first_name=user_first_name,
+                             user_last_name=user_last_name, user_city=user_city,
+                             user_address=user_address)
         
     except Exception as e:
         release_conn(conn)
@@ -2369,7 +2658,6 @@ def create_order():
             delivery_cost = data.get('delivery_cost', 0) if index == 0 else 0
             total_with_delivery = item_total + delivery_cost
             
-            # Генерируем уникальный номер заказа с повторными попытками при коллизии
             for _ in range(10):
                 order_number = generate_order_number()
                 cursor.execute("SELECT 1 FROM purchase_orders WHERE order_number = %s", (order_number,))
@@ -2445,6 +2733,10 @@ def rental_checkout():
     try:
         cursor = conn.cursor()
         
+        cursor.execute("SELECT phone FROM users WHERE user_id = %s", (session['user_id'],))
+        user_phone = cursor.fetchone()
+        user_phone = user_phone[0] if user_phone and user_phone[0] else ''
+        
         cursor.execute("""
             SELECT 
                 ci.cart_item_id,
@@ -2497,7 +2789,8 @@ def rental_checkout():
                              today=today,
                              default_start=tomorrow,
                              default_end=next_week,
-                             total_deposit=total_deposit)
+                             total_deposit=total_deposit,
+                             user_phone=user_phone)
         
     except Exception as e:
         print(f"Error in rental_checkout: {e}")
@@ -2812,13 +3105,34 @@ def admin_dashboard():
         stats['repairs_today'] = cursor.fetchone()[0] or 0
         
         cursor.execute("""
-            SELECT SUM(total_price) FROM purchase_orders 
-            WHERE order_date >= NOW() - INTERVAL '1 month'
+            SELECT SUM(po.total_price)
+            FROM purchase_orders po
+            WHERE DATE_TRUNC('month', po.order_date) = DATE_TRUNC('month', NOW())
+            AND po.status_id NOT IN (SELECT status_id FROM order_statuses WHERE status_name = 'cancelled')
         """)
-        stats['monthly_revenue'] = cursor.fetchone()[0] or 0
+        orders_month = cursor.fetchone()[0] or 0
+
+        cursor.execute("""
+            SELECT SUM(ro.total_amount)
+            FROM rental_orders ro
+            WHERE DATE_TRUNC('month', ro.created_at) = DATE_TRUNC('month', NOW())
+            AND ro.status_id NOT IN (SELECT status_id FROM rental_statuses WHERE status_name = 'cancelled')
+        """)
+        rentals_month = cursor.fetchone()[0] or 0
+
+        cursor.execute("""
+            SELECT SUM(rr.actual_cost)
+            FROM repair_requests rr
+            WHERE DATE_TRUNC('month', rr.created_at) = DATE_TRUNC('month', NOW())
+            AND rr.actual_cost IS NOT NULL
+        """)
+        repairs_month = cursor.fetchone()[0] or 0
+
+        stats['monthly_revenue'] = (orders_month or 0) + (rentals_month or 0) + (repairs_month or 0)
         
         cursor.execute("""
             SELECT AVG(total_price) FROM purchase_orders
+            WHERE status_id NOT IN (SELECT status_id FROM order_statuses WHERE status_name = 'cancelled')
         """)
         stats['avg_order'] = cursor.fetchone()[0] or 0
         
@@ -4405,18 +4719,42 @@ def api_categories():
         release_conn(conn)
         return jsonify([])
 
+
+@app.route('/api/instrument_rental_price/<int:instrument_id>')
+def api_instrument_rental_price(instrument_id):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'price': 0})
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT rental_price_per_day FROM instruments WHERE instrument_id = %s",
+            (instrument_id,)
+        )
+        row = cursor.fetchone()
+        release_conn(conn)
+        price = float(row[0]) if row and row[0] else 0
+        return jsonify({'price': price})
+    except Exception as e:
+        release_conn(conn)
+        return jsonify({'price': 0})
+
 @app.route('/submit_review', methods=['POST'])
 @login_required
 def submit_review():
-    """Пользователь отправляет отзыв на покупку."""
+    """Пользователь отправляет отзыв на покупку или аренду."""
     try:
         order_id = request.form.get('order_id', type=int)
+        rental_id = request.form.get('rental_id', type=int)
         instrument_id = request.form.get('instrument_id', type=int)
         rating = request.form.get('rating', type=int)
         title = request.form.get('title', '').strip()
         comment = request.form.get('comment', '').strip()
 
-        if not order_id or not instrument_id or not rating or not comment:
+        if not order_id and not rental_id:
+            return jsonify({'success': False, 'message': 'Некорректные данные отзыва'})
+
+        if not instrument_id or not rating or not comment:
             return jsonify({'success': False, 'message': 'Заполните все обязательные поля'})
 
         if rating < 1 or rating > 5:
@@ -4431,35 +4769,45 @@ def submit_review():
 
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT po.order_id, po.instrument_id, os.status_name
-            FROM purchase_orders po
-            JOIN order_statuses os ON po.status_id = os.status_id
-            WHERE po.order_id = %s AND po.user_id = %s
-        """, (order_id, session['user_id']))
-        order = cursor.fetchone()
+        if order_id:
+            cursor.execute("""
+                SELECT po.order_id, po.instrument_id, os.status_name
+                FROM purchase_orders po
+                JOIN order_statuses os ON po.status_id = os.status_id
+                WHERE po.order_id = %s AND po.user_id = %s
+            """, (order_id, session['user_id']))
+            source = cursor.fetchone()
 
-        if not order:
+            if not source:
+                release_conn(conn)
+                return jsonify({'success': False, 'message': 'Заказ не найден'})
+
+            if source[2] != 'delivered':
+                release_conn(conn)
+                return jsonify({'success': False, 'message': 'Отзыв можно оставить только после получения заказа'})
+
+            if source[1] != instrument_id:
+                release_conn(conn)
+                return jsonify({'success': False, 'message': 'Инструмент не совпадает с заказом'})
+
+            cursor.execute("""
+                SELECT review_id FROM reviews WHERE user_id = %s AND order_id = %s
+            """, (session['user_id'], order_id))
+            if cursor.fetchone():
+                release_conn(conn)
+                return jsonify({'success': False, 'message': 'Вы уже оставили отзыв на этот заказ'})
+
+            cursor.execute("""
+                INSERT INTO reviews (user_id, instrument_id, order_id, rating, title, comment, is_approved, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, FALSE, NOW())
+                RETURNING review_id
+            """, (session['user_id'], instrument_id, order_id, rating,
+                  title if title else None, comment))
+
+        else:
             release_conn(conn)
-            return jsonify({'success': False, 'message': 'Заказ не найден'})
+            return jsonify({'success': False, 'message': 'Отзывы можно оставлять только на покупки'})
 
-        if order[2] != 'delivered':
-            release_conn(conn)
-            return jsonify({'success': False, 'message': 'Отзыв можно оставить только после получения заказа'})
-
-        cursor.execute("""
-            SELECT review_id FROM reviews WHERE user_id = %s AND order_id = %s
-        """, (session['user_id'], order_id))
-        if cursor.fetchone():
-            release_conn(conn)
-            return jsonify({'success': False, 'message': 'Вы уже оставили отзыв на этот заказ'})
-
-        cursor.execute("""
-            INSERT INTO reviews (user_id, instrument_id, order_id, rating, title, comment, is_approved, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, FALSE, NOW())
-            RETURNING review_id
-        """, (session['user_id'], instrument_id, order_id, rating,
-              title if title else None, comment))
         review_id = cursor.fetchone()[0]
 
         photos = request.files.getlist('photos')
@@ -4548,12 +4896,15 @@ def admin_reviews():
                 u.login as user_login,
                 i.instrument_id, i.name as instrument_name, i.main_image_url as instrument_image,
                 b.brand_name,
-                po.order_number
+                po.order_number,
+                ro.rental_number,
+                CASE WHEN r.order_id IS NOT NULL THEN 'purchase' ELSE 'rental' END as review_source
             FROM reviews r
             JOIN users u ON r.user_id = u.user_id
             JOIN instruments i ON r.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
-            JOIN purchase_orders po ON r.order_id = po.order_id
+            LEFT JOIN purchase_orders po ON r.order_id = po.order_id
+            LEFT JOIN rental_orders ro ON r.rental_id = ro.rental_id
             {where}
             ORDER BY r.created_at DESC
         """)
@@ -4563,6 +4914,7 @@ def admin_reviews():
         reviews = []
         for row in rows:
             review = dict(zip(columns, row))
+            review['created_at'] = to_moscow_time(review['created_at'])
             cursor.execute("""
                 SELECT photo_url FROM review_photos WHERE review_id = %s ORDER BY photo_id
             """, (review['review_id'],))
@@ -4680,11 +5032,14 @@ def my_reviews():
                 r.is_approved, r.is_rejected,
                 i.instrument_id, i.name as instrument_name, i.main_image_url,
                 b.brand_name,
-                po.order_number
+                po.order_number,
+                ro.rental_number,
+                CASE WHEN r.order_id IS NOT NULL THEN 'purchase' ELSE 'rental' END as review_source
             FROM reviews r
             JOIN instruments i ON r.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
-            JOIN purchase_orders po ON r.order_id = po.order_id
+            LEFT JOIN purchase_orders po ON r.order_id = po.order_id
+            LEFT JOIN rental_orders ro ON r.rental_id = ro.rental_id
             WHERE r.user_id = %s
             ORDER BY r.created_at DESC
         """, (session['user_id'],))
@@ -4695,6 +5050,7 @@ def my_reviews():
         reviews = []
         for row in rows:
             review = dict(zip(columns, row))
+            review['created_at'] = to_moscow_time(review['created_at'])
             cursor.execute("""
                 SELECT photo_url FROM review_photos WHERE review_id = %s ORDER BY photo_id
             """, (review['review_id'],))
@@ -4711,6 +5067,74 @@ def my_reviews():
         return redirect(url_for('profile'))
 
 
+@app.route('/edit_review/<int:review_id>', methods=['GET', 'POST'])
+@login_required
+def edit_review(review_id):
+    """Редактирование отзыва пользователем."""
+    conn = get_db_connection()
+    if not conn:
+        flash('Ошибка подключения к базе данных', 'danger')
+        return redirect(url_for('my_reviews'))
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT review_id FROM reviews WHERE review_id = %s AND user_id = %s
+        """, (review_id, session['user_id']))
+        if not cursor.fetchone():
+            flash('Отзыв не найден или доступ запрещён', 'danger')
+            return redirect(url_for('my_reviews'))
+        
+        if request.method == 'POST':
+            rating = request.form.get('rating', type=int)
+            title = request.form.get('title', '').strip()
+            comment = request.form.get('comment', '').strip()
+            
+            if not comment or not rating:
+                flash('Пожалуйста, заполните все поля', 'warning')
+                return redirect(url_for('edit_review', review_id=review_id))
+            
+            # Обновляем отзыв и выставляем на новую модерацию
+            cursor.execute("""
+                UPDATE reviews
+                SET rating = %s, title = %s, comment = %s, is_approved = FALSE, is_rejected = FALSE, created_at = NOW()
+                WHERE review_id = %s
+            """, (rating, title, comment, review_id))
+            conn.commit()
+            
+            flash('Отзыв обновлён и отправлен на модерацию', 'success')
+            release_conn(conn)
+            return redirect(url_for('my_reviews'))
+        
+        cursor.execute("""
+            SELECT r.review_id, r.rating, r.title, r.comment,
+                   i.instrument_id, i.name as instrument_name, i.main_image_url,
+                   b.brand_name
+            FROM reviews r
+            JOIN instruments i ON r.instrument_id = i.instrument_id
+            LEFT JOIN brands b ON i.brand_id = b.brand_id
+            WHERE r.review_id = %s AND r.user_id = %s
+        """, (review_id, session['user_id']))
+        
+        result = cursor.fetchone()
+        if not result:
+            flash('Отзыв не найден', 'danger')
+            return redirect(url_for('my_reviews'))
+        
+        review = dict(zip([col[0] for col in cursor.description], result))
+        release_conn(conn)
+        
+        return render_template('edit_review.html', review=review)
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            release_conn(conn)
+        flash(f'Ошибка: {str(e)}', 'danger')
+        return redirect(url_for('my_reviews'))
+
+
 @app.route('/admin/reports')
 @login_required
 @admin_required
@@ -4724,15 +5148,30 @@ def admin_reports():
         cursor = conn.cursor()
         from datetime import date
 
-        cursor.execute("SELECT COUNT(*), COALESCE(SUM(total_price),0) FROM purchase_orders")
+        cursor.execute("""
+            SELECT COUNT(*), COALESCE(SUM(total_price),0)
+            FROM purchase_orders
+            WHERE status_id NOT IN (SELECT status_id FROM order_statuses WHERE status_name = 'cancelled')
+            AND DATE_TRUNC('month', order_date) = DATE_TRUNC('month', NOW())
+        """)
         r = cursor.fetchone()
         total_orders, orders_revenue = r[0], float(r[1])
 
-        cursor.execute("SELECT COUNT(*), COALESCE(SUM(total_amount),0) FROM rental_orders")
+        cursor.execute("""
+            SELECT COUNT(*), COALESCE(SUM(total_amount),0)
+            FROM rental_orders
+            WHERE status_id NOT IN (SELECT status_id FROM rental_statuses WHERE status_name = 'cancelled')
+            AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
+        """)
         r = cursor.fetchone()
         total_rentals, rentals_revenue = r[0], float(r[1])
 
-        cursor.execute("SELECT COUNT(*), COALESCE(SUM(actual_cost),0) FROM repair_requests WHERE actual_cost IS NOT NULL")
+        cursor.execute("""
+            SELECT COUNT(*), COALESCE(SUM(actual_cost),0)
+            FROM repair_requests
+            WHERE actual_cost IS NOT NULL
+            AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
+        """)
         r = cursor.fetchone()
         total_repairs, repairs_revenue = r[0], float(r[1])
 
@@ -4751,6 +5190,7 @@ def admin_reports():
             FROM purchase_orders po
             JOIN instruments i ON po.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
+            WHERE po.status_id NOT IN (SELECT status_id FROM order_statuses WHERE status_name = 'cancelled')
             GROUP BY i.instrument_id, i.name, b.brand_name
             ORDER BY SUM(po.quantity) DESC
             LIMIT 7
@@ -4762,6 +5202,7 @@ def admin_reports():
             FROM rental_orders ro
             JOIN instruments i ON ro.instrument_id = i.instrument_id
             LEFT JOIN brands b ON i.brand_id = b.brand_id
+            WHERE ro.status_id NOT IN (SELECT status_id FROM rental_statuses WHERE status_name = 'cancelled')
             GROUP BY i.instrument_id, i.name, b.brand_name
             ORDER BY COUNT(*) DESC
             LIMIT 7
@@ -4775,13 +5216,17 @@ def admin_reports():
             FROM (
                 SELECT gs.month,
                     COALESCE((SELECT COUNT(*) FROM purchase_orders po
-                               WHERE DATE_TRUNC('month', po.order_date) = gs.month), 0) AS orders_cnt,
+                               WHERE DATE_TRUNC('month', po.order_date) = gs.month
+                               AND po.status_id NOT IN (SELECT status_id FROM order_statuses WHERE status_name = 'cancelled')), 0) AS orders_cnt,
                     COALESCE((SELECT COALESCE(SUM(po2.total_price),0) FROM purchase_orders po2
-                               WHERE DATE_TRUNC('month', po2.order_date) = gs.month), 0) AS orders_rev,
+                               WHERE DATE_TRUNC('month', po2.order_date) = gs.month
+                               AND po2.status_id NOT IN (SELECT status_id FROM order_statuses WHERE status_name = 'cancelled')), 0) AS orders_rev,
                     COALESCE((SELECT COUNT(*) FROM rental_orders ro
-                               WHERE DATE_TRUNC('month', ro.created_at) = gs.month), 0) AS rentals_cnt,
+                               WHERE DATE_TRUNC('month', ro.created_at) = gs.month
+                               AND ro.status_id NOT IN (SELECT status_id FROM rental_statuses WHERE status_name = 'cancelled')), 0) AS rentals_cnt,
                     COALESCE((SELECT COALESCE(SUM(ro2.total_amount),0) FROM rental_orders ro2
-                               WHERE DATE_TRUNC('month', ro2.created_at) = gs.month), 0) AS rentals_rev,
+                               WHERE DATE_TRUNC('month', ro2.created_at) = gs.month
+                               AND ro2.status_id NOT IN (SELECT status_id FROM rental_statuses WHERE status_name = 'cancelled')), 0) AS rentals_rev,
                     COALESCE((SELECT COUNT(*) FROM repair_requests rr
                                WHERE DATE_TRUNC('month', rr.created_at) = gs.month), 0) AS repairs_cnt,
                     COALESCE((SELECT COALESCE(SUM(rr2.actual_cost),0) FROM repair_requests rr2
@@ -4850,10 +5295,12 @@ def admin_reports_export():
         'доставлен': 'C6EFCE', 'завершен': 'C6EFCE', 'завершена': 'C6EFCE',
         'активная':  'C6EFCE', 'согласовано': 'C6EFCE',
         'отправлен': 'DDEBF7', 'в обработке': 'DDEBF7', 'в работе': 'DDEBF7',
-        'диагностика': 'DDEBF7', 'подтвержден': 'DDEBF7',
-        'забронирован': 'DDEBF7', 'ожидает': 'FFEB9C', 'новая': 'FFEB9C',
-        'готов к выдаче': 'FFEB9C',
-        'отменен': 'FFC7CE', 'отменена': 'FFC7CE', 'просрочена': 'FFC7CE',
+        'диагностика': 'DDEBF7', 'подтвержден': 'DDEBF7', 'подтверждён': 'DDEBF7',
+        'забронирован': 'DDEBF7', 'забронирована': 'DDEBF7',
+        'ожидает': 'FFEB9C', 'ожидает согласования': 'FFEB9C',
+        'новая': 'FFEB9C', 'готов к выдаче': 'FFEB9C',
+        'отменен': 'FFC7CE', 'отменён': 'FFC7CE', 'отменена': 'FFC7CE',
+        'просрочена': 'FFC7CE',
     }
 
     def _border():
@@ -4941,7 +5388,7 @@ def admin_reports_export():
                 JOIN instruments i ON po.instrument_id = i.instrument_id
                 LEFT JOIN brands b ON i.brand_id = b.brand_id
                 JOIN order_statuses os ON po.status_id = os.status_id
-                WHERE 1=1
+                WHERE os.status_name != 'cancelled'
             """
             params = []
             sql, params = _add_date_filter(sql, params, 'po.order_date',
@@ -4967,7 +5414,7 @@ def admin_reports_export():
                 brd = _border()
                 vals = [r[0], r[1].strftime('%d.%m.%Y') if r[1] else '',
                         r[2], r[3], r[4], r[5] or '',
-                        r[6], float(r[7]), r[8]]
+                        r[6], float(r[7]), translate_status(r[8])]
                 for col, val in enumerate(vals, 1):
                     c = ws.cell(row=i, column=col, value=val)
                     c.font  = Font(name='Calibri', size=10)
@@ -4980,7 +5427,7 @@ def admin_reports_export():
                 ws.cell(row=i, column=8).number_format = '#,##0.00 \u20bd'
                 ws.cell(row=i, column=8).font = Font(
                     name='Calibri', size=10, color=pal['header_bg'], bold=True)
-                ws.cell(row=i, column=9).fill = _status_fill(r[8])
+                ws.cell(row=i, column=9).fill = _status_fill(translate_status(r[8]))
                 ws.cell(row=i, column=9).alignment = Alignment(
                     horizontal='center', vertical='center')
                 total += float(r[7])
@@ -4999,7 +5446,7 @@ def admin_reports_export():
                 JOIN instruments i ON ro.instrument_id = i.instrument_id
                 LEFT JOIN brands b ON i.brand_id = b.brand_id
                 JOIN rental_statuses rs ON ro.status_id = rs.status_id
-                WHERE 1=1
+                WHERE rs.status_name != 'cancelled'
             """
             params = []
             sql, params = _add_date_filter(sql, params, 'ro.created_at',
@@ -5028,7 +5475,7 @@ def admin_reports_export():
                         r[2], r[3], r[4], r[5] or '',
                         r[6].strftime('%d.%m.%Y') if r[6] else '',
                         r[7].strftime('%d.%m.%Y') if r[7] else '',
-                        r[8], float(r[9]), r[10]]
+                        r[8], float(r[9]), translate_status(r[10])]
                 for col, val in enumerate(vals, 1):
                     c = ws.cell(row=i, column=col, value=val)
                     c.font  = Font(name='Calibri', size=10)
@@ -5041,7 +5488,7 @@ def admin_reports_export():
                 ws.cell(row=i, column=10).number_format = '#,##0.00 \u20bd'
                 ws.cell(row=i, column=10).font = Font(
                     name='Calibri', size=10, color=pal['header_bg'], bold=True)
-                ws.cell(row=i, column=11).fill = _status_fill(r[10])
+                ws.cell(row=i, column=11).fill = _status_fill(translate_status(r[10]))
                 ws.cell(row=i, column=11).alignment = Alignment(
                     horizontal='center', vertical='center')
                 total += float(r[9])
@@ -5085,7 +5532,7 @@ def admin_reports_export():
                 cost = float(r[8]) if r[8] else 0.0
                 vals = [r[0], r[1].strftime('%d.%m.%Y') if r[1] else '',
                         r[2], r[3], r[4], r[5] or '', r[6] or '',
-                        r[7] or '', cost, r[9]]
+                        r[7] or '', cost, translate_status(r[9])]
                 for col, val in enumerate(vals, 1):
                     c = ws.cell(row=i, column=col, value=val)
                     c.font  = Font(name='Calibri', size=10)
@@ -5105,7 +5552,7 @@ def admin_reports_export():
                     cost_c.value = '\u2014'
                     cost_c.alignment = Alignment(horizontal='center',
                                                   vertical='center')
-                ws.cell(row=i, column=10).fill = _status_fill(r[9])
+                ws.cell(row=i, column=10).fill = _status_fill(translate_status(r[9]))
                 ws.cell(row=i, column=10).alignment = Alignment(
                     horizontal='center', vertical='center')
                 total += cost
@@ -5114,7 +5561,8 @@ def admin_reports_export():
         if report_type == 'full':
             # Считаем с тем же фильтром по датам, что и основные листы
             ord_sql = ("SELECT COUNT(*), COALESCE(SUM(total_price),0) "
-                       "FROM purchase_orders WHERE 1=1")
+                       "FROM purchase_orders WHERE status_id NOT IN "
+                       "(SELECT status_id FROM order_statuses WHERE status_name = 'cancelled')")
             ord_params = []
             ord_sql, ord_params = _add_date_filter(
                 ord_sql, ord_params, 'order_date', date_from, date_to)
@@ -5122,7 +5570,8 @@ def admin_reports_export():
             rc = cursor.fetchone(); o_cnt, o_rev = rc[0], float(rc[1])
 
             rnt_sql = ("SELECT COUNT(*), COALESCE(SUM(total_amount),0) "
-                       "FROM rental_orders WHERE 1=1")
+                       "FROM rental_orders WHERE status_id NOT IN "
+                       "(SELECT status_id FROM rental_statuses WHERE status_name = 'cancelled')")
             rnt_params = []
             rnt_sql, rnt_params = _add_date_filter(
                 rnt_sql, rnt_params, 'created_at', date_from, date_to)
@@ -5274,7 +5723,7 @@ def export_orders():
         
         for order in orders:
             date_str = order[1].strftime('%d.%m.%Y') if order[1] else ''
-            output.write(f'"{order[0]}","{date_str}","{order[2]}","{order[3] or ""}",{order[4]},{order[5]},"{order[6]}"\n')
+            output.write(f'"{order[0]}","{date_str}","{order[2]}","{order[3] or ""}",{order[4]},{order[5]},"{translate_status(order[6])}"\n')
         
         from flask import Response
         return Response(
@@ -5286,6 +5735,16 @@ def export_orders():
     except Exception as e:
         flash(f'Ошибка экспорта: {str(e)}', 'danger')
         return redirect(url_for('orders'))
+
+
+_review_schema_initialized = False
+
+@app.before_request
+def init_review_schema_once():
+    global _review_schema_initialized
+    if not _review_schema_initialized:
+        ensure_review_schema()
+        _review_schema_initialized = True
 
 
 @app.errorhandler(404)

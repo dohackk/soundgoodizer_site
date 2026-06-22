@@ -58,7 +58,7 @@
             <select class="form-select" id="adminStatusFilter">
                 <option value="">Все статусы</option>
                 {% for status in statuses %}
-                <option value="{{ status[1] }}">{{ status[1] }}</option>
+                <option value="{{ status[1] }}">{{ status[1]|status_ru }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -111,8 +111,9 @@
                                     data-order-id="{{ order[0] }}">
                                 {% for status in statuses %}
                                 <option value="{{ status[0] }}"
+                                        data-status-name="{{ status[1] }}"
                                         {% if status[1] == order[4] %}selected{% endif %}>
-                                    {{ status[1] }}
+                                    {{ status[1]|status_ru }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -171,12 +172,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const user         = row.cells[2].textContent.toLowerCase();
             const instrument   = row.cells[3].textContent.toLowerCase();
             const sel         = row.cells[7].querySelector('select');
-            const statusText  = sel ? sel.options[sel.selectedIndex].textContent.trim() : '';
+            const statusName  = sel ? sel.options[sel.selectedIndex]?.dataset.statusName : '';
             const dateStr     = row.cells[1].textContent.trim();
 
             let show = true;
             if (search && !orderNumber.includes(search) && !user.includes(search) && !instrument.includes(search)) show = false;
-            if (statusVal && statusText !== statusVal) show = false;
+            if (statusVal && statusName !== statusVal) show = false;
 
             if (show && (dateFrom || dateTo)) {
                 try {

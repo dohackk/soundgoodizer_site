@@ -455,12 +455,7 @@
                                         'cancelled': 'danger'
                                     } %}
                                     <span class="badge bg-{{ status_colors.get(order[5], 'secondary') }} status-badge">
-                                        {% if order[5] == 'pending' %}Ожидает
-                                        {% elif order[5] == 'confirmed' %}Подтвержден
-                                        {% elif order[5] == 'processing' %}В обработке
-                                        {% elif order[5] == 'shipped' %}Отправлен
-                                        {% elif order[5] == 'delivered' %}Доставлен
-                                        {% else %}{{ order[5] }}{% endif %}
+                                        {{ order[5]|status_ru }}
                                     </span>
                                 </td>
                                 <td>

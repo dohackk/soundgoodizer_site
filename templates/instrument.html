@@ -208,6 +208,9 @@
                                             <div class="fw-semibold small">{{ review.user_login }}</div>
                                             <div class="text-muted" style="font-size:0.75rem;">
                                                 {{ review.created_at.strftime('%d.%m.%Y') if review.created_at else '' }}
+                                                {% if review.review_source %}
+                                                · <span class="badge bg-light text-dark border">{{ review.review_source|review_source_ru }}</span>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>

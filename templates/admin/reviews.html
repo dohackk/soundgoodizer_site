@@ -123,11 +123,17 @@
                                 </div>
                             </div>
                             <div class="mt-2">
-                                <small class="text-muted">Заказ: <span class="fw-bold">{{ review.order_number }}</span></small>
+                                <small class="text-muted">
+                                    {% if review.review_source == 'rental' %}
+                                    Аренда: <span class="fw-bold">{{ review.rental_number }}</span>
+                                    {% else %}
+                                    Заказ: <span class="fw-bold">{{ review.order_number }}</span>
+                                    {% endif %}
+                                    · <span class="badge bg-light text-dark border">{{ review.review_source|review_source_ru }}</span>
+                                </small>
                             </div>
                         </div>
 
-                        <!-- Содержимое отзыва -->
                         <div class="col-md-6 mb-3 mb-md-0">
                             <div class="d-flex align-items-center gap-2 mb-1">
                                 <div class="star-rating">

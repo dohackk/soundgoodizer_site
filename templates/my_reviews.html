@@ -93,7 +93,14 @@
                                 </div>
                             </div>
                             <div class="mt-2">
-                                <small class="text-muted">Заказ: <span class="fw-bold">{{ review.order_number }}</span></small><br>
+                                <small class="text-muted">
+                                    {% if review.review_source == 'rental' %}
+                                    Аренда: <span class="fw-bold">{{ review.rental_number }}</span>
+                                    {% else %}
+                                    Заказ: <span class="fw-bold">{{ review.order_number }}</span>
+                                    {% endif %}
+                                    · <span class="badge bg-light text-dark border">{{ review.review_source|review_source_ru }}</span>
+                                </small><br>
                                 <small class="text-muted">{{ review.created_at.strftime('%d.%m.%Y') if review.created_at else '' }}</small>
                             </div>
                         </div>
@@ -123,21 +130,26 @@
                             {% endif %}
                         </div>
 
-                        <!-- Статус -->
                         <div class="col-md-2 text-md-end">
                             {% if review.is_approved %}
-                            <span class="badge bg-success status-badge">
+                            <span class="badge bg-success status-badge mb-2 d-inline-block">
                                 <i class="bi bi-check-circle me-1"></i>Опубликован
                             </span>
                             {% elif review.is_rejected %}
-                            <span class="badge bg-danger status-badge">
+                            <span class="badge bg-danger status-badge mb-2 d-inline-block">
                                 <i class="bi bi-x-circle me-1"></i>Отклонён
                             </span>
                             {% else %}
-                            <span class="badge bg-warning text-dark status-badge">
+                            <span class="badge bg-warning text-dark status-badge mb-2 d-inline-block">
                                 <i class="bi bi-clock me-1"></i>На модерации
                             </span>
                             {% endif %}
+                            <div>
+                                <a href="{{ url_for('edit_review', review_id=review.review_id) }}"
+                                   class="btn btn-sm btn-outline-primary" title="Редактировать">
+                                    <i class="bi bi-pencil me-1"></i>Редакт.
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>

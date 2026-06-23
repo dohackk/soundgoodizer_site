@@ -192,7 +192,8 @@
                 <h5 class="modal-title">Добавить инструмент</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ url_for('admin_add_instrument') }}" enctype="multipart/form-data">
+            <form method="POST" action="{{ url_for('admin_add_instrument') }}" enctype="multipart/form-data" class="needs-validation" novalidate
+                  onsubmit="if(!this.checkValidity()){this.reportValidity();return false;}">
                 <div class="modal-body">
                     <div class="row mb-3">
                         <div class="col-md-6">
@@ -207,22 +208,24 @@
                     
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">Бренд</label>
-                            <select class="form-select" name="brand_id">
+                            <label class="form-label">Бренд *</label>
+                            <select class="form-select" name="brand_id" required>
                                 <option value="">Выберите бренд</option>
                                 {% for brand in brands %}
                                 <option value="{{ brand[0] }}">{{ brand[1] }}</option>
                                 {% endfor %}
                             </select>
+                            <div class="invalid-feedback">Выберите бренд</div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Категория</label>
-                            <select class="form-select" name="category_id">
+                            <label class="form-label">Категория *</label>
+                            <select class="form-select" name="category_id" required>
                                 <option value="">Выберите категорию</option>
                                 {% for category in categories %}
                                 <option value="{{ category[0] }}">{{ category[1] }}</option>
                                 {% endfor %}
                             </select>
+                            <div class="invalid-feedback">Выберите категорию</div>
                         </div>
                     </div>
                     

@@ -4273,6 +4273,13 @@ def admin_add_instrument():
         is_available_for_sale = True if request.form.get('is_available_for_sale') else False
         is_available_for_rent = True if request.form.get('is_available_for_rent') else False
         
+        if not brand_id:
+            flash('Ошибка: необходимо выбрать бренд', 'danger')
+            return redirect(url_for('admin_instruments'))
+        if not category_id:
+            flash('Ошибка: необходимо выбрать категорию', 'danger')
+            return redirect(url_for('admin_instruments'))
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         

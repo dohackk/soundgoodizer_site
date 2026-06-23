@@ -53,6 +53,12 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['REPAIR_PHOTOS_FOLDER'] = REPAIR_PHOTOS_FOLDER
 app.config['INSTRUMENT_IMAGES_FOLDER'] = INSTRUMENT_IMAGES_FOLDER
 
+# Настройки сессионных cookie — не привязываем к конкретному домену,
+# чтобы работало и по IP и по домену
+app.config['SESSION_COOKIE_DOMAIN'] = None
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False  # True только если HTTPS
+
 app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT']     = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS']  = True
